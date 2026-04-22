@@ -20,6 +20,10 @@ export const metadata: Metadata = {
     "Free, open-source, local-first time tracking and invoicing for independent contractors.",
   manifest: "/manifest.webmanifest",
   applicationName: "Tallyhand",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon-maskable.svg", type: "image/svg+xml" }],
+  },
   appleWebApp: {
     capable: true,
     title: "Tallyhand",
@@ -34,6 +38,7 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

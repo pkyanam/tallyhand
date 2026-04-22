@@ -2,24 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  ListChecks,
-  Users,
-  FileText,
-  Wallet,
-  Settings,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/ledger", label: "Ledger", icon: ListChecks },
-  { href: "/clients", label: "Clients", icon: Users },
-  { href: "/invoices", label: "Invoices", icon: FileText },
-  { href: "/expenses", label: "Expenses", icon: Wallet },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { APP_NAV_ITEMS } from "@/components/app/app-nav-items";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -33,7 +17,7 @@ export function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-2">
-        {nav.map((item) => {
+        {APP_NAV_ITEMS.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;

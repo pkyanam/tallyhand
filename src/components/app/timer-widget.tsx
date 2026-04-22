@@ -52,7 +52,7 @@ export function TimerWidget() {
       )}
       <div
         className={cn(
-          "hidden min-w-[72px] text-right font-mono text-sm tabular-nums sm:block",
+          "min-w-[3.25rem] text-right font-mono text-xs tabular-nums sm:min-w-[4.5rem] sm:text-sm",
           running ? "text-foreground" : "text-muted-foreground",
         )}
         aria-live="polite"

@@ -50,7 +50,8 @@ export function AppChromeProvider({ children }: { children: React.ReactNode }) {
         <div
           role="status"
           className={cn(
-            "fixed bottom-6 left-1/2 z-[100] max-w-md -translate-x-1/2 rounded-md border bg-popover px-4 py-2 text-center text-sm text-popover-foreground shadow-md",
+            "fixed left-1/2 z-[100] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border bg-popover px-4 py-2 text-center text-sm text-popover-foreground shadow-md",
+            "bottom-[max(1.5rem,env(safe-area-inset-bottom,0px)+0.75rem)]",
           )}
         >
           {notice}

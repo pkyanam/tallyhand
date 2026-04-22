@@ -8,11 +8,13 @@ import { TimerHotkey } from "@/components/app/timer-hotkey";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppChrome>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-[100dvh]">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 p-6">{children}</main>
+          <main className="flex-1 overflow-x-auto p-4 pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] sm:p-6 sm:pb-6">
+            {children}
+          </main>
         </div>
         <StopPrompt />
         <TimerHotkey />
