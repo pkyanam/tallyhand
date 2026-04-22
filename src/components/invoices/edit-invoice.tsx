@@ -29,6 +29,8 @@ import {
   markInvoiceSent,
 } from "@/lib/invoice-helpers";
 import type { Invoice, InvoiceStatus } from "@/lib/db/types";
+import { newInvoicePublicToken } from "@/lib/db/id";
+import { InvoicePublicLinkPanel } from "@/components/invoices/invoice-public-link-panel";
 
 function statusBadge(status: InvoiceStatus) {
   switch (status) {
@@ -69,6 +71,7 @@ function invoicesEqual(a: Invoice, b: Invoice): boolean {
     a.subtotal === b.subtotal &&
     a.total === b.total &&
     (a.notes ?? "") === (b.notes ?? "") &&
+    (a.publicToken ?? "") === (b.publicToken ?? "") &&
     JSON.stringify(a.lineItems) === JSON.stringify(b.lineItems)
   );
 }
@@ -120,6 +123,7 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
     }
     setSaving(true);
     try {
+      const publicToken = draft.publicToken ?? newInvoicePublicToken();
       await invoiceRepo.update(draft.id, {
         clientId: draft.clientId,
         invoiceNumber: draft.invoiceNumber,
@@ -129,10 +133,13 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
         subtotal: draft.subtotal,
         total: draft.total,
         notes: draft.notes,
+        publicToken,
       });
+      const nextDraft = { ...draft, publicToken };
+      setDraft(nextDraft);
       lastSyncedRef.current = JSON.stringify({
-        ...draft,
-        updatedAt: draft.updatedAt,
+        ...nextDraft,
+        updatedAt: nextDraft.updatedAt,
       });
       showNotice("Saved.");
     } finally {
@@ -288,6 +295,12 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
           </CardContent>
         </Card>
       ) : null}
+
+      <InvoicePublicLinkPanel
+        invoice={draft}
+        readOnly={readOnly}
+        dirty={dirty}
+      />
 
       <InvoiceEditor
         invoice={draft}

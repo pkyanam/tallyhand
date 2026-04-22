@@ -2,8 +2,17 @@
 
 import * as React from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ImageUp, Trash2 } from "lucide-react";
+import { useTheme } from "next-themes";
+import {
+  ArrowDown,
+  ArrowUp,
+  Download,
+  ImageUp,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -13,14 +22,42 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/app/page-header";
 import { useAppChrome } from "@/components/app/app-chrome-provider";
+import {
+  exportBundleExpensesCsv,
+  exportBundleJsonString,
+  exportBundleMarkdown,
+  exportBundleTasksCsv,
+  exportLedgerJsonString,
+  importTallyhandBundleV1,
+  parseTallyhandBundleV1,
+  resetAllLocalData,
+} from "@/lib/app-bundle";
 import { settingsRepo } from "@/lib/db/repos";
+import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
 import type { Settings } from "@/lib/db/types";
 
 const MAX_LOGO_BYTES = 500 * 1024;
+
+const DOW_OPTIONS: { value: string; label: string }[] = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+];
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,6 +71,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export function SettingsContent() {
   const settings = useLiveQuery(() => settingsRepo.read(), []);
   const { showNotice } = useAppChrome();
+  const { setTheme } = useTheme();
+  const [newCategory, setNewCategory] = React.useState("");
+  const importRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     void settingsRepo.get();
@@ -64,6 +104,83 @@ export function SettingsContent() {
     });
   };
 
+  const updateReckoning = async (patch: Partial<Settings["reckoning"]>) => {
+    await settingsRepo.update({
+      reckoning: { ...settings.reckoning, ...patch },
+    });
+  };
+
+  const updateAppearance = async (patch: Partial<Settings["appearance"]>) => {
+    const next = { ...settings.appearance, ...patch };
+    await settingsRepo.update({ appearance: next });
+    if (next.theme === "light" || next.theme === "dark" || next.theme === "system")
+      setTheme(next.theme);
+  };
+
+  const moveCategory = async (index: number, dir: -1 | 1) => {
+    const list = [...settings.expenseCategories];
+    const j = index + dir;
+    if (j < 0 || j >= list.length) return;
+    const t = list[index];
+    list[index] = list[j];
+    list[j] = t;
+    await settingsRepo.update({ expenseCategories: list });
+  };
+
+  const removeCategory = async (index: number) => {
+    const list = settings.expenseCategories.filter((_, i) => i !== index);
+    if (list.length === 0) {
+      showNotice("Keep at least one category.");
+      return;
+    }
+    await settingsRepo.update({ expenseCategories: list });
+  };
+
+  const addCategory = async () => {
+    const v = newCategory.trim();
+    if (!v) return;
+    if (settings.expenseCategories.includes(v)) {
+      showNotice("That category already exists.");
+      return;
+    }
+    await settingsRepo.update({
+      expenseCategories: [...settings.expenseCategories, v],
+    });
+    setNewCategory("");
+  };
+
+  const handleImport = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed: unknown = JSON.parse(text);
+      const bundle = parseTallyhandBundleV1(parsed);
+      await importTallyhandBundleV1(bundle);
+      showNotice("Import complete — reloading.");
+      window.location.reload();
+    } catch (e) {
+      showNotice(
+        e instanceof Error ? e.message : "Import failed — invalid file?",
+      );
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm("Delete ALL local Tallyhand data on this device?"))
+      return;
+    if (
+      !window.confirm(
+        "This cannot be undone. Type OK in your mind and click OK to wipe everything.",
+      )
+    )
+      return;
+    await resetAllLocalData();
+    showNotice("Database cleared — reloading.");
+    window.location.reload();
+  };
+
   const handleLogoFile = async (file: File | null) => {
     if (!file) return;
     if (file.size > MAX_LOGO_BYTES) {
@@ -79,7 +196,7 @@ export function SettingsContent() {
     <>
       <PageHeader
         title="Settings"
-        description="Business info and invoice defaults. The Reckoning, expense categories, and data tools land in later stages."
+        description="Business, invoicing, Weekly Reckoning schedule, categories, appearance, and backups."
       />
 
       <div className="space-y-6">
@@ -259,6 +376,264 @@ export function SettingsContent() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly Reckoning</CardTitle>
+            <CardDescription>
+              Full-screen review of the week — opened from ⌘K or automatically
+              after your chosen day and time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="reckoning-enabled"
+                checked={settings.reckoning.enabled}
+                onCheckedChange={(c) =>
+                  void updateReckoning({ enabled: c === true })
+                }
+              />
+              <Label htmlFor="reckoning-enabled" className="font-normal">
+                Enable scheduled reckoning
+              </Label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>Day</Label>
+                <Select
+                  value={String(settings.reckoning.dayOfWeek)}
+                  onValueChange={(v) =>
+                    void updateReckoning({ dayOfWeek: Number.parseInt(v, 10) })
+                  }
+                  disabled={!settings.reckoning.enabled}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Weekday" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOW_OPTIONS.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <FieldNumber
+                label="Hour (0–23, local)"
+                defaultValue={settings.reckoning.hourOfDay}
+                disabled={!settings.reckoning.enabled}
+                onCommit={(n) =>
+                  void updateReckoning({
+                    hourOfDay: Math.min(23, Math.max(0, n)),
+                  })
+                }
+                placeholder="16"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When you finish a session in Reckoning, use &quot;Mark reckoning
+              complete&quot; so auto-open waits until the next week.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Expense categories</CardTitle>
+            <CardDescription>
+              Used in expense forms and the ledger. Reorder with the arrows.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ul className="space-y-2">
+              {settings.expenseCategories.map((cat, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-2 rounded-md border px-2 py-1.5"
+                >
+                  <span className="flex-1 text-sm">{cat}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Move up"
+                    disabled={i === 0}
+                    onClick={() => void moveCategory(i, -1)}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Move down"
+                    disabled={i === settings.expenseCategories.length - 1}
+                    onClick={() => void moveCategory(i, 1)}
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-destructive"
+                    aria-label="Remove"
+                    onClick={() => void removeCategory(i)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="max-w-xs"
+                placeholder="New category"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void addCategory();
+                }}
+              />
+              <Button type="button" variant="secondary" onClick={() => void addCategory()}>
+                Add
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Appearance</CardTitle>
+            <CardDescription>
+              Synced with the top bar theme control and command palette.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="max-w-xs space-y-2">
+            <Label>Theme</Label>
+            <Select
+              value={settings.appearance.theme}
+              onValueChange={(v) =>
+                void updateAppearance({
+                  theme: v as Settings["appearance"]["theme"],
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">System</SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Data</CardTitle>
+            <CardDescription>
+              Full backups use the <code className="text-xs">tallyhand.v1</code>{" "}
+              JSON bundle (settings + every table). Ledger JSON matches the
+              Stage 2 export shape.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void exportBundleJsonString().then((s) =>
+                    downloadText(
+                      `tallyhand-backup-${new Date().toISOString().slice(0, 10)}.json`,
+                      s,
+                      "application/json",
+                    ),
+                  )
+                }
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Export bundle (JSON)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void exportLedgerJsonString().then((s) =>
+                    downloadText(
+                      `tallyhand-ledger-${new Date().toISOString().slice(0, 10)}.json`,
+                      s,
+                      "application/json",
+                    ),
+                  )
+                }
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Ledger JSON
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void exportBundleTasksCsv().then((s) =>
+                    downloadText("tallyhand-tasks.csv", s, "text/csv"),
+                  )
+                }
+              >
+                Tasks CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void exportBundleExpensesCsv().then((s) =>
+                    downloadText("tallyhand-expenses.csv", s, "text/csv"),
+                  )
+                }
+              >
+                Expenses CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void exportBundleMarkdown().then((s) =>
+                    downloadText("tallyhand-ledger.md", s, "text/markdown"),
+                  )
+                }
+              >
+                Ledger Markdown
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+              <input
+                ref={importRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => void handleImport(e.target.files?.[0] ?? null)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => importRef.current?.click()}
+              >
+                <Upload className="mr-1 h-4 w-4" />
+                Import bundle (JSON)
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void handleReset()}>
+                Reset local data…
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </>
   );
@@ -331,11 +706,13 @@ function FieldNumber({
   defaultValue,
   onCommit,
   placeholder,
+  disabled,
 }: {
   label: string;
   defaultValue: number;
   onCommit: (value: number) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="grid gap-1.5">
@@ -343,6 +720,7 @@ function FieldNumber({
       <Input
         type="number"
         inputMode="numeric"
+        disabled={disabled}
         defaultValue={String(defaultValue)}
         key={`${label}-${defaultValue}`}
         onBlur={(e) => {

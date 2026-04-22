@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   computeDueDate,
+  computeExpenseLineAmount,
   computeLineAmount,
+  computeLineItemAmount,
   expenseToLineItem,
   formatInvoiceNumber,
   inferClientIdFromSelection,
@@ -11,6 +13,7 @@ import {
   sumLineItems,
   taskToLineItem,
 } from "@/lib/invoice-helpers";
+import type { InvoiceLineItem } from "@/lib/db/types";
 import type { Client, Expense, Project, Task } from "@/lib/db/types";
 
 function task(partial: Partial<Task> & Pick<Task, "id" | "projectId">): Task {
@@ -40,6 +43,42 @@ describe("computeLineAmount", () => {
   it("multiplies and rounds", () => {
     expect(computeLineAmount(1.5, 100)).toBe(150);
     expect(computeLineAmount(0.333, 30)).toBe(9.99);
+  });
+});
+
+describe("computeExpenseLineAmount", () => {
+  it("applies optional markup to base * quantity", () => {
+    expect(computeExpenseLineAmount(100, 1, 10)).toBe(110);
+    expect(computeExpenseLineAmount(100, 1, 0)).toBe(100);
+    expect(computeExpenseLineAmount(100, 1, undefined)).toBe(100);
+    expect(computeExpenseLineAmount(50, 2, 20)).toBe(120);
+  });
+});
+
+describe("computeLineItemAmount", () => {
+  it("uses expense markup for expense lines", () => {
+    const line: InvoiceLineItem = {
+      id: "1",
+      description: "X",
+      quantity: 1,
+      rate: 200,
+      amount: 0,
+      sourceType: "expense",
+      markupPercent: 15,
+    };
+    expect(computeLineItemAmount(line)).toBe(230);
+  });
+
+  it("uses quantity × rate for non-expense lines", () => {
+    const line: InvoiceLineItem = {
+      id: "1",
+      description: "X",
+      quantity: 2,
+      rate: 50,
+      amount: 0,
+      sourceType: "task",
+    };
+    expect(computeLineItemAmount(line)).toBe(100);
   });
 });
 
@@ -145,6 +184,13 @@ describe("expenseToLineItem", () => {
   it("appends note to description when present", () => {
     const li = expenseToLineItem({ ...base, note: "Figma sub" });
     expect(li.description).toBe("Software — Figma sub");
+  });
+
+  it("applies optional markup to amount and sets markupPercent", () => {
+    const li = expenseToLineItem(base, { markupPercent: 10 });
+    expect(li.rate).toBe(42.5);
+    expect(li.markupPercent).toBe(10);
+    expect(li.amount).toBe(46.75);
   });
 });
 

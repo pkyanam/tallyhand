@@ -6,7 +6,14 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLiveQuery } from "dexie-react-hooks";
 import { endOfMonth, startOfMonth } from "date-fns";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FileJson, FileSpreadsheet, FileText, Plus } from "lucide-react";
+import {
+  FileJson,
+  FileSpreadsheet,
+  FileText,
+  LayoutList,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -397,6 +404,33 @@ export function LedgerContent() {
 
   const clearDates = () => setParams({ from: "", to: "" });
 
+  const clearFilters = () => {
+    setParams({
+      from: "",
+      to: "",
+      client: "",
+      project: "",
+      billed: "all",
+      tag: "",
+      q: "",
+    });
+  };
+
+  const dataLoading =
+    tasks === undefined ||
+    expenses === undefined ||
+    projects === undefined ||
+    clients === undefined;
+  const hasAnyRows = !dataLoading && merged.length > 0;
+  const filtersActive =
+    Boolean(from) ||
+    Boolean(to) ||
+    Boolean(clientId) ||
+    Boolean(projectId) ||
+    billed !== "all" ||
+    Boolean(tag.trim()) ||
+    Boolean(q.trim());
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="sticky top-0 z-20 space-y-3 rounded-lg border bg-background/95 p-4 backdrop-blur">
@@ -619,11 +653,42 @@ export function LedgerContent() {
         className="min-h-0 flex-1 overflow-auto rounded-md border bg-card"
         style={{ maxHeight: "min(70vh, 640px)" }}
       >
-        {tasks === undefined || expenses === undefined ? (
-          <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+        {dataLoading ? (
+          <div className="space-y-3 p-8">
+            <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+            <div className="h-16 w-full animate-pulse rounded bg-muted" />
+            <div className="h-16 w-full animate-pulse rounded bg-muted" />
+            <div className="h-16 w-full animate-pulse rounded bg-muted" />
+          </div>
+        ) : !hasAnyRows ? (
+          <div className="flex flex-col items-center gap-4 p-10 text-center">
+            <div className="rounded-full bg-muted p-3">
+              <LayoutList className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-medium">Nothing in your ledger yet</p>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                Start the timer from the top bar (⌘⇧T), add a manual entry, or
+                log an expense. Everything you track shows up here.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button type="button" asChild variant="default" size="sm">
+                <Link href="/clients/new">Add a client</Link>
+              </Button>
+              <Button type="button" asChild variant="outline" size="sm">
+                <Link href="/expenses/new">New expense</Link>
+              </Button>
+            </div>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            No entries match these filters.
+          <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
+            <p>No entries match these filters.</p>
+            {filtersActive ? (
+              <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div
@@ -727,28 +792,57 @@ function TaskRow({
   };
 
   return (
-    <div className="flex items-stretch gap-2 px-2 py-2 text-sm">
-      <div className="flex w-8 shrink-0 items-center justify-center pt-0.5">
+    <div className="flex items-start gap-2 px-2 py-2 text-sm">
+      <div className="flex w-8 shrink-0 items-start justify-center pt-1">
         <Checkbox
           checked={selected}
           onCheckedChange={(c) => onSelect(c === true)}
           aria-label="Select row"
         />
       </div>
-      <div className="w-28 shrink-0 text-xs text-muted-foreground">
-        {new Date(t.startAt).toLocaleDateString()}
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="truncate text-xs text-muted-foreground">
-          {client ? (
-            <Link href={`/clients/${client.id}`} className="hover:underline">
-              {client.name}
-            </Link>
-          ) : (
-            "—"
-          )}
-          {" · "}
-          {project?.name ?? "—"}
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 tabular-nums">
+            {new Date(t.startAt).toLocaleDateString()}
+          </span>
+          <span className="shrink-0 select-none text-muted-foreground/60">
+            ·
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {client ? (
+              <Link href={`/clients/${client.id}`} className="hover:underline">
+                {client.name}
+              </Link>
+            ) : (
+              "—"
+            )}
+            <span className="select-none text-muted-foreground/60"> · </span>
+            {project?.name ?? "—"}
+          </span>
+          <span className="shrink-0 font-mono tabular-nums">
+            {edit === "minutes" ? (
+              <Input
+                autoFocus
+                className="h-7 w-16 px-1 text-right text-xs"
+                defaultValue={String(t.durationMinutes)}
+                inputMode="numeric"
+                onBlur={(e) => saveMinutes(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter")
+                    saveMinutes((e.target as HTMLInputElement).value);
+                  if (e.key === "Escape") setEdit(null);
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="hover:underline"
+                onClick={() => setEdit("minutes")}
+              >
+                {formatDuration(t.durationMinutes)}
+              </button>
+            )}
+          </span>
         </div>
         {edit === "name" ? (
           <Input
@@ -821,36 +915,48 @@ function TaskRow({
           </button>
         )}
       </div>
-      <div className="w-24 shrink-0 text-right font-mono text-xs">
-        {edit === "minutes" ? (
-          <Input
-            autoFocus
-            className="h-8 text-right"
-            defaultValue={String(t.durationMinutes)}
-            inputMode="numeric"
-            onBlur={(e) => saveMinutes(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter")
-                saveMinutes((e.target as HTMLInputElement).value);
-              if (e.key === "Escape") setEdit(null);
-            }}
-          />
+      <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+        {!t.isBilled ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/invoices/new?tasks=${encodeURIComponent(t.id)}`}>
+              Open
+            </Link>
+          </Button>
+        ) : t.invoiceId ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/invoices/${encodeURIComponent(t.invoiceId)}`}>
+              Open
+            </Link>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="w-full hover:underline"
-            onClick={() => setEdit("minutes")}
-          >
-            {formatDuration(t.durationMinutes)}
-          </button>
+          <Badge variant="secondary" className="text-[10px]">
+            Billed
+          </Badge>
         )}
-      </div>
-      <div className="flex w-16 shrink-0 items-center justify-end">
-        {t.isBilled ? (
-          <Badge variant="secondary">Billed</Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">Open</span>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          disabled={t.isBilled}
+          title={
+            t.isBilled
+              ? "Remove from invoice before deleting (billed entries are protected)."
+              : "Delete this entry"
+          }
+          aria-label="Delete time entry"
+          onClick={() => {
+            if (
+              !window.confirm(
+                "Delete this time entry? This cannot be undone.",
+              )
+            )
+              return;
+            void taskRepo.remove(t.id);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
@@ -896,28 +1002,57 @@ function ExpenseRow({
   };
 
   return (
-    <div className="flex items-stretch gap-2 border-l-4 border-l-primary/40 bg-muted/20 px-2 py-2 text-sm">
-      <div className="flex w-8 shrink-0 items-center justify-center pt-0.5">
+    <div className="flex items-start gap-2 border-l-4 border-l-primary/40 bg-muted/20 px-2 py-2 text-sm">
+      <div className="flex w-8 shrink-0 items-start justify-center pt-1">
         <Checkbox
           checked={selected}
           onCheckedChange={(c) => onSelect(c === true)}
           aria-label="Select row"
         />
       </div>
-      <div className="w-28 shrink-0 text-xs text-muted-foreground">
-        {new Date(e.date).toLocaleDateString()}
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="truncate text-xs text-muted-foreground">
-          {client ? (
-            <Link href={`/clients/${client.id}`} className="hover:underline">
-              {client.name}
-            </Link>
-          ) : (
-            "—"
-          )}
-          {" · "}
-          {project?.name ?? "—"}
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 tabular-nums">
+            {new Date(e.date).toLocaleDateString()}
+          </span>
+          <span className="shrink-0 select-none text-muted-foreground/60">
+            ·
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {client ? (
+              <Link href={`/clients/${client.id}`} className="hover:underline">
+                {client.name}
+              </Link>
+            ) : (
+              "—"
+            )}
+            <span className="select-none text-muted-foreground/60"> · </span>
+            {project?.name ?? "—"}
+          </span>
+          <span className="shrink-0 font-mono tabular-nums">
+            {edit === "amount" ? (
+              <Input
+                autoFocus
+                className="h-7 w-20 px-1 text-right text-xs"
+                defaultValue={String(e.amount)}
+                inputMode="decimal"
+                onBlur={(ev) => saveAmount(ev.target.value)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter")
+                    saveAmount((ev.target as HTMLInputElement).value);
+                  if (ev.key === "Escape") setEdit(null);
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="hover:underline"
+                onClick={() => setEdit("amount")}
+              >
+                {formatCurrency(e.amount)}
+              </button>
+            )}
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {edit === "category" ? (
@@ -964,36 +1099,48 @@ function ExpenseRow({
           )}
         </div>
       </div>
-      <div className="w-28 shrink-0 text-right font-mono text-xs">
-        {edit === "amount" ? (
-          <Input
-            autoFocus
-            className="h-8 text-right"
-            defaultValue={String(e.amount)}
-            inputMode="decimal"
-            onBlur={(ev) => saveAmount(ev.target.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === "Enter")
-                saveAmount((ev.target as HTMLInputElement).value);
-              if (ev.key === "Escape") setEdit(null);
-            }}
-          />
+      <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+        {!e.isBilled ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/invoices/new?expenses=${encodeURIComponent(e.id)}`}>
+              Open
+            </Link>
+          </Button>
+        ) : e.invoiceId ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/invoices/${encodeURIComponent(e.invoiceId)}`}>
+              Open
+            </Link>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="w-full hover:underline"
-            onClick={() => setEdit("amount")}
-          >
-            {formatCurrency(e.amount)}
-          </button>
+          <Badge variant="secondary" className="text-[10px]">
+            Billed
+          </Badge>
         )}
-      </div>
-      <div className="flex w-16 shrink-0 items-center justify-end">
-        {e.isBilled ? (
-          <Badge variant="secondary">Billed</Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">Open</span>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          disabled={e.isBilled}
+          title={
+            e.isBilled
+              ? "Remove from invoice before deleting (billed entries are protected)."
+              : "Delete this expense"
+          }
+          aria-label="Delete expense"
+          onClick={() => {
+            if (
+              !window.confirm(
+                "Delete this expense? This cannot be undone.",
+              )
+            )
+              return;
+            void expenseRepo.remove(e.id);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );

@@ -28,6 +28,8 @@ import { formatDuration } from "@/lib/utils";
 export interface ManualEntryDialogProps {
   trigger?: React.ReactNode;
   defaultProjectId?: string | null;
+  /** When set, start/end default to 10:00–11:00 on that calendar day (local). */
+  defaultDayStartMs?: number | null;
   onCreated?: () => void;
 }
 
@@ -53,9 +55,30 @@ function defaultFormState(projectId: string | null = null): FormState {
   };
 }
 
+function formStateForDay(
+  dayStartMs: number,
+  projectId: string | null = null,
+): FormState {
+  const d = new Date(dayStartMs);
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const date = d.getDate();
+  const startAt = new Date(y, m, date, 10, 0, 0, 0).getTime();
+  const endAt = new Date(y, m, date, 11, 0, 0, 0).getTime();
+  return {
+    name: "",
+    projectId,
+    startAt,
+    endAt,
+    notes: "",
+    tags: [],
+  };
+}
+
 export function ManualEntryDialog({
   trigger,
   defaultProjectId = null,
+  defaultDayStartMs = null,
   onCreated,
 }: ManualEntryDialogProps) {
   const [open, setOpen] = React.useState(false);
@@ -69,10 +92,14 @@ export function ManualEntryDialog({
 
   React.useEffect(() => {
     if (open) {
-      setForm(defaultFormState(defaultProjectId));
+      setForm(
+        defaultDayStartMs != null
+          ? formStateForDay(defaultDayStartMs, defaultProjectId)
+          : defaultFormState(defaultProjectId),
+      );
       setError(null);
     }
-  }, [open, defaultProjectId]);
+  }, [open, defaultProjectId, defaultDayStartMs]);
 
   const durationMin = Math.max(
     0,

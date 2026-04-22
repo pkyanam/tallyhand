@@ -13,7 +13,8 @@ export function InvoicePreview({
   settings: Settings;
   client?: Client;
 }) {
-  const accent = settings.invoice.accentColor || "#0a0a0a";
+  const accent =
+    settings.invoice.accentColor?.trim() || "hsl(var(--foreground))";
 
   return (
     <div

@@ -29,10 +29,26 @@ export class TallyhandDB extends Dexie {
         "id, clientId, invoiceNumber, status, issueDate, dueDate, updatedAt",
       settings: "id",
     });
+    this.version(2).stores({
+      clients: "id, name, archived, updatedAt",
+      projects: "id, clientId, name, archived, updatedAt",
+      tasks:
+        "id, projectId, startAt, endAt, isBilled, invoiceId, updatedAt, *tags",
+      expenses:
+        "id, clientId, projectId, date, category, isBilled, invoiceId, updatedAt",
+      invoices:
+        "id, clientId, invoiceNumber, status, issueDate, dueDate, publicToken, updatedAt",
+      settings: "id",
+    });
   }
 }
 
 let _db: TallyhandDB | null = null;
+
+/** Test helper: call after `await db.delete()` so the next `getDB()` opens a fresh DB. */
+export function resetDbSingletonForTests(): void {
+  _db = null;
+}
 
 export function getDB(): TallyhandDB {
   if (typeof window === "undefined") {

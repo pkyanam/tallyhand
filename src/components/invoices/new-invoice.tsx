@@ -18,7 +18,7 @@ import {
   settingsRepo,
   taskRepo,
 } from "@/lib/db/repos";
-import { newId } from "@/lib/db/id";
+import { newId, newInvoicePublicToken } from "@/lib/db/id";
 import {
   assignNextInvoiceNumber,
   computeDueDate,
@@ -175,6 +175,7 @@ export function NewInvoiceContent() {
       lineItems,
       subtotal,
       total,
+      publicToken: newInvoicePublicToken(),
       createdAt: 0,
       updatedAt: 0,
     });
@@ -214,6 +215,7 @@ export function NewInvoiceContent() {
         subtotal: draft.subtotal,
         total: draft.total,
         notes: draft.notes,
+        publicToken: draft.publicToken ?? newInvoicePublicToken(),
       });
       router.replace(`/invoices/${created.id}`);
     } finally {

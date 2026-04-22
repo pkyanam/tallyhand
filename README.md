@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tallyhand
 
-## Getting Started
+**Local-first time tracking and invoicing** for independent contractors. Next.js 14 (App Router), Dexie (IndexedDB), Zustand, shadcn/ui. **MIT licensed.**
 
-First, run the development server:
+**Try it:** [tallyhand.vercel.app](https://tallyhand.vercel.app) (production, deployed from `main` via GitHub → Vercel).
+
+## Features
+
+- **Timer + Stop Prompt** — Start/stop from the top bar; capture task, project, times, notes, and tags when you stop (⌘⇧T / Ctrl+Shift+T).
+- **Ledger** — Unified feed of time entries and expenses; filters, inline edit, bulk select, CSV/JSON/Markdown export.
+- **Clients & projects** — Rates, archive, activity hints.
+- **Invoices** — Build from ledger selections or blank; live HTML preview; PDF download; mark sent/paid; optional **read-only public link** (same browser / imported data only — see below).
+- **Expenses** — Categories, receipts (client-side), ledger + invoice integration.
+- **Weekly Reckoning** — Summary, gap detector, “new invoice” shortcuts (⌘K → Weekly Reckoning).
+- **Settings** — Business profile, invoice defaults (accent, logo, numbering), reckoning schedule, expense categories, theme, **Data** export/import (`tallyhand.v1` JSON) and reset.
+
+## Screenshots
+
+Add captures under `docs/screenshots/` and link them here (or embed in GitHub):
+
+| Area | Suggested filename |
+|------|--------------------|
+| Ledger | `docs/screenshots/ledger.png` |
+| Stop Prompt | `docs/screenshots/stop-prompt.png` |
+| Invoice preview | `docs/screenshots/invoice-preview.png` |
+| Weekly Reckoning | `docs/screenshots/reckoning.png` |
+
+## Quick start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000), then **Launch app**. No account or API keys.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Checks before a PR:**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run test
+npm run build
+```
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
+Pushing to the GitHub repo connected to Vercel deploys automatically. Production: **https://tallyhand.vercel.app**. Preview deployments apply to other branches/PRs per your Vercel project settings.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Self-host / static notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Run `npm run build` then `npm start` (Node server) anywhere you can run Next.js 14.
+- Data is **only** in each visitor’s browser (IndexedDB). The hosted demo does not store your clients or hours on the server.
+- **Public invoice URLs** (`/invoice/public/[token]`) resolve against **that browser’s** IndexedDB. Sharing a link does not upload the invoice; recipients only see data if they use the same profile or import your bundle.
 
-## Deploy on Vercel
+## Public invoice link
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Each invoice can get an opaque `publicToken` (minted on save). The URL path is `/invoice/public/<token>`. It is **read-only** and **no-auth** by design, with the limitations above.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## What we are not building (MVP)
+
+See **`PRD.md`** §1.3 and §9: no cloud sync, no QuickBooks/Stripe integrations, no multi-user mode, no mobile native apps, etc. PRs that add server-side user storage would change the product model — discuss in an issue first.
+
+## Contributing
+
+See **`CONTRIBUTING.md`**. Bug reports and ideas: use the [GitHub issue templates](https://github.com/pkyanam/tallyhand/issues).
+
+## License
+
+MIT — see `LICENSE`.
+
+## Launch / community
+
+When README and production smoke look good: Show HN, r/freelance, r/selfhosted, Product Hunt (see `HANDOFF.md` / `TODO.md` §10).

@@ -1,5 +1,6 @@
 import { getDB } from "./schema";
 import { newId, now } from "./id";
+import { normalizeSettings } from "@/lib/settings-normalize";
 import {
   DEFAULT_SETTINGS,
   type Client,
@@ -168,6 +169,10 @@ export const invoiceRepo = {
   async get(id: string) {
     return getDB().invoices.get(id);
   },
+  async getByPublicToken(token: string): Promise<Invoice | undefined> {
+    if (!token) return undefined;
+    return getDB().invoices.where("publicToken").equals(token).first();
+  },
   async create(
     input: Optional<Invoice, "id" | "createdAt" | "updatedAt">,
   ): Promise<Invoice> {
@@ -200,13 +205,34 @@ export const settingsRepo = {
   // functions and will silently loop). Call from effects or event handlers.
   async get(): Promise<Settings> {
     const existing = await getDB().settings.get("singleton");
-    if (existing) return existing;
+    if (existing) {
+      const merged = normalizeSettings(existing);
+      if (JSON.stringify(merged) !== JSON.stringify(existing)) {
+        await getDB().settings.put(merged);
+      }
+      return merged;
+    }
     await getDB().settings.put(DEFAULT_SETTINGS);
     return DEFAULT_SETTINGS;
   },
   async update(patch: Partial<Settings>) {
     const current = await this.get();
-    const next: Settings = { ...current, ...patch, id: "singleton" };
+    const next = normalizeSettings({
+      ...current,
+      ...patch,
+      id: "singleton",
+      business: { ...current.business, ...patch.business },
+      invoice: { ...current.invoice, ...patch.invoice },
+      reckoning: {
+        ...current.reckoning,
+        ...(patch.reckoning ?? {}),
+      },
+      appearance: {
+        ...current.appearance,
+        ...(patch.appearance ?? {}),
+      },
+      expenseCategories: patch.expenseCategories ?? current.expenseCategories,
+    });
     await getDB().settings.put(next);
     return next;
   },

@@ -40,6 +40,12 @@ export function Sidebar() {
       </nav>
       <div className="border-t p-3 text-xs text-muted-foreground">
         <div>Local-first · Offline-ready</div>
+        <Link
+          href="/shortcuts"
+          className="mt-2 block text-foreground/80 underline-offset-4 hover:underline"
+        >
+          Keyboard shortcuts
+        </Link>
         <div className="mt-1 opacity-70">v0.1.0</div>
       </div>
     </aside>

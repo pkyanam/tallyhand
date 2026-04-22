@@ -55,7 +55,8 @@ export default function LandingPage() {
           <p className="mt-5 text-balance text-lg text-muted-foreground">
             Tallyhand is a free, open-source time tracker and invoice generator
             for independent contractors. Your data lives on your device. No
-            SaaS, no integrations, no surprises.
+            SaaS, no integrations, no surprises. Export a JSON backup from
+            Settings → Data so you never lose your ledger to a browser reset.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Button asChild size="lg">

@@ -57,6 +57,8 @@ export interface InvoiceLineItem {
   quantity: number;
   rate: number;
   amount: number;
+  /** Only on expense-sourced lines: percent added on top of `rate` (base cost) when computing `amount`. */
+  markupPercent?: number;
   sourceType?: "task" | "expense" | "manual";
   sourceId?: ID;
 }
@@ -97,6 +99,8 @@ export interface Settings {
     enabled: boolean;
     dayOfWeek: number;
     hourOfDay: number;
+    /** When user last completed Weekly Reckoning (auto-open guard). */
+    lastCompletedAtMs?: number;
   };
   expenseCategories: string[];
   appearance: {

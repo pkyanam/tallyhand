@@ -21,6 +21,27 @@ export function computeLineAmount(quantity: number, rate: number): number {
   return round2(quantity * rate);
 }
 
+/** Expense line: `rate` is the base (pre-markup) cost. */
+export function computeExpenseLineAmount(
+  baseRate: number,
+  quantity: number,
+  markupPercent?: number,
+): number {
+  const m = markupPercent ?? 0;
+  return round2(quantity * baseRate * (1 + m / 100));
+}
+
+export function computeLineItemAmount(line: InvoiceLineItem): number {
+  if (line.sourceType === "expense") {
+    return computeExpenseLineAmount(
+      line.rate,
+      line.quantity,
+      line.markupPercent,
+    );
+  }
+  return computeLineAmount(line.quantity, line.rate);
+}
+
 export function sumLineItems(items: InvoiceLineItem[]): number {
   return round2(items.reduce((acc, it) => acc + (it.amount ?? 0), 0));
 }
@@ -51,18 +72,23 @@ export function taskToLineItem(
   };
 }
 
-export function expenseToLineItem(expense: Expense): InvoiceLineItem {
+export function expenseToLineItem(
+  expense: Expense,
+  options?: { markupPercent?: number },
+): InvoiceLineItem {
   const description = expense.note
     ? `${expense.category} — ${expense.note}`
     : expense.category;
+  const markup = options?.markupPercent;
   return {
     id: newId("li"),
     description,
     quantity: 1,
     rate: expense.amount,
-    amount: expense.amount,
+    amount: computeExpenseLineAmount(expense.amount, 1, markup),
     sourceType: "expense",
     sourceId: expense.id,
+    ...(markup != null && markup !== 0 ? { markupPercent: markup } : {}),
   };
 }
 

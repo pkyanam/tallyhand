@@ -27,3 +27,21 @@ export function formatElapsed(ms: number): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
+
+/** `YYYY-MM-DD` for `<input type="date">` from epoch ms (local calendar day). */
+export function toDateInputValue(ts: number): string {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Parse `YYYY-MM-DD` to epoch ms at local midnight (matches ledger date filters). */
+export function fromDateInputValue(value: string): number | null {
+  if (!value) return null;
+  const [y, mo, d] = value.split("-").map(Number);
+  if (!y || !mo || !d) return null;
+  const ms = new Date(y, mo - 1, d).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}

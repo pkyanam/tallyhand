@@ -25,6 +25,8 @@ import { clientRepo, projectRepo } from "@/lib/db/repos";
 export interface ProjectPickerProps {
   value: string | null;
   onChange: (projectId: string | null) => void;
+  /** When set, only projects for this client are listed. */
+  clientIdFilter?: string | null;
   placeholder?: string;
   className?: string;
   allowClear?: boolean;
@@ -35,6 +37,7 @@ export interface ProjectPickerProps {
 export function ProjectPicker({
   value,
   onChange,
+  clientIdFilter,
   placeholder = "Pick a project",
   className,
   allowClear = true,
@@ -54,11 +57,15 @@ export function ProjectPicker({
 
   const byClient = React.useMemo(() => {
     const activeProjects = (projects ?? []).filter((p) => !p.archived);
+    const filtered =
+      clientIdFilter != null && clientIdFilter !== ""
+        ? activeProjects.filter((p) => p.clientId === clientIdFilter)
+        : activeProjects;
     const map = new Map<
       string,
       { clientName: string; projects: typeof activeProjects }
     >();
-    for (const p of activeProjects) {
+    for (const p of filtered) {
       const client = clientsById.get(p.clientId);
       if (!client) continue;
       const bucket = map.get(p.clientId) ?? {
@@ -71,7 +78,7 @@ export function ProjectPicker({
     return Array.from(map.values()).sort((a, b) =>
       a.clientName.localeCompare(b.clientName),
     );
-  }, [projects, clientsById]);
+  }, [projects, clientsById, clientIdFilter]);
 
   const selected = (projects ?? []).find((p) => p.id === value);
   const selectedClient = selected ? clientsById.get(selected.clientId) : null;

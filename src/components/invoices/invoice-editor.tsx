@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { InvoicePreview } from "./invoice-preview";
 import {
-  computeLineAmount,
+  computeLineItemAmount,
   invoiceTotals,
   makeManualLineItem,
 } from "@/lib/invoice-helpers";
@@ -25,7 +25,7 @@ import type {
   InvoiceLineItem,
   Settings,
 } from "@/lib/db/types";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 function ymdFromMs(ms: number): string {
   const d = new Date(ms);
@@ -69,8 +69,12 @@ export function InvoiceEditor({
     const current = invoice.lineItems[index];
     if (!current) return;
     const merged: InvoiceLineItem = { ...current, ...patch };
-    if (patch.quantity != null || patch.rate != null) {
-      merged.amount = computeLineAmount(merged.quantity, merged.rate);
+    if (
+      patch.quantity != null ||
+      patch.rate != null ||
+      "markupPercent" in patch
+    ) {
+      merged.amount = computeLineItemAmount(merged);
     }
     const next = [...invoice.lineItems];
     next[index] = merged;
@@ -275,8 +279,17 @@ function LineItemRow({
     if (value !== current) onChange({ [field]: value });
   };
 
+  const isExpense = item.sourceType === "expense";
+
   return (
-    <li className="grid items-start gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_70px_90px_100px_32px] sm:items-center">
+    <li
+      className={cn(
+        "grid items-start gap-2 px-4 py-3 text-sm sm:items-center",
+        isExpense
+          ? "sm:grid-cols-[1fr_52px_72px_64px_88px_32px]"
+          : "sm:grid-cols-[1fr_70px_90px_100px_32px]",
+      )}
+    >
       <div className="flex items-start gap-2">
         <div
           className="mt-2 text-muted-foreground"
@@ -299,6 +312,7 @@ function LineItemRow({
       <Input
         className="h-9 text-right font-mono text-xs"
         inputMode="decimal"
+        title="Quantity"
         defaultValue={String(item.quantity)}
         key={`qty-${item.id}-${item.quantity}`}
         onBlur={(e) =>
@@ -309,11 +323,36 @@ function LineItemRow({
       <Input
         className="h-9 text-right font-mono text-xs"
         inputMode="decimal"
+        title={isExpense ? "Base (pre-markup)" : "Rate"}
         defaultValue={String(item.rate)}
         key={`rate-${item.id}-${item.rate}`}
         onBlur={(e) => commitNumber(e.target.value, "rate", item.rate)}
         disabled={disabled}
       />
+      {isExpense ? (
+        <Input
+          className="h-9 text-right font-mono text-xs"
+          inputMode="decimal"
+          title="Markup %"
+          placeholder="%"
+          defaultValue={
+            item.markupPercent == null ? "" : String(item.markupPercent)
+          }
+          key={`mk-${item.id}-${item.markupPercent ?? "x"}`}
+          onBlur={(e) => {
+            const raw = e.target.value.trim();
+            if (raw === "") {
+              if (item.markupPercent != null) onChange({ markupPercent: undefined });
+              return;
+            }
+            const n = Number.parseFloat(raw);
+            if (!Number.isFinite(n) || n < 0) return;
+            const next = n === 0 ? undefined : n;
+            if (next !== item.markupPercent) onChange({ markupPercent: next });
+          }}
+          disabled={disabled}
+        />
+      ) : null}
       <div className="text-right font-mono text-xs tabular-nums">
         {formatCurrency(item.amount)}
       </div>

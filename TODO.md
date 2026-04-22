@@ -2,7 +2,15 @@
 
 **For the next agent.** This doc is the working backlog. The authoritative product spec is `PRD.md` at the repo root — read it before starting anything substantial. This file is intentionally concrete: what's done, what's not, conventions in use, and gotchas already discovered.
 
-Last updated at end of Stage 3 (invoicing: list, editor, PDF, status transitions, settings slice).
+Last updated for **Stage 5** handoff + **Ledger** row fix (Open links, delete unbilled, meta-line alignment). Stage 4 is complete.
+
+---
+
+## 0. Deploy (already wired)
+
+- **GitHub → Vercel:** Pushing to the connected repository triggers a **Vercel** production deploy.
+- **Production URL:** https://tallyhand.vercel.app — use it for smoke tests after shipping user-facing changes.
+- Stage 5 **README** should document this flow (branch/trigger as you prefer: e.g. `main` → Production). Custom domain is optional later.
 
 ---
 
@@ -49,6 +57,17 @@ Last updated at end of Stage 3 (invoicing: list, editor, PDF, status transitions
 - **Settings → Business + Invoices**: `src/components/settings/settings-content.tsx` — auto-commit-on-blur form for business info (name, owner, email, tax ID, address, payment instructions) and invoice defaults (number prefix, next-number preview, payment terms days, accent colour, footer, logo upload-as-base64 with 500 KB warning).
 - **Helpers + tests**: `src/lib/invoice-helpers.ts` + `src/lib/invoice-helpers.test.ts` (round2, computeLineAmount, sumLineItems, computeDueDate, taskToLineItem / expenseToLineItem, inferClientIdFromSelection, invoiceTotals). 10 new tests; full suite passes `vitest`.
 
+### Stage 4 (expenses + Weekly Reckoning + settings)
+
+- **Expenses** (from prior work, verified in this stage): list/create/edit, categories from settings, client→project filter, receipt resize + warn, Ledger integration, delete confirm, ⌘K **New expense**.
+- **Expense markup on invoices**: optional `InvoiceLineItem.markupPercent` on expense lines; helpers in `invoice-helpers.ts`; tests in `invoice-helpers.test.ts`.
+- **Weekly Reckoning**: `/reckoning` (not in sidebar), `reckoning-content.tsx`, summary + gap detector + per-client **New invoice** → `/invoices/new?tasks=…&expenses=…`, **Mark reckoning complete** writes `Settings.reckoning.lastCompletedAtMs`. Aggregations: `weeklyReckoningSummary`, `detectGaps`, `unbilledTaskIdsForClient` / `unbilledExpenseIdsForClient`, `minutesOverlapWorkWindow`; tests in `aggregations.test.ts` + `reckoning-schedule.test.ts`.
+- **Auto-open**: `reckoning-auto-open.tsx` + `isReckoningDue` / `lastReckoningInstantMs` (`reckoning-schedule.ts`); session guard `sessionStorage` key `tallyhand.reckoning.autoOpened`.
+- **⌘K**: **Weekly Reckoning** navigates to `/reckoning` (replaces Stage 4 stub notice).
+- **Settings**: Reckoning schedule, expense category list (add/remove/reorder), appearance theme (Select) synced with **next-themes** via `settings-theme-sync.tsx` + `persistThemeChoice` from topbar/command palette, **Data** — `tallyhand.v1` JSON bundle export/import, ledger JSON, tasks/expenses CSV, Markdown export, reset with double `confirm` + reload.
+- **Persistence**: `settingsRepo.get()` deep-merges via `normalizeSettings()` (`settings-normalize.ts`) so new fields backfill; `lastCompletedAtMs` optional on `Settings.reckoning`.
+- **Dev stability**: `next.config.mjs` webpack `watchOptions.poll` when EMFILE on macOS (see `HANDOFF.md`).
+
 ---
 
 ## 2. Stack and where things live
@@ -70,13 +89,16 @@ src/
 │       │       └── edit/page.tsx
 │       ├── invoices/page.tsx
 │       ├── expenses/page.tsx
+│       ├── reckoning/page.tsx
 │       └── settings/page.tsx
 ├── components/
 │   ├── app/                    # app-shell pieces
-│   │   ├── app-chrome.tsx      # AppChromeProvider + CommandPalette + CommandHotkey
+│   │   ├── app-chrome.tsx      # Provider + theme/reckoning sync + CommandPalette + hotkey
 │   │   ├── app-chrome-provider.tsx
 │   │   ├── command-palette.tsx
 │   │   ├── command-hotkey.tsx
+│   │   ├── reckoning-auto-open.tsx
+│   │   ├── settings-theme-sync.tsx
 │   │   ├── sidebar.tsx
 │   │   ├── topbar.tsx
 │   │   ├── page-header.tsx
@@ -96,13 +118,18 @@ src/
 │   │   └── dashboard-content.tsx
 │   ├── ledger/
 │   │   └── ledger-content.tsx
+│   ├── reckoning/
+│   │   └── reckoning-content.tsx
 │   ├── ui/                     # shadcn-style primitives (see list above)
 │   ├── theme-provider.tsx
 │   └── theme-toggle.tsx
 └── lib/
     ├── utils.ts                # cn(), formatCurrency(), formatDuration()
-    ├── aggregations.ts         # week totals, unbilled-by-client, recentEntries
+    ├── aggregations.ts         # week totals, unbilled-by-client, reckoning + gaps
+    ├── app-bundle.ts           # tallyhand.v1 export / import / reset
     ├── ledger-export.ts        # CSV / JSON / Markdown export helpers
+    ├── reckoning-schedule.ts   # last reckoning instant, isReckoningDue
+    ├── settings-normalize.ts   # merge persisted Settings with defaults
     ├── datetime.ts             # to/fromLocalInputValue(), formatElapsed()
     ├── timer-store.ts          # Zustand store, persisted to localStorage
     └── db/
@@ -142,6 +169,8 @@ Installed but still unused: `date-fns`, `@react-pdf/renderer`.
 7. **Dexie liveQuery callbacks must be pure reads — no writes.** Stage 3 blew up on this: `settingsRepo.get()` writes `DEFAULT_SETTINGS` on first read, and wiring it into `useLiveQuery(() => settingsRepo.get())` silently stalls the observable and spams errors ("DexieError"). Fix pattern now in `settingsRepo`: `read()` is the pure getter for `useLiveQuery`; `get()` is the write-if-missing helper, called once from `useEffect`. Any repo method that writes-on-miss needs the same split.
 8. **`@react-pdf/renderer` is browser-only and heavy.** Never import it at the module level of a component that ships in the main bundle — it will bloat the client payload and break if it ever gets evaluated server-side. The pattern in `pdf-download-button.tsx` is the one to copy: dynamic `await import("@react-pdf/renderer")` inside the click handler, then `pdf(<Doc/>).toBlob()`. Also: the `<Image>` component has no alt prop, so any `jsx-a11y/alt-text` lint needs an `eslint-disable-next-line` at that line.
 9. **Next.js `PageHeader` now takes `ReactNode` for `title` and `description`.** Stage 3 needed a status badge inline with the invoice number in the header; relaxing the prop types was the minimum change. Existing callers passing strings are unaffected.
+10. **`settingsRepo.get()` may write on read.** Older settings rows are normalized against `DEFAULT_SETTINGS` and re-`put` when nested keys drift — safe, but avoid calling `get()` from inside Dexie `liveQuery` queriers (same rule as `read()` vs `get()` split in §4.7).
+11. **Theme persistence.** `SettingsThemeSync` applies `appearance.theme` after load; `ThemeToggle` and the command palette theme cycle call `persistThemeChoice()` so IndexedDB stays aligned with next-themes.
 
 ---
 
@@ -149,7 +178,7 @@ Installed but still unused: `date-fns`, `@react-pdf/renderer`.
 
 - [x] Add `LICENSE` file (MIT) at repo root.
 - [ ] Verify PWA installs on desktop Chrome + iOS Safari + Android Chrome against a production build.
-- [ ] Preview deploy (Vercel recommended — static-friendly, no server-side state needed).
+- [x] **Vercel production deploy** — GitHub push triggers deploy; app at **https://tallyhand.vercel.app** (document in README for Stage 5).
 - [ ] `public/` has SVG icons only. Generate PNG fallbacks (192, 512) for broader PWA compatibility if testing reveals install issues.
 
 ---
@@ -192,7 +221,8 @@ All items landed. `npm run lint` clean, `npm run build` green, all routes return
 
 ### Ledger
 - [x] `/ledger` — chronological feed of tasks **and** expenses (unified row type). Virtualized with `@tanstack/react-virtual`.
-- [x] Row renders: date, project → client, task name / expense category, duration or amount, billed badge, tag chips (tasks). Expenses use a distinct row variant.
+- [x] Row renders: **meta line** (date · client · project · duration or amount) on one horizontal line; task name / expense category + note below; tag chips (tasks). Expenses use a distinct row variant.
+- [x] Per-row **Open** → `/invoices/new?tasks=…` or `?expenses=…` when unbilled; **Open** → `/invoices/[id]` when billed (uses `invoiceId`). **Delete** (trash icon) with confirm for **unbilled** rows only (`taskRepo.remove` / `expenseRepo.remove`); billed rows are protected.
 - [x] Filters panel (sticky top): date range (with week/month presets), client, project, billed/unbilled, tag, free-text search. URL-encoded via `useSearchParams`.
 - [x] Inline edit (click → input → save on blur/enter) via `taskRepo.update()` / `expenseRepo.update()`.
 - [x] Bulk selection: checkboxes + shift-click range; sticky bar with count + **Invoice selected** → `/invoices/new?tasks=…&expenses=…` (Stage 3 route may 404 until invoicing ships).
@@ -200,7 +230,7 @@ All items landed. `npm run lint` clean, `npm run build` green, all routes return
 
 ### Command Palette
 - [x] `topbar.tsx` opens the real `CommandDialog` from `src/components/ui/command.tsx`; global **⌘K** / Ctrl+K via capture-phase `command-hotkey.tsx`.
-- [x] Actions: start/stop timer, new client, new project, new invoice, Ledger, toggle theme, Weekly Reckoning (in-app notice — Stage 4).
+- [x] Actions: start/stop timer, new client, new project, new invoice, Ledger, toggle theme, Weekly Reckoning → `/reckoning`.
 - [x] Entity search: client-side fuzzy filter over clients, active projects, 50 most recent tasks, invoice numbers (`useDeferredValue` on the query).
 
 ### Dashboard
@@ -228,7 +258,7 @@ A user with 100+ entries can filter, search, inline-edit, bulk-select. Primary a
 
 ### Skipped for Stage 4+
 
-- Expense line markup % (TODO Stage 4 mentions it — not needed for the MVP invoice flow; expenses currently import at cost).
+- ~~Expense line markup %~~ **Done in Stage 4** (optional markup on expense-sourced invoice lines).
 - Reverting a sent/paid invoice back to draft (users can delete and recreate if truly needed).
 - Multiple PDF templates (PRD §10.3 — shipping one polished template for MVP).
 
@@ -237,45 +267,47 @@ Founder can: select ledger entries → click Invoice → edit the draft → down
 
 ---
 
-## 9. Stage 4 — Expenses and Weekly Reckoning
+## 9. Stage 4 — Expenses and Weekly Reckoning ✅
 
 ### Expenses
-- [ ] Expense form: amount, category (dropdown from `Settings.expenseCategories`), date, optional client/project, optional note, optional receipt image.
-- [ ] Receipt upload: resize client-side to ~1600px max edge, store as base64 on the `Expense.receiptB64` field. Warn above ~500KB.
-- [ ] Expenses appear in the Ledger (Stage 2 row variant).
-- [ ] Expenses addable as invoice line items in Stage 3's editor, with optional markup % field.
+- [x] Expense form: amount, category (dropdown from `Settings.expenseCategories`), date, optional client/project, optional note, optional receipt image.
+- [x] Receipt upload: resize client-side to ~1600px max edge, store as base64 on the `Expense.receiptB64` field. Warn above ~500KB.
+- [x] Expenses appear in the Ledger (Stage 2 row variant).
+- [x] Expenses addable as invoice line items in Stage 3's editor, with optional markup % field.
 
 ### Weekly Reckoning (the signature feature — do not skimp)
-- [ ] `/reckoning` full-screen layout. Hidden from nav but reachable via ⌘K and auto-opened on schedule.
-- [ ] Scheduled trigger: at `Settings.reckoning.dayOfWeek + hourOfDay` (default Friday 16:00 local). Check on app mount; if the scheduled moment has passed since last-seen and user hasn't opened Reckoning this week, open it.
-- [ ] Summary panels: total hours this week, unbilled hours by client, total expenses, total unbilled dollars.
-- [ ] **Gap detector:** for each weekday in the current week, flag 9:00–17:00 blocks with less than 2 cumulative tracked hours. Prompt the user to fill each gap with a quick-add form.
-- [ ] Per-client "Invoice unbilled time for ClientX" one-click actions that jump into the Stage 3 flow pre-populated.
-- [ ] Completion event logged so the auto-open logic doesn't re-trigger.
+- [x] `/reckoning` layout (same app shell; not in sidebar). Reachable via ⌘K and auto-opened on schedule when due.
+- [x] Scheduled trigger: `Settings.reckoning.dayOfWeek` + `hourOfDay` (default Friday 16:00 local). `ReckoningAutoOpen` + `isReckoningDue` / `lastReckoningInstantMs`; session guard `sessionStorage` so auto-open runs once per browser session.
+- [x] Summary panels: tracked hours this week, unbilled task $ by client, expenses this week (+ unbilled portion), gap count card.
+- [x] **Gap detector:** Mon–Fri 9:00–17:00 local, under 2 hours → gap; `ManualEntryDialog` with `defaultDayStartMs` for quick-add.
+- [x] Per-client **New invoice** → `/invoices/new?tasks=…&expenses=…` with all unbilled tasks/expenses for that client.
+- [x] **Mark reckoning complete** → `lastCompletedAtMs` so auto-open does not loop.
 
 ### Settings page (complete)
-- [ ] Tabs or sections: Business, Invoices, Reckoning, Expense Categories, Appearance, Data.
-- [ ] Data tools: **Export all** (JSON / CSV / Markdown), **Import** (JSON), **Reset** (wipe IndexedDB, confirm twice). Export should be a single download button per format.
+- [x] Sections: Business, Invoices, Reckoning, Expense Categories, Appearance, Data.
+- [x] Data tools: **tallyhand.v1** bundle JSON export + import, ledger JSON (`tallyhand.ledger.v1`), tasks CSV, expenses CSV, Markdown export; **Reset** clears all tables + re-init settings (double `confirm`, full reload).
 
 ### Done when
-You (the founder) use Reckoning on a real Friday, fill a gap, and generate a real invoice from it.
+You (the founder) use Reckoning on a real Friday, fill a gap, and generate a real invoice from it. **Ship checklist:** `npm run lint && npm run test && npm run build` — all green after Stage 4 land.
 
 ---
 
 ## 10. Stage 5 — Polish, Docs, Launch
 
-- [ ] Empty states for every list view (Ledger, Clients, Invoices, Expenses). Loading states on all async boundaries. Error boundaries at route level.
-- [ ] Keyboard shortcut reference page (or modal from ⌘K → "Keyboard shortcuts").
-- [ ] Round-trip test: export all → reset → import → verify byte-equivalence. Same for Markdown ledger (idempotent parse/render).
-- [ ] Theme polish pass. Ensure nothing uses hex literals.
-- [ ] **README.md** rewrite: screenshots (Ledger, Stop Prompt, Invoice preview, Reckoning), feature list, quickstart, self-host instructions, "what's out of scope and why."
-- [ ] `CONTRIBUTING.md`, code of conduct, issue templates (.github/ISSUE_TEMPLATE).
-- [ ] `Dockerfile` + docker-compose example. Target: `docker run -p 3000:3000 tallyhand/tallyhand`.
-- [ ] `LICENSE` file (MIT) at repo root (see Stage 0 loose ends).
-- [ ] Community-hosted instance deployed to a domain.
-- [ ] **Public invoice link** feature (self-hosted only): read-only route `/invoice/public/[token]` that renders the invoice from its `publicToken`. No auth, no writes. Show warning in UI if enabled on the hosted instance (no server-side state available).
-- [ ] Onboarding notice about local-first data loss + nudge to export weekly (PRD Section 8 mitigation).
-- [ ] Launch: Show HN, r/freelance, r/selfhosted, Product Hunt.
+**Hosting:** Production is already on **Vercel** at **https://tallyhand.vercel.app** via GitHub integration (see §0). Remaining work is polish, docs accuracy, optional Docker/custom domain, and launch comms.
+
+- [x] Empty states for every list view (Ledger, Clients, Invoices, Expenses). Loading states on async boundaries; `(app)/error.tsx` route error boundary.
+- [x] Keyboard shortcut reference page at `/shortcuts` + ⌘K action + sidebar/mobile footer links.
+- [x] Round-trip test (`app-bundle-roundtrip.test.ts`): export → reset → import with `fake-indexeddb` + jsdom; Markdown export idempotence at fixed clock.
+- [x] Theme polish: invoice HTML preview accent fallback uses `hsl(var(--foreground))` when unset (user accent from settings unchanged).
+- [x] **README.md** rewrite: feature list, quickstart, deploy URL, self-host / public-link caveats, non-goals pointer; screenshot table → `docs/screenshots/`.
+- [x] `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/ISSUE_TEMPLATE/*`.
+- [ ] `Dockerfile` + docker-compose example (deferred unless you want Docker).
+- [x] **`LICENSE` (MIT)** at repo root — shipped in Stage 0; no action unless you change license terms.
+- [x] **Hosted instance** — **https://tallyhand.vercel.app** (Vercel). README documents URL + deploy; optional: custom domain + DNS later.
+- [x] **Public invoice link**: read-only `/invoice/public/[token]` + `publicToken` on save/create + share panel + local-only warnings.
+- [x] Onboarding: dismissible banner in app shell + landing copy → Settings → Data export.
+- [ ] Launch: Show HN, r/freelance, r/selfhosted, Product Hunt (manual when ready).
 
 ---
 
@@ -300,6 +332,7 @@ npm run lint
 ```
 
 - Read `PRD.md` for product vision and non-goals.
-- Stage 2 is complete. **Start on Stage 3 (Invoicing)** unless the user directs otherwise.
+- Stages 0–4 are complete. **Start on Stage 5 (Polish, Docs, Launch)** unless the user directs otherwise.
+- **Production:** https://tallyhand.vercel.app (GitHub → Vercel). Smoke-test there after risky changes.
 - `@tanstack/react-virtual` is installed for the Ledger list.
 - When in doubt, **ask the user** before expanding scope. The PRD's "Non-Goals" (Section 1.3) and "Out of Scope" (Section 9) lists are real.

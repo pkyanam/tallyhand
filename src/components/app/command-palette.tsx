@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useTheme } from "next-themes";
 import {
+  Banknote,
   Clock,
   FileText,
   FolderKanban,
+  Keyboard,
   LayoutList,
   Moon,
   Plus,
@@ -28,6 +30,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { useAppChrome } from "@/components/app/app-chrome-provider";
+import { persistThemeChoice } from "@/components/app/settings-theme-sync";
 import {
   clientRepo,
   invoiceRepo,
@@ -55,7 +58,7 @@ function matchesQuery(haystack: string, query: string): boolean {
 
 export function CommandPalette() {
   const router = useRouter();
-  const { commandOpen, setCommandOpen, showNotice } = useAppChrome();
+  const { commandOpen, setCommandOpen } = useAppChrome();
   const { theme, setTheme } = useTheme();
   const running = useTimerStore((s) => s.running);
   const projectId = useTimerStore((s) => s.projectId);
@@ -121,6 +124,7 @@ export function CommandPalette() {
     const next =
       theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
     setTheme(next);
+    void persistThemeChoice(next);
   };
 
   const actionMatches = (label: string) => matchesQuery(label, q);
@@ -197,6 +201,17 @@ export function CommandPalette() {
                 New invoice
               </CommandItem>
             )}
+            {actionMatches("New expense") && (
+              <CommandItem
+                onSelect={() => {
+                  router.push("/expenses/new");
+                  close();
+                }}
+              >
+                <Banknote className="h-4 w-4" />
+                New expense
+              </CommandItem>
+            )}
             {actionMatches("Open ledger") && (
               <CommandItem
                 onSelect={() => {
@@ -226,12 +241,24 @@ export function CommandPalette() {
             {actionMatches("Weekly Reckoning") && (
               <CommandItem
                 onSelect={() => {
-                  showNotice("Weekly Reckoning is coming in Stage 4.");
+                  router.push("/reckoning");
                   close();
                 }}
               >
                 <Wand2 className="h-4 w-4" />
                 Weekly Reckoning
+              </CommandItem>
+            )}
+            {actionMatches("Keyboard shortcuts") && (
+              <CommandItem
+                onSelect={() => {
+                  router.push("/shortcuts");
+                  close();
+                }}
+              >
+                <Keyboard className="h-4 w-4" />
+                Keyboard shortcuts
+                <CommandShortcut>⌘K</CommandShortcut>
               </CommandItem>
             )}
           </CommandGroup>

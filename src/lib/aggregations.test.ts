@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectGaps,
+  minutesOverlapWorkWindow,
   recentEntries,
   startOfWeekMonday,
   unbilledByClient,
@@ -122,6 +124,40 @@ describe("unbilledByClient", () => {
     expect(rows[0].amount).toBe(400);
     expect(rows[1].clientId).toBe("cli_a");
     expect(rows[1].amount).toBe(100);
+  });
+});
+
+describe("minutesOverlapWorkWindow", () => {
+  it("returns full overlap minutes when task sits inside window", () => {
+    const winStart = new Date(2026, 3, 21, 9, 0, 0, 0).getTime();
+    const winEnd = new Date(2026, 3, 21, 17, 0, 0, 0).getTime();
+    const t0 = new Date(2026, 3, 21, 10, 0, 0, 0).getTime();
+    const t1 = new Date(2026, 3, 21, 11, 0, 0, 0).getTime();
+    expect(minutesOverlapWorkWindow(t0, t1, winStart, winEnd)).toBe(60);
+  });
+});
+
+describe("detectGaps", () => {
+  it("flags a weekday when under 2h fall inside 9–5", () => {
+    const wed = new Date(2026, 3, 22, 12, 0, 0);
+    const ws = startOfWeekMonday(wed);
+    const winStart = new Date(2026, 3, 21, 9, 0, 0, 0).getTime();
+    const tasks = [
+      task({
+        id: "g",
+        projectId: "prj",
+        startAt: winStart + 3600000,
+        endAt: winStart + 2 * 3600000,
+        durationMinutes: 60,
+      }),
+    ];
+    const gaps = detectGaps(wed, tasks);
+    const mon = gaps.find((g) => g.dayStartMs === ws);
+    const tue = gaps.find((g) => g.dayStartMs === ws + 86400000);
+    expect(mon?.isGap).toBe(true);
+    expect(mon?.minutesInWindow).toBe(0);
+    expect(tue?.minutesInWindow).toBe(60);
+    expect(tue?.isGap).toBe(true);
   });
 });
 
