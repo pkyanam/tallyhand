@@ -26,7 +26,7 @@ export default function LandingPage() {
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <a
-              href="https://github.com/"
+              href="https://github.com/pkyanam/tallyhand"
               target="_blank"
               rel="noreferrer"
               aria-label="GitHub repository"
@@ -65,7 +65,7 @@ export default function LandingPage() {
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <a href="https://github.com/" target="_blank" rel="noreferrer">
+              <a href="https://github.com/pkyanam/tallyhand" target="_blank" rel="noreferrer">
                 <GithubIcon className="mr-1.5 h-4 w-4" />
                 Star on GitHub
               </a>
