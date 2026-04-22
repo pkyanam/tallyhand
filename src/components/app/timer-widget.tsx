@@ -3,49 +3,69 @@
 import * as React from "react";
 import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProjectPicker } from "./project-picker";
 import { cn } from "@/lib/utils";
+import { useTimerStore } from "@/lib/timer-store";
+import { formatElapsed } from "@/lib/datetime";
 
 export function TimerWidget() {
-  const [running, setRunning] = React.useState(false);
-  const [startedAt, setStartedAt] = React.useState<number | null>(null);
-  const [elapsed, setElapsed] = React.useState(0);
+  const running = useTimerStore((s) => s.running);
+  const startedAt = useTimerStore((s) => s.startedAt);
+  const projectId = useTimerStore((s) => s.projectId);
+  const start = useTimerStore((s) => s.start);
+  const stop = useTimerStore((s) => s.stop);
+  const setProject = useTimerStore((s) => s.setProject);
+
+  const [now, setNow] = React.useState(() => Date.now());
+  const [hydrated, setHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   React.useEffect(() => {
     if (!running || startedAt == null) return;
-    const id = window.setInterval(() => {
-      setElapsed(Date.now() - startedAt);
-    }, 500);
+    const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
   }, [running, startedAt]);
 
+  const elapsed = running && startedAt != null ? now - startedAt : 0;
+
   const toggle = () => {
-    if (!running) {
-      setStartedAt(Date.now());
-      setElapsed(0);
-      setRunning(true);
+    if (running) {
+      stop();
     } else {
-      setRunning(false);
+      start(projectId);
     }
   };
 
-  const display = formatElapsed(elapsed);
-
   return (
     <div className="flex items-center gap-2">
+      {hydrated && (
+        <ProjectPicker
+          value={projectId}
+          onChange={setProject}
+          placeholder="No project"
+          triggerClassName="hidden max-w-[220px] md:inline-flex"
+          size="sm"
+        />
+      )}
       <div
         className={cn(
-          "hidden min-w-[80px] text-right font-mono text-sm tabular-nums sm:block",
+          "hidden min-w-[72px] text-right font-mono text-sm tabular-nums sm:block",
           running ? "text-foreground" : "text-muted-foreground",
         )}
         aria-live="polite"
       >
-        {display}
+        {formatElapsed(elapsed)}
       </div>
       <Button
         variant={running ? "destructive" : "default"}
         size="sm"
         onClick={toggle}
         className="gap-1.5"
+        aria-label={running ? "Stop timer" : "Start timer"}
+        title={running ? "Stop timer (⌘⇧T)" : "Start timer (⌘⇧T)"}
       >
         {running ? (
           <>
@@ -61,13 +81,4 @@ export function TimerWidget() {
       </Button>
     </div>
   );
-}
-
-function formatElapsed(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }

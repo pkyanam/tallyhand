@@ -190,6 +190,14 @@ export const invoiceRepo = {
 };
 
 export const settingsRepo = {
+  // Pure read — safe inside useLiveQuery. Returns undefined if the singleton
+  // row has not been written yet.
+  async read(): Promise<Settings | undefined> {
+    return getDB().settings.get("singleton");
+  },
+  // Read-or-initialize. Writes the default row if missing. Do NOT call this
+  // inside a Dexie liveQuery callback (Dexie forbids writes from querier
+  // functions and will silently loop). Call from effects or event handlers.
   async get(): Promise<Settings> {
     const existing = await getDB().settings.get("singleton");
     if (existing) return existing;

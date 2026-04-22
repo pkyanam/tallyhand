@@ -2,11 +2,13 @@
 
 **For the next agent.** This doc is the working backlog. The authoritative product spec is `PRD.md` at the repo root — read it before starting anything substantial. This file is intentionally concrete: what's done, what's not, conventions in use, and gotchas already discovered.
 
-Last updated at end of Stage 0 (foundation).
+Last updated at end of Stage 3 (invoicing: list, editor, PDF, status transitions, settings slice).
 
 ---
 
-## 1. What is already done (Stage 0)
+## 1. What is already done
+
+### Stage 0 (foundation)
 
 - Next.js 14 (App Router) + TypeScript + Tailwind scaffolded.
 - shadcn/ui tokens wired via HSL CSS vars (light/dark). Base components: `Button`, `Input`, `Label`, `Card`, `Dialog`, `Separator`, `Badge`.
@@ -16,6 +18,36 @@ Last updated at end of Stage 0 (foundation).
 - Landing page at `/` with "Launch app" CTA.
 - PWA: `manifest.webmanifest`, SVG icons, `next-pwa` service worker (only active in production builds).
 - GitHub remote wired to `https://github.com/pkyanam/tallyhand`.
+- `LICENSE` file (MIT) at repo root.
+
+### Stage 1 (clients, projects, timer)
+
+- Extra shadcn primitives added: `Textarea`, `Checkbox`, `Select`, `Popover`, `DropdownMenu`, `Tabs`, `Command` (cmdk).
+- **Clients**: `/clients` (active/archived tabs, search, project count + last activity), `/clients/new`, `/clients/[id]` detail, `/clients/[id]/edit`. Archive/unarchive + delete.
+- **Projects**: inline CRUD in the client detail view with rate override that falls back to `client.defaultRate`. Archive + unarchive.
+- **Timer**: `src/lib/timer-store.ts` — Zustand store persisted to `localStorage` (key `tallyhand.timer`). Survives reload. Project picker (`src/components/app/project-picker.tsx`) is searchable via cmdk, grouped by client.
+- **Stop Prompt**: `src/components/app/stop-prompt.tsx` opens on stop. Fields: task name, project, editable start/end (datetime-local), notes, tags (chips). Dismissing keeps the entry as a draft; auto-reopens on next load. Explicit **Discard** button clears the draft after confirm.
+- **⌘⇧T global shortcut**: `src/components/app/timer-hotkey.tsx` — bound with `{ capture: true }` so it fires even when focus is in an input.
+- **Manual entry**: `src/components/app/manual-entry-dialog.tsx` — modal with same fields as Stop Prompt plus date/time pickers. Exposed on Dashboard and Ledger page headers.
+- **Dashboard**: real data — hours this week, unbilled $, active clients, total tracked entries, recent 10 entries with client/project links.
+
+### Stage 2 (ledger, command palette, dashboard)
+
+- **`/ledger`**: unified virtualized feed (tasks + expenses), URL-synced filters (date range + week/month presets, client, project, billed, tag, search), inline edit (tasks: name, duration, tags; expenses: amount, category, note), bulk select with shift-range, “Invoice selected” → `/invoices/new?tasks=…&expenses=…`, CSV/JSON/Markdown export with canonical JSON + human-readable MD note. Dev-only **Seed 5 expenses** when `NODE_ENV=development`.
+- **Command palette (⌘K)**: `CommandDialog` + global capture-phase hotkey; actions (timer, nav, theme, Reckoning stub notice); fuzzy entity search over clients, projects, recent 50 tasks, invoices.
+- **Dashboard**: `src/lib/aggregations.ts` powers week totals, unbilled-by-client (top 5 widget), recent entries; **Open invoices** count (draft + sent) with zero-state copy.
+- **Tests**: `vitest` + `src/lib/aggregations.test.ts`; `npm run test` script.
+
+### Stage 3 (invoicing)
+
+- **`/invoices`** list: live query, sortable by issue date / number, status badges (draft / sent / paid), draft delete with confirm, empty state.
+- **`/invoices/new`**: parses `?tasks=…&expenses=…` query params, hydrates line items from tasks (quantity=hours, rate from project override → client default) and expenses (qty=1, rate=amount). Silently drops missing IDs with a notice. Also serves as a blank-start page when no params supplied. Infers client from the first selected task/expense; user can re-pick.
+- **`/invoices/[id]`**: shared `InvoiceEditor` with form on the left (client picker, dates, number, editable line items with source-type icon + manual lines, notes) and live HTML preview on the right. Editable invoice number; editable descriptions / quantities / rates with auto-recomputed amount.
+- **Invoice numbering**: `${Settings.invoice.numberPrefix}${Settings.invoice.nextNumber}`. `assignNextInvoiceNumber()` in `src/lib/invoice-helpers.ts` reads-and-bumps inside a Dexie `rw` transaction. On new-invoice save, if the user hasn't manually changed the pre-filled number it's replaced with the atomically-assigned one and the counter bumps; if they did change it the counter is left alone.
+- **PDF export**: `src/components/invoices/pdf-template.tsx` renders a `@react-pdf/renderer` `Document` that mirrors the HTML preview (LETTER, Helvetica, accent color, logo, footer, notes, payment instructions). `pdf-download-button.tsx` lazy-imports `@react-pdf/renderer` + the template only on click (via `pdf(...).toBlob()`) so it stays out of the main bundle and never runs server-side.
+- **Status workflow (no email)**: `Mark as sent` calls `markInvoiceSent(invoice)` which in one Dexie `rw` transaction flips invoice → `sent` and sets `isBilled=true` + `invoiceId=<inv.id>` on every task/expense referenced via `lineItem.sourceId`. Idempotent. `Mark as paid` updates status only. Paid invoices become read-only in the editor.
+- **Settings → Business + Invoices**: `src/components/settings/settings-content.tsx` — auto-commit-on-blur form for business info (name, owner, email, tax ID, address, payment instructions) and invoice defaults (number prefix, next-number preview, payment terms days, accent colour, footer, logo upload-as-base64 with 500 KB warning).
+- **Helpers + tests**: `src/lib/invoice-helpers.ts` + `src/lib/invoice-helpers.test.ts` (round2, computeLineAmount, sumLineItems, computeDueDate, taskToLineItem / expenseToLineItem, inferClientIdFromSelection, invoiceTotals). 10 new tests; full suite passes `vitest`.
 
 ---
 
@@ -27,20 +59,52 @@ src/
 │   ├── layout.tsx              # root layout — fonts, ThemeProvider, metadata
 │   ├── page.tsx                # marketing landing page
 │   └── (app)/                  # route group sharing the sidebar+topbar shell
-│       ├── layout.tsx
+│       ├── layout.tsx          # mounts StopPrompt + TimerHotkey
 │       ├── dashboard/page.tsx
-│       ├── ledger/page.tsx
-│       ├── clients/page.tsx
+│       ├── ledger/page.tsx     # Suspense + LedgerContent
+│       ├── clients/
+│       │   ├── page.tsx
+│       │   ├── new/page.tsx
+│       │   └── [id]/
+│       │       ├── page.tsx
+│       │       └── edit/page.tsx
 │       ├── invoices/page.tsx
 │       ├── expenses/page.tsx
 │       └── settings/page.tsx
 ├── components/
-│   ├── app/                    # app-shell pieces (sidebar, topbar, timer widget, page header)
-│   ├── ui/                     # shadcn-style primitives
+│   ├── app/                    # app-shell pieces
+│   │   ├── app-chrome.tsx      # AppChromeProvider + CommandPalette + CommandHotkey
+│   │   ├── app-chrome-provider.tsx
+│   │   ├── command-palette.tsx
+│   │   ├── command-hotkey.tsx
+│   │   ├── sidebar.tsx
+│   │   ├── topbar.tsx
+│   │   ├── page-header.tsx
+│   │   ├── timer-widget.tsx    # reads useTimerStore
+│   │   ├── timer-hotkey.tsx    # ⌘⇧T global binding (capture phase)
+│   │   ├── stop-prompt.tsx     # opens on stop; auto-reopens on draft
+│   │   ├── manual-entry-dialog.tsx
+│   │   ├── project-picker.tsx  # cmdk popover, grouped by client
+│   │   └── tags-input.tsx
+│   ├── clients/
+│   │   ├── client-form.tsx     # react-hook-form + zod
+│   │   ├── clients-list.tsx
+│   │   ├── client-detail.tsx
+│   │   ├── project-form.tsx
+│   │   └── projects-section.tsx
+│   ├── dashboard/
+│   │   └── dashboard-content.tsx
+│   ├── ledger/
+│   │   └── ledger-content.tsx
+│   ├── ui/                     # shadcn-style primitives (see list above)
 │   ├── theme-provider.tsx
 │   └── theme-toggle.tsx
 └── lib/
     ├── utils.ts                # cn(), formatCurrency(), formatDuration()
+    ├── aggregations.ts         # week totals, unbilled-by-client, recentEntries
+    ├── ledger-export.ts        # CSV / JSON / Markdown export helpers
+    ├── datetime.ts             # to/fromLocalInputValue(), formatElapsed()
+    ├── timer-store.ts          # Zustand store, persisted to localStorage
     └── db/
         ├── types.ts            # entity interfaces, DEFAULT_SETTINGS
         ├── schema.ts           # TallyhandDB class, getDB() factory
@@ -49,7 +113,7 @@ src/
         └── index.ts
 ```
 
-Installed but unused so far: `zustand`, `react-hook-form`, `@hookform/resolvers`, `zod`, `date-fns`, `cmdk`, `@react-pdf/renderer`, `dexie-react-hooks`, several Radix primitives.
+Installed but still unused: `date-fns`, `@react-pdf/renderer`.
 
 ---
 
@@ -74,91 +138,102 @@ Installed but unused so far: `zustand`, `react-hook-form`, `@hookform/resolvers`
 3. **Dexie is browser-only.** `getDB()` throws server-side. Always use it from client components or inside effects/handlers.
 4. **PWA service worker is disabled in dev.** `next-pwa` only emits `sw.js` on `next build`. Test offline behavior against `npm run build && npm start`.
 5. **Route group `(app)` vs root `/`:** landing page lives at `src/app/page.tsx` (root layout). App lives under `src/app/(app)/...` which injects the sidebar+topbar shell. Don't collapse these.
+6. **`Set` / `Map` iteration in `next build`:** the project TypeScript target can flag `for..of` on `Set` and spreads like `[...map.entries()]` unless `downlevelIteration` is enabled. Prefer `Array.from(set)` / `Array.from(map.entries())` in library code.
+7. **Dexie liveQuery callbacks must be pure reads — no writes.** Stage 3 blew up on this: `settingsRepo.get()` writes `DEFAULT_SETTINGS` on first read, and wiring it into `useLiveQuery(() => settingsRepo.get())` silently stalls the observable and spams errors ("DexieError"). Fix pattern now in `settingsRepo`: `read()` is the pure getter for `useLiveQuery`; `get()` is the write-if-missing helper, called once from `useEffect`. Any repo method that writes-on-miss needs the same split.
+8. **`@react-pdf/renderer` is browser-only and heavy.** Never import it at the module level of a component that ships in the main bundle — it will bloat the client payload and break if it ever gets evaluated server-side. The pattern in `pdf-download-button.tsx` is the one to copy: dynamic `await import("@react-pdf/renderer")` inside the click handler, then `pdf(<Doc/>).toBlob()`. Also: the `<Image>` component has no alt prop, so any `jsx-a11y/alt-text` lint needs an `eslint-disable-next-line` at that line.
+9. **Next.js `PageHeader` now takes `ReactNode` for `title` and `description`.** Stage 3 needed a status badge inline with the invoice number in the header; relaxing the prop types was the minimum change. Existing callers passing strings are unaffected.
 
 ---
 
 ## 5. Stage 0 loose ends
 
-- [ ] Add `LICENSE` file (MIT) at repo root. `package.json` declares MIT but there's no LICENSE file.
+- [x] Add `LICENSE` file (MIT) at repo root.
 - [ ] Verify PWA installs on desktop Chrome + iOS Safari + Android Chrome against a production build.
 - [ ] Preview deploy (Vercel recommended — static-friendly, no server-side state needed).
 - [ ] `public/` has SVG icons only. Generate PNG fallbacks (192, 512) for broader PWA compatibility if testing reveals install issues.
 
 ---
 
-## 6. Stage 1 — Clients, Projects, and the Timer
+## 6. Stage 1 — Clients, Projects, and the Timer ✅
 
-**Goal:** The daily-use loop works end to end.
+All items landed. `npm run lint` clean, `npm run build` green, all routes return 200 in dev.
 
 ### Clients
-- [ ] `/clients` — list view. Columns: name, default rate, project count, last activity. Actions: new, edit, archive.
-- [ ] `/clients/new` and `/clients/[id]/edit` forms (react-hook-form + zod). Fields per `Client` interface.
-- [ ] `/clients/[id]` detail view. Shows client info + list of projects + recent tasks.
-- [ ] Archive (soft delete) via `clientRepo.archive()`. Archived clients are hidden from pickers but visible in an "Archived" tab.
+- [x] `/clients` list with active/archived tabs, search, project count, last activity, row-level archive/unarchive/edit.
+- [x] `/clients/new` and `/clients/[id]/edit` forms (react-hook-form + zod, shared `ClientForm`).
+- [x] `/clients/[id]` detail — info card, projects section, recent activity list.
+- [x] Archive + unarchive via `clientRepo.update({ archived })`. Delete with confirm.
 
 ### Projects
-- [ ] Nested under `/clients/[id]` — inline project CRUD.
-- [ ] Rate override field (falls back to client `defaultRate` when unset).
-- [ ] Archive flag (same pattern as clients).
+- [x] Inline CRUD in the client detail (`ProjectsSection`).
+- [x] Rate override field with client `defaultRate` fallback and "override" badge in the effective rate line.
+- [x] Archive/unarchive actions; archived section rendered after active.
 
-### Timer (real this time)
-- [ ] Replace the stub in `src/components/app/timer-widget.tsx` with a Zustand store that persists to localStorage so the timer survives reloads.
-- [ ] Project picker dropdown in the widget (searchable; lists active projects grouped by client).
-- [ ] **Stop Prompt** dialog on stop. Fields: task name (required), project (required, pre-filled), editable start/end times, notes, tags (free-form chips). Save writes a `Task` via `taskRepo.create()`.
-- [ ] If the user closes the Stop Prompt without saving, persist the unsaved draft (in store + localStorage) and reopen it on next app load. PRD 4.2 — "nothing is lost."
-- [ ] Keyboard shortcut **⌘⇧T** to start/stop the timer, bound globally (including when focus is in inputs — contractor is likely mid-task).
+### Timer
+- [x] `src/lib/timer-store.ts` — Zustand + `persist` middleware keyed at `tallyhand.timer`.
+- [x] `ProjectPicker` — cmdk popover, searchable, grouped by client, empty-state CTA to create first client.
+- [x] `StopPrompt` — name/project/start/end/notes/tags. Validates project exists and end > start. Dismiss preserves draft; `Discard` button clears it after confirm. Auto-reopens on next mount if a draft exists.
+- [x] ⌘⇧T global binding via `{ capture: true }` so input focus doesn't swallow the key.
 
 ### Manual entry
-- [ ] `/ledger/new` or a modal action "Add entry" — same fields as Stop Prompt, minus the timer. Date/time pickers.
+- [x] `ManualEntryDialog` modal (default: last hour → now). Wired into Dashboard and Ledger headers.
 
-### Done when
-A user can create a client + project, start the timer, stop it, fill the Stop Prompt, and see the saved task in IndexedDB. Dismissing the Stop Prompt preserves a draft.
+### Gotchas surfaced
+
+- **Zod v4 + `@hookform/resolvers`.** `.transform()` on an `.optional()` field drifts the resolver's input/output types and TSC rejects it. Workaround used in `ClientForm` / `ProjectForm`: keep the rate field as `z.string().optional().refine(...)` and parse to `number` manually inside `handleSubmit`. Revisit if you adopt coerced or preprocessed schemas elsewhere.
+- **Zustand `persist` + SSR.** The timer widget reads from the persisted store; to avoid hydration mismatches, the project picker inside `timer-widget.tsx` is gated on a `hydrated` flag set in `useEffect`.
+- **Stop Prompt re-open on mount.** `promptOpen` is intentionally excluded from `partialize` — `pending` alone drives the auto-reopen effect so a stale `promptOpen=true` can't ship from localStorage.
 
 ---
 
-## 7. Stage 2 — Ledger and Command Palette
+## 7. Stage 2 — Ledger and Command Palette ✅
 
 **Goal:** One unified view of the user's work, keyboard-first.
 
 ### Ledger
-- [ ] `/ledger` — chronological feed of tasks **and** expenses (unified row type). Virtualized list (use `@tanstack/react-virtual` — not yet installed).
-- [ ] Row renders: date, project → client, task name, duration, amount, billed badge, tag chips. Expenses render as a distinct row variant.
-- [ ] Filters panel (sticky top): date range (with week/month presets), client, project, billed/unbilled, tag, free-text search. URL-encode filters so views are shareable within an install.
-- [ ] Inline edit on any cell (click → input → save on blur/enter). Use `taskRepo.update()` / `expenseRepo.update()`.
-- [ ] Bulk selection: row checkboxes + shift-click range select. Selection count pill in a sticky action bar with "Invoice selected" CTA (wire to Stage 3).
-- [ ] Export actions on the current filtered view: **CSV** (per entity), **JSON** (combined), **Markdown ledger** (chronological, human-readable — PRD 2.5).
+- [x] `/ledger` — chronological feed of tasks **and** expenses (unified row type). Virtualized with `@tanstack/react-virtual`.
+- [x] Row renders: date, project → client, task name / expense category, duration or amount, billed badge, tag chips (tasks). Expenses use a distinct row variant.
+- [x] Filters panel (sticky top): date range (with week/month presets), client, project, billed/unbilled, tag, free-text search. URL-encoded via `useSearchParams`.
+- [x] Inline edit (click → input → save on blur/enter) via `taskRepo.update()` / `expenseRepo.update()`.
+- [x] Bulk selection: checkboxes + shift-click range; sticky bar with count + **Invoice selected** → `/invoices/new?tasks=…&expenses=…` (Stage 3 route may 404 until invoicing ships).
+- [x] Export: **CSV** (tasks + expenses files), **JSON** (combined canonical payload), **Markdown** ledger; UI notes JSON = canonical, MD = human-readable.
 
 ### Command Palette
-- [ ] Replace the ⌘K stub in `src/components/app/topbar.tsx` with a real `cmdk` dialog.
-- [ ] Actions: start/stop timer, new client, new project, new invoice, jump to Ledger, toggle theme.
-- [ ] Entity search: fuzzy over clients, projects, recent tasks, invoice numbers.
-- [ ] Bind global **⌘K**.
+- [x] `topbar.tsx` opens the real `CommandDialog` from `src/components/ui/command.tsx`; global **⌘K** / Ctrl+K via capture-phase `command-hotkey.tsx`.
+- [x] Actions: start/stop timer, new client, new project, new invoice, Ledger, toggle theme, Weekly Reckoning (in-app notice — Stage 4).
+- [x] Entity search: client-side fuzzy filter over clients, active projects, 50 most recent tasks, invoice numbers (`useDeferredValue` on the query).
 
 ### Dashboard
-- [ ] Real widgets: hours this week, unbilled $ by client (top 5), open invoices, recent entries (last 10).
-- [ ] Aggregations live in a `src/lib/aggregations.ts` helper.
+- [x] Top 5 **unbilled clients** + **open invoices** (draft + sent) + existing stat cards; `recentEntries` from aggregations.
+- [x] `src/lib/aggregations.ts` + `aggregations.test.ts` (`vitest`).
 
 ### Done when
-A user with 100+ entries can filter, search, inline-edit, bulk-select. Every primary action is reachable from ⌘K.
+A user with 100+ entries can filter, search, inline-edit, bulk-select. Primary actions are reachable from ⌘K.
 
 ---
 
-## 8. Stage 3 — Invoicing
+## 8. Stage 3 — Invoicing ✅
 
 **Goal:** Turn selected ledger entries into a professional PDF.
 
-- [ ] `/invoices` list with status badges (draft / sent / paid), sortable by date/number.
-- [ ] "Invoice selected" from Ledger → `/invoices/new?tasks=id1,id2,...` — new invoice draft with auto-populated line items from those tasks.
-- [ ] Invoice editor layout: left pane = form (client picker, issue/due dates, number with configurable prefix + auto-increment from `Settings.invoice.nextNumber`, line items table, notes, payment instructions). Right pane = live PDF preview.
-- [ ] Line items: description (editable), quantity, rate, amount (auto). Source type retained (`task` / `expense` / `manual`). Add manual line items for flat-fee deliverables.
-- [ ] **PDF export** via `@react-pdf/renderer`. Build the template in `src/components/invoices/pdf-template.tsx`. One polished default template — open PRD question about whether to offer variants.
-- [ ] Mark-as-sent, mark-as-paid (manual status buttons, no email integration — PRD Section 9).
-- [ ] When invoice is marked sent: flip `isBilled = true` and set `invoiceId` on every linked task/expense.
-- [ ] Invoice appearance settings (under Settings → Invoices): logo upload (base64), accent color, footer text, default payment terms.
-- [ ] Invoice numbering: `${prefix}${nextNumber}`, atomic increment.
+- [x] `/invoices` list with status badges (draft / sent / paid), sortable by date/number.
+- [x] "Invoice selected" from Ledger → `/invoices/new?tasks=id1,id2,...` — new invoice draft with auto-populated line items from those tasks (and expenses).
+- [x] Invoice editor layout: left pane = form (client picker, issue/due dates, number with configurable prefix + atomic bump from `Settings.invoice.nextNumber`, line items table, notes). Right pane = live HTML preview that mirrors the PDF.
+- [x] Line items: description (editable), quantity, rate, amount (auto = qty × rate). Source type retained (`task` / `expense` / `manual`). Add manual line items for flat-fee deliverables.
+- [x] **PDF export** via `@react-pdf/renderer` — template at `src/components/invoices/pdf-template.tsx`, triggered via `PdfDownloadButton` with lazy `import()` on click.
+- [x] Mark-as-sent, mark-as-paid (manual status buttons, no email integration — PRD Section 9).
+- [x] When invoice is marked sent: flip `isBilled = true` and set `invoiceId` on every linked task/expense, all in one Dexie `rw` transaction.
+- [x] Invoice appearance settings (under Settings → Invoices): logo upload (base64), accent color, footer text, default payment terms.
+- [x] Invoice numbering: `${prefix}${nextNumber}`, atomic increment in a Dexie transaction.
 
-### Done when
-User selects a week of tasks in the Ledger, clicks Invoice, edits the draft, exports a PDF they'd actually send a client.
+### Skipped for Stage 4+
+
+- Expense line markup % (TODO Stage 4 mentions it — not needed for the MVP invoice flow; expenses currently import at cost).
+- Reverting a sent/paid invoice back to draft (users can delete and recreate if truly needed).
+- Multiple PDF templates (PRD §10.3 — shipping one polished template for MVP).
+
+### Done when ✅
+Founder can: select ledger entries → click Invoice → edit the draft → download a PDF → mark sent → see tasks/expenses flip to billed with `invoiceId` set.
 
 ---
 
@@ -225,5 +300,6 @@ npm run lint
 ```
 
 - Read `PRD.md` for product vision and non-goals.
-- Start with Stage 1 unless the user directs otherwise. The Timer + Stop Prompt is the load-bearing UX of the product — take it seriously.
+- Stage 2 is complete. **Start on Stage 3 (Invoicing)** unless the user directs otherwise.
+- `@tanstack/react-virtual` is installed for the Ledger list.
 - When in doubt, **ask the user** before expanding scope. The PRD's "Non-Goals" (Section 1.3) and "Out of Scope" (Section 9) lists are real.

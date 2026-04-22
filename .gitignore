@@ -43,3 +43,6 @@ next-env.d.ts
 /public/worker-*.js
 /public/worker-*.js.map
 /public/fallback-*.js
+
+# playwright-mcp smoke-test artifacts
+/.playwright-mcp/

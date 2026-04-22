@@ -3,9 +3,12 @@
 import { Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
 import { TimerWidget } from "./timer-widget";
 
 export function Topbar() {
+  const { setCommandOpen } = useAppChrome();
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur">
       <div className="flex-1" />
@@ -14,6 +17,7 @@ export function Topbar() {
         size="sm"
         className="hidden gap-2 text-muted-foreground sm:inline-flex"
         aria-label="Open command palette"
+        onClick={() => setCommandOpen(true)}
       >
         <Command className="h-3.5 w-3.5" />
         <span className="hidden md:inline">Search</span>

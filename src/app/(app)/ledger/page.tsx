@@ -1,19 +1,25 @@
+import { Suspense } from "react";
 import { PageHeader } from "@/components/app/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { ManualEntryDialog } from "@/components/app/manual-entry-dialog";
+import { LedgerContent } from "@/components/ledger/ledger-content";
 
 export default function LedgerPage() {
   return (
     <>
       <PageHeader
         title="Ledger"
-        description="Chronological feed of tasks and expenses. Built in Stage 2."
+        description="Unified chronological feed of time and expenses. Filter, edit inline, export, or select rows to invoice."
+        actions={<ManualEntryDialog />}
       />
-      <Card>
-        <CardContent className="p-10 text-center text-sm text-muted-foreground">
-          The unified ledger lands in Stage 2. Filters, inline edit, bulk
-          select, and export will live here.
-        </CardContent>
-      </Card>
+      <Suspense
+        fallback={
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            Loading ledger…
+          </div>
+        }
+      >
+        <LedgerContent />
+      </Suspense>
     </>
   );
 }

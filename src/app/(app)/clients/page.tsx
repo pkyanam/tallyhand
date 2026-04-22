@@ -1,18 +1,25 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ClientsList } from "@/components/clients/clients-list";
 
 export default function ClientsPage() {
   return (
     <>
       <PageHeader
         title="Clients"
-        description="Manage clients and their projects. Built in Stage 1."
+        description="People and companies you bill. Create clients first — projects live under them."
+        actions={
+          <Button asChild>
+            <Link href="/clients/new">
+              <Plus className="mr-1 h-4 w-4" />
+              New client
+            </Link>
+          </Button>
+        }
       />
-      <Card>
-        <CardContent className="p-10 text-center text-sm text-muted-foreground">
-          Client CRUD lands in Stage 1.
-        </CardContent>
-      </Card>
+      <ClientsList />
     </>
   );
 }
