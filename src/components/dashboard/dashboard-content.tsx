@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   clientRepo,
   invoiceRepo,
@@ -82,6 +83,24 @@ export function DashboardContent() {
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly timesheet</CardTitle>
+            <CardDescription>
+              Review this week&apos;s entries and edit them from one page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Clean up names, fix hours, and add anything you forgot before the
+              week gets away from you.
+            </p>
+            <Button asChild>
+              <Link href="/timesheet">Open timesheet</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Top unbilled clients</CardTitle>

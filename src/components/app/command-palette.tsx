@@ -59,7 +59,7 @@ function matchesQuery(haystack: string, query: string): boolean {
 export function CommandPalette() {
   const router = useRouter();
   const { commandOpen, setCommandOpen } = useAppChrome();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme, theme } = useTheme();
   const running = useTimerStore((s) => s.running);
   const projectId = useTimerStore((s) => s.projectId);
   const start = useTimerStore((s) => s.start);
@@ -122,7 +122,7 @@ export function CommandPalette() {
 
   const cycleTheme = () => {
     const next =
-      theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+      theme === "dark" || resolvedTheme === "dark" ? "light" : "dark";
     setTheme(next);
     void persistThemeChoice(next);
   };
@@ -230,7 +230,7 @@ export function CommandPalette() {
                   close();
                 }}
               >
-                {theme === "dark" ? (
+                {theme === "dark" || resolvedTheme === "dark" ? (
                   <Moon className="h-4 w-4" />
                 ) : (
                   <Sun className="h-4 w-4" />

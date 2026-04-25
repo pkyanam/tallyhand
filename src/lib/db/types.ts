@@ -139,6 +139,6 @@ export const DEFAULT_SETTINGS: Settings = {
     "Other",
   ],
   appearance: {
-    theme: "system",
+    theme: "light",
   },
 };

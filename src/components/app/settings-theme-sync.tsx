@@ -14,7 +14,7 @@ export function SettingsThemeSync() {
       const s = await settingsRepo.get();
       if (cancelled) return;
       const t = s.appearance.theme;
-      if (t === "light" || t === "dark" || t === "system") setTheme(t);
+      setTheme(t === "dark" ? "dark" : "light");
     })();
     return () => {
       cancelled = true;

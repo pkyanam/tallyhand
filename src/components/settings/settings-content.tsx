@@ -113,8 +113,7 @@ export function SettingsContent() {
   const updateAppearance = async (patch: Partial<Settings["appearance"]>) => {
     const next = { ...settings.appearance, ...patch };
     await settingsRepo.update({ appearance: next });
-    if (next.theme === "light" || next.theme === "dark" || next.theme === "system")
-      setTheme(next.theme);
+    setTheme(next.theme === "dark" ? "dark" : "light");
   };
 
   const moveCategory = async (index: number, dir: -1 | 1) => {
@@ -516,7 +515,7 @@ export function SettingsContent() {
           <CardContent className="max-w-xs space-y-2">
             <Label>Theme</Label>
             <Select
-              value={settings.appearance.theme}
+              value={settings.appearance.theme === "dark" ? "dark" : "light"}
               onValueChange={(v) =>
                 void updateAppearance({
                   theme: v as Settings["appearance"]["theme"],
@@ -527,7 +526,6 @@ export function SettingsContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="system">System</SelectItem>
                 <SelectItem value="light">Light</SelectItem>
                 <SelectItem value="dark">Dark</SelectItem>
               </SelectContent>
