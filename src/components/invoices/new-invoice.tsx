@@ -137,11 +137,16 @@ export function NewInvoiceContent() {
       projects,
     );
 
+    const defaultTaxRate = settings.invoice.defaultTaxRate;
     const lineItems = buildUnbilledLineItems(
       tasks,
       expenses,
       projectById,
       clientById,
+    ).map((line) =>
+      line.taxRate == null && defaultTaxRate
+        ? { ...line, taxRate: defaultTaxRate }
+        : line,
     );
 
     const { subtotal, total } = invoiceTotals(lineItems);
@@ -169,6 +174,12 @@ export function NewInvoiceContent() {
       publicToken: newInvoicePublicToken(),
       createdAt: 0,
       updatedAt: 0,
+      currency: settings.invoice.defaultCurrency,
+      taxRegion: settings.invoice.defaultTaxRegion,
+      amountInWords: settings.invoice.amountInWordsDefault,
+      ...(settings.invoice.defaultPaymentMethod.trim()
+        ? { paymentMethod: settings.invoice.defaultPaymentMethod.trim() }
+        : {}),
     });
 
     const missing = missingTasks.length + missingExpenses.length;
@@ -207,6 +218,25 @@ export function NewInvoiceContent() {
         total: draft.total,
         notes: draft.notes,
         publicToken: draft.publicToken ?? newInvoicePublicToken(),
+        currency: draft.currency,
+        taxRegion: draft.taxRegion,
+        sellerTaxId: draft.sellerTaxId,
+        sellerTaxIdLabel: draft.sellerTaxIdLabel,
+        buyerTaxId: draft.buyerTaxId,
+        sellerEmailVisible: draft.sellerEmailVisible,
+        buyerEmailVisible: draft.buyerEmailVisible,
+        serviceStart: draft.serviceStart,
+        serviceEnd: draft.serviceEnd,
+        invoiceType: draft.invoiceType,
+        paymentMethod: draft.paymentMethod,
+        paymentUrl: draft.paymentUrl,
+        bankAccount: draft.bankAccount,
+        swiftBic: draft.swiftBic,
+        qrEnabled: draft.qrEnabled,
+        qrPayload: draft.qrPayload,
+        qrDescription: draft.qrDescription,
+        amountInWords: draft.amountInWords,
+        template: draft.template,
       });
       router.replace(`/invoices/${created.id}`);
     } finally {

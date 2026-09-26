@@ -58,6 +58,30 @@ function statusBadge(status: InvoiceStatus) {
   }
 }
 
+function localizationOf(i: Invoice) {
+  return {
+    currency: i.currency,
+    taxRegion: i.taxRegion,
+    sellerTaxId: i.sellerTaxId,
+    sellerTaxIdLabel: i.sellerTaxIdLabel,
+    buyerTaxId: i.buyerTaxId,
+    sellerEmailVisible: i.sellerEmailVisible,
+    buyerEmailVisible: i.buyerEmailVisible,
+    serviceStart: i.serviceStart,
+    serviceEnd: i.serviceEnd,
+    invoiceType: i.invoiceType,
+    paymentMethod: i.paymentMethod,
+    paymentUrl: i.paymentUrl,
+    bankAccount: i.bankAccount,
+    swiftBic: i.swiftBic,
+    qrEnabled: i.qrEnabled,
+    qrPayload: i.qrPayload,
+    qrDescription: i.qrDescription,
+    amountInWords: i.amountInWords,
+    template: i.template,
+  };
+}
+
 function invoicesEqual(a: Invoice, b: Invoice): boolean {
   return (
     a.clientId === b.clientId &&
@@ -69,7 +93,8 @@ function invoicesEqual(a: Invoice, b: Invoice): boolean {
     a.total === b.total &&
     (a.notes ?? "") === (b.notes ?? "") &&
     (a.publicToken ?? "") === (b.publicToken ?? "") &&
-    JSON.stringify(a.lineItems) === JSON.stringify(b.lineItems)
+    JSON.stringify(a.lineItems) === JSON.stringify(b.lineItems) &&
+    JSON.stringify(localizationOf(a)) === JSON.stringify(localizationOf(b))
   );
 }
 
@@ -131,6 +156,7 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
         total: draft.total,
         notes: draft.notes,
         publicToken,
+        ...localizationOf(draft),
       });
       const nextDraft = { ...draft, publicToken };
       setDraft(nextDraft);

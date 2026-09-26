@@ -45,7 +45,8 @@ import {
 import { settingsRepo } from "@/lib/db/repos";
 import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
-import type { Settings } from "@/lib/db/types";
+import { CURRENCIES } from "@/core/currencies";
+import type { Settings, TaxRegion } from "@/lib/db/types";
 import { DunningCard, StripeCard, TaxCard } from "@/components/settings/dunning-tax-cards";
 
 const MAX_LOGO_BYTES = 500 * 1024;
@@ -256,7 +257,7 @@ export function SettingsContent() {
           <CardHeader>
             <CardTitle>Invoices</CardTitle>
             <CardDescription>
-              Numbering, appearance, and payment terms.
+              Numbering, appearance, payment terms, and localization defaults.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5">
@@ -373,6 +374,99 @@ export function SettingsContent() {
               <p className="text-xs text-muted-foreground">
                 Stored inline in your browser as base64. Keep it under 500 KB.
               </p>
+            </div>
+
+            <div className="grid gap-4 border-t pt-5">
+              <p className="text-sm font-medium">Localization defaults</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label>Default currency</Label>
+                  <Select
+                    value={settings.invoice.defaultCurrency}
+                    onValueChange={(v) =>
+                      void updateInvoice({ defaultCurrency: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Default tax region</Label>
+                  <SegmentedControl<TaxRegion>
+                    ariaLabel="Default tax region"
+                    options={[
+                      { value: "US", label: "US" },
+                      { value: "EU", label: "EU" },
+                    ]}
+                    value={settings.invoice.defaultTaxRegion}
+                    onChange={(v) =>
+                      void updateInvoice({ defaultTaxRegion: v })
+                    }
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Default tax rate (%)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    defaultValue={String(settings.invoice.defaultTaxRate)}
+                    key={`def-tax-rate-${settings.invoice.defaultTaxRate}`}
+                    onBlur={(e) => {
+                      const n = Number.parseFloat(e.target.value);
+                      if (
+                        !Number.isFinite(n) ||
+                        n === settings.invoice.defaultTaxRate
+                      )
+                        return;
+                      void updateInvoice({
+                        defaultTaxRate: Math.min(100, Math.max(0, n)),
+                      });
+                    }}
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Stamped onto new line items.
+                  </p>
+                </div>
+                <FieldInput
+                  label="Tax ID label"
+                  defaultValue={settings.invoice.taxIdLabel}
+                  onCommit={(v) => void updateInvoice({ taxIdLabel: v })}
+                  placeholder="Tax ID"
+                />
+                <FieldInput
+                  label="Default payment method"
+                  defaultValue={settings.invoice.defaultPaymentMethod}
+                  onCommit={(v) =>
+                    void updateInvoice({ defaultPaymentMethod: v })
+                  }
+                  placeholder="Bank transfer"
+                />
+                <div className="flex items-center gap-2 sm:col-span-2">
+                  <Checkbox
+                    id="amount-in-words-default"
+                    checked={settings.invoice.amountInWordsDefault}
+                    onCheckedChange={(c) =>
+                      void updateInvoice({ amountInWordsDefault: c === true })
+                    }
+                  />
+                  <Label
+                    htmlFor="amount-in-words-default"
+                    className="font-normal"
+                  >
+                    Print amount in words on new invoices
+                  </Label>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -702,6 +796,43 @@ function FieldTextarea({
         }}
         placeholder={placeholder}
       />
+    </div>
+  );
+}
+
+/** Minimal two-or-more-option segmented control (black-and-white). */
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="inline-flex w-fit rounded-md border border-input p-0.5"
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+          className={
+            option.value === value
+              ? "rounded-[4px] bg-foreground px-3 py-1.5 text-sm text-background"
+              : "rounded-[4px] px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+          }
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
