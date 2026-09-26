@@ -66,7 +66,20 @@ export interface InvoiceLineItem {
   markupPercent?: number;
   sourceType?: "task" | "expense" | "manual";
   sourceId?: ID;
+  /**
+   * Per-line tax rate as a percent (e.g. 8.5 means 8.5% of `amount`).
+   * Undefined/null means no tax on this line.
+   */
+  taxRate?: number;
+  /** Optional per-line tax label override (e.g. "NY sales tax", "VAT 20%"). */
+  taxLabel?: string;
 }
+
+/** Tax-jurisdiction behavior for an invoice: US sales-tax style or EU VAT style. */
+export type TaxRegion = "US" | "EU";
+
+/** PDF template variant for an invoice. */
+export type InvoiceTemplate = "default" | "stripe";
 
 export interface Invoice extends Timestamped {
   id: ID;
@@ -86,6 +99,45 @@ export interface Invoice extends Timestamped {
   lateFeeApplications?: LateFeeApplicationRecord[];
   /** Dunning: ms epoch when the onInvoiceOverdue hook last fired (once per overdue episode). */
   overdueNotifiedAt?: number;
+  // -- invoice localization / payment (all optional; absent = legacy behavior) --
+  /** ISO 4217 currency code (e.g. "USD"). Defaults to "USD" (or settings default). */
+  currency?: string;
+  /** Tax-jurisdiction behavior. Defaults to "US". */
+  taxRegion?: TaxRegion;
+  /** Seller tax identifier override for this invoice (falls back to settings.business.taxId). */
+  sellerTaxId?: string;
+  /** Label for the seller tax identifier (falls back to the region default). */
+  sellerTaxIdLabel?: string;
+  /** Buyer tax identifier (e.g. the client's VAT ID). */
+  buyerTaxId?: string;
+  /** Show the seller email on the invoice. Defaults to true. */
+  sellerEmailVisible?: boolean;
+  /** Show the buyer (client) email on the invoice. Defaults to true. */
+  buyerEmailVisible?: boolean;
+  /** Service period start (ms epoch), optional. */
+  serviceStart?: number;
+  /** Service period end (ms epoch), optional. */
+  serviceEnd?: number;
+  /** Document type label, e.g. "Invoice", "Proforma invoice", "Credit note". Defaults to "Invoice". */
+  invoiceType?: string;
+  /** Payment method text (e.g. "Bank transfer", "Card"). */
+  paymentMethod?: string;
+  /** URL the client can pay at (e.g. a Stripe payment link). */
+  paymentUrl?: string;
+  /** Seller bank account (IBAN for EU invoices). */
+  bankAccount?: string;
+  /** SWIFT/BIC for EU bank transfers. */
+  swiftBic?: string;
+  /** Render a payment QR code on the PDF. */
+  qrEnabled?: boolean;
+  /** Custom QR payload override (URL or text). Generated from payment fields when omitted. */
+  qrPayload?: string;
+  /** Human-readable description shown under the QR code. */
+  qrDescription?: string;
+  /** Print the total amount in words on the PDF. */
+  amountInWords?: boolean;
+  /** PDF template variant. Defaults to "default". */
+  template?: InvoiceTemplate;
 }
 
 /** One dunning reminder already sent for an invoice. */
@@ -117,6 +169,18 @@ export interface Settings {
     accentColor: string;
     footerText: string;
     paymentTermsDays: number;
+    /** Default ISO 4217 currency for new invoices. */
+    defaultCurrency: string;
+    /** Default tax region for new invoices. */
+    defaultTaxRegion: TaxRegion;
+    /** Default per-line tax rate (percent) stamped onto new line items. */
+    defaultTaxRate: number;
+    /** Default label for the seller tax identifier (e.g. "Tax ID", "EIN", "VAT ID"). */
+    taxIdLabel: string;
+    /** Default payment method text for new invoices. */
+    defaultPaymentMethod: string;
+    /** Print amount-in-words on new invoices by default. */
+    amountInWordsDefault: boolean;
   };
   reckoning: {
     enabled: boolean;
@@ -161,6 +225,12 @@ export const DEFAULT_SETTINGS: Settings = {
     accentColor: "#0a0a0a",
     footerText: "Thank you for your business.",
     paymentTermsDays: 14,
+    defaultCurrency: "USD",
+    defaultTaxRegion: "US",
+    defaultTaxRate: 0,
+    taxIdLabel: "Tax ID",
+    defaultPaymentMethod: "",
+    amountInWordsDefault: false,
   },
   reckoning: {
     enabled: true,
