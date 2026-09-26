@@ -19,6 +19,16 @@ export function normalizeSettings(raw: Settings): Settings {
       ...raw.appearance,
       theme: normalizedTheme,
     },
+    dunning: {
+      ...DEFAULT_SETTINGS.dunning,
+      ...raw.dunning,
+      lateFee: {
+        ...DEFAULT_SETTINGS.dunning.lateFee,
+        ...raw.dunning?.lateFee,
+      },
+    },
+    tax: { ...DEFAULT_SETTINGS.tax, ...raw.tax },
+    analytics: { ...DEFAULT_SETTINGS.analytics, ...raw.analytics },
     expenseCategories:
       raw.expenseCategories?.length > 0
         ? [...raw.expenseCategories]

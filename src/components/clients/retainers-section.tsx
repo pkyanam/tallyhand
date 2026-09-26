@@ -34,25 +34,22 @@ function statusBadge(status: RetainerStatus): {
     case "active":
       return {
         label: "Active",
-        className:
-          "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        className: "badge-positive",
       };
     case "paused":
       return {
         label: "Paused",
-        className:
-          "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        className: "badge-neutral",
       };
     case "depleted":
       return {
         label: "Depleted",
-        className:
-          "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+        className: "border-foreground/40 text-foreground",
       };
     default:
       return {
         label: "Ended",
-        className: "bg-muted text-muted-foreground border-border",
+        className: "badge-quiet",
       };
   }
 }

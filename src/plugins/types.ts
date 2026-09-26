@@ -8,6 +8,22 @@ export interface PluginManifest {
   version: string;
   /** One-line human description shown in the plugin list. */
   description: string;
+  /**
+   * Optional npm peer dependencies, e.g. `{ stripe: "22.6.2" }`.
+   * Documented only — Tallyhand never auto-installs them.
+   */
+  peerDependencies?: Record<string, string>;
+}
+
+/** Payload for the onPaymentReceived hook. */
+export interface PaymentReceivedPayload {
+  invoice: Invoice;
+  /** Amount actually collected, in minor currency units. */
+  amountCents: number;
+  /** Payment provider name, e.g. "stripe". */
+  provider: string;
+  /** Provider-side id (Stripe Checkout Session id). */
+  externalId: string;
 }
 
 /** Payload per domain hook, keyed by hook name. */
@@ -17,6 +33,10 @@ export interface DomainHookPayloads {
   onExpenseCreated: Expense;
   onInvoiceSent: Invoice;
   onInvoicePaid: Invoice;
+  /** Fired when an invoice is first observed overdue by the dunning run. */
+  onInvoiceOverdue: Invoice;
+  /** Fired when money is collected against an invoice (webhook, etc.). */
+  onPaymentReceived: PaymentReceivedPayload;
 }
 
 export type DomainHookName = keyof DomainHookPayloads;

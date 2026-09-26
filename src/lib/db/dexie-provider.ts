@@ -20,6 +20,11 @@ import type {
   RetainerCreateInput,
   RetainerStatus,
 } from "@/core/recurring";
+import type { MileageEntry, MileageEntryCreateInput } from "@/core/mileage";
+import { mileageRateForDate } from "@/core/mileage";
+import type { Contract, ContractCreateInput } from "@/core/contracts";
+import type { TaxPayment, TaxPaymentCreateInput } from "@/core/tax";
+import type { RateCard, RateCardCreateInput } from "@/core/rate-cards";
 import type {
   ClientCreateInput,
   ExpenseCreateInput,
@@ -260,6 +265,17 @@ export class DexieStorageProvider implements StorageProvider {
         ...(patch.appearance ?? {}),
       },
       expenseCategories: patch.expenseCategories ?? current.expenseCategories,
+      dunning: {
+        ...current.dunning,
+        ...(patch.dunning ?? {}),
+        lateFee: {
+          ...current.dunning.lateFee,
+          ...(patch.dunning?.lateFee ?? {}),
+        },
+      },
+      tax: { ...current.tax, ...(patch.tax ?? {}) },
+      analytics: { ...current.analytics, ...(patch.analytics ?? {}) },
+      pluginSettings: patch.pluginSettings ?? current.pluginSettings,
     });
     await getDB().settings.put(next);
     return next;
@@ -358,6 +374,137 @@ export class DexieStorageProvider implements StorageProvider {
 
   async removeRetainer(id: ID): Promise<void> {
     await getDB().retainers.delete(id);
+  }
+
+  // -- mileage -----------------------------------------------------------
+  async listMileageEntries(): Promise<MileageEntry[]> {
+    const rows = await getDB().mileageEntries.orderBy("date").toArray();
+    return rows.reverse();
+  }
+
+  async getMileageEntry(id: ID): Promise<MileageEntry | undefined> {
+    return getDB().mileageEntries.get(id);
+  }
+
+  async createMileageEntry(
+    input: MileageEntryCreateInput,
+  ): Promise<MileageEntry> {
+    const ts = now();
+    const entry: MileageEntry = {
+      id: newId("mil"),
+      isBilled: false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+      // Computed after the spread: an explicit `rate: undefined` in
+      // unchecked runtime input must not clobber the default.
+      rate:
+        (input as { rate?: number }).rate ?? mileageRateForDate(input.date),
+    } as MileageEntry;
+    await getDB().mileageEntries.add(entry);
+    return entry;
+  }
+
+  async updateMileageEntry(
+    id: ID,
+    patch: Partial<MileageEntry>,
+  ): Promise<void> {
+    await getDB().mileageEntries.update(id, { ...patch, updatedAt: now() });
+  }
+
+  async removeMileageEntry(id: ID): Promise<void> {
+    await getDB().mileageEntries.delete(id);
+  }
+
+  // -- contracts ---------------------------------------------------------
+  async listContracts(): Promise<Contract[]> {
+    return getDB().contracts.orderBy("updatedAt").reverse().toArray();
+  }
+
+  async getContract(id: ID): Promise<Contract | undefined> {
+    return getDB().contracts.get(id);
+  }
+
+  async createContract(input: ContractCreateInput): Promise<Contract> {
+    const ts = now();
+    const contract: Contract = {
+      id: newId("ctr"),
+      renewalNoticeDays: 30,
+      archived: false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as Contract;
+    await getDB().contracts.add(contract);
+    return contract;
+  }
+
+  async updateContract(id: ID, patch: Partial<Contract>): Promise<void> {
+    await getDB().contracts.update(id, { ...patch, updatedAt: now() });
+  }
+
+  async removeContract(id: ID): Promise<void> {
+    await getDB().contracts.delete(id);
+  }
+
+  // -- tax payments ------------------------------------------------------
+  async listTaxPayments(): Promise<TaxPayment[]> {
+    const rows = await getDB().taxPayments.orderBy("date").toArray();
+    return rows.reverse();
+  }
+
+  async getTaxPayment(id: ID): Promise<TaxPayment | undefined> {
+    return getDB().taxPayments.get(id);
+  }
+
+  async createTaxPayment(input: TaxPaymentCreateInput): Promise<TaxPayment> {
+    const ts = now();
+    const payment: TaxPayment = {
+      id: newId("txp"),
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as TaxPayment;
+    await getDB().taxPayments.add(payment);
+    return payment;
+  }
+
+  async updateTaxPayment(id: ID, patch: Partial<TaxPayment>): Promise<void> {
+    await getDB().taxPayments.update(id, { ...patch, updatedAt: now() });
+  }
+
+  async removeTaxPayment(id: ID): Promise<void> {
+    await getDB().taxPayments.delete(id);
+  }
+
+  // -- rate cards --------------------------------------------------------
+  async listRateCards(): Promise<RateCard[]> {
+    return getDB().rateCards.orderBy("updatedAt").reverse().toArray();
+  }
+
+  async getRateCard(id: ID): Promise<RateCard | undefined> {
+    return getDB().rateCards.get(id);
+  }
+
+  async createRateCard(input: RateCardCreateInput): Promise<RateCard> {
+    const ts = now();
+    const card: RateCard = {
+      id: newId("rc"),
+      archived: false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as RateCard;
+    await getDB().rateCards.add(card);
+    return card;
+  }
+
+  async updateRateCard(id: ID, patch: Partial<RateCard>): Promise<void> {
+    await getDB().rateCards.update(id, { ...patch, updatedAt: now() });
+  }
+
+  async removeRateCard(id: ID): Promise<void> {
+    await getDB().rateCards.delete(id);
   }
 
   // -- transactional domain workflows ------------------------------------

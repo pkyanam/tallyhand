@@ -1,5 +1,10 @@
 export type ID = string;
 
+import type { DunningConfig } from "./dunning";
+import { DEFAULT_DUNNING_CONFIG } from "./dunning";
+import type { TaxSettings } from "./tax";
+import { DEFAULT_TAX_SETTINGS } from "./tax";
+
 export interface Timestamped {
   createdAt: number;
   updatedAt: number;
@@ -75,6 +80,24 @@ export interface Invoice extends Timestamped {
   total: number;
   notes?: string;
   publicToken?: string;
+  /** Dunning: reminder history, one entry per schedule day already sent. */
+  reminderLog?: DunningReminderRecord[];
+  /** Dunning: automatic late-fee applications, in order. */
+  lateFeeApplications?: LateFeeApplicationRecord[];
+  /** Dunning: ms epoch when the onInvoiceOverdue hook last fired (once per overdue episode). */
+  overdueNotifiedAt?: number;
+}
+
+/** One dunning reminder already sent for an invoice. */
+export interface DunningReminderRecord {
+  reminderDay: number;
+  sentAt: number;
+}
+
+/** One automatically-applied late fee on an invoice. */
+export interface LateFeeApplicationRecord {
+  appliedAt: number;
+  amount: number;
 }
 
 export interface Settings {
@@ -106,6 +129,20 @@ export interface Settings {
   appearance: {
     theme: "light" | "dark" | "system";
   };
+  /** Dunning engine configuration (reminder schedule + late fees). */
+  dunning: DunningConfig;
+  /** Sole-proprietor tax dashboard preferences. */
+  tax: TaxSettings;
+  /** Analytics preferences (utilization target, revenue goal). */
+  analytics: {
+    weeklyBillableTargetHours: number;
+    monthlyRevenueTarget: number;
+  };
+  /**
+   * Host-persisted values for plugin settings sections
+   * (see PluginSettingsSection): plugin name → field key → value.
+   */
+  pluginSettings?: Record<string, Record<string, string | number | boolean>>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -141,4 +178,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: {
     theme: "light",
   },
+  dunning: { ...DEFAULT_DUNNING_CONFIG },
+  tax: { ...DEFAULT_TAX_SETTINGS },
+  analytics: { weeklyBillableTargetHours: 40, monthlyRevenueTarget: 0 },
 };

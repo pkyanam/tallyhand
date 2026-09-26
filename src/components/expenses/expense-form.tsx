@@ -23,6 +23,8 @@ import { clientRepo, projectRepo, settingsRepo } from "@/lib/db/repos";
 import { DEFAULT_SETTINGS } from "@/lib/db/types";
 import { fromDateInputValue, toDateInputValue } from "@/lib/datetime";
 import { resizeImageToJpegDataUrl } from "@/lib/receipt-image";
+import { ReceiptOcrButton } from "@/components/expenses/receipt-ocr-button";
+import { applyOcrResult } from "@/core/receipt-ocr";
 import type { Expense } from "@/lib/db/types";
 
 const OTHER_KEY = "__other__";
@@ -399,14 +401,32 @@ export function ExpenseForm({
           <p className="text-xs text-muted-foreground">{receiptName}</p>
         )}
         {receiptB64 && (
-          <div className="relative h-32 w-48 overflow-hidden rounded-md border bg-muted">
-            {/* eslint-disable-next-line @next/next/no-img-element -- data URL from user device */}
-            <img
-              src={receiptB64}
-              alt="Receipt preview"
-              className="h-full w-full object-contain"
+          <>
+            <div className="relative h-32 w-48 overflow-hidden rounded-md border bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element -- data URL from user device */}
+              <img
+                src={receiptB64}
+                alt="Receipt preview"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <ReceiptOcrButton
+              imageDataUrl={receiptB64}
+              onApply={(r) => {
+                const merged = applyOcrResult(
+                  {
+                    amount: form.getValues("amount"),
+                    date: form.getValues("date"),
+                  },
+                  r,
+                );
+                form.setValue("amount", merged.amount ?? "", {
+                  shouldValidate: true,
+                });
+                if (merged.date) form.setValue("date", merged.date);
+              }}
             />
-          </div>
+          </>
         )}
         <p className="text-xs text-muted-foreground">
           <ImageUp className="mb-0.5 mr-1 inline h-3.5 w-3.5" />

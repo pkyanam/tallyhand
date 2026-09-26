@@ -46,6 +46,7 @@ import { settingsRepo } from "@/lib/db/repos";
 import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
 import type { Settings } from "@/lib/db/types";
+import { DunningCard, StripeCard, TaxCard } from "@/components/settings/dunning-tax-cards";
 
 const MAX_LOGO_BYTES = 500 * 1024;
 
@@ -376,6 +377,8 @@ export function SettingsContent() {
           </CardContent>
         </Card>
 
+        <DunningCard settings={settings} />
+
         <Card>
           <CardHeader>
             <CardTitle>Weekly Reckoning</CardTitle>
@@ -437,6 +440,10 @@ export function SettingsContent() {
             </p>
           </CardContent>
         </Card>
+
+        <TaxCard settings={settings} />
+
+        <StripeCard settings={settings} />
 
         <Card>
           <CardHeader>

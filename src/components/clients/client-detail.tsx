@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/app/page-header";
 import { ProjectsSection } from "./projects-section";
 import { RetainersSection } from "./retainers-section";
+import { RateCardsSection } from "./rate-cards-section";
+import { ContractsSection } from "./contracts-section";
 import { clientRepo, projectRepo, taskRepo } from "@/lib/db/repos";
 import type { Task } from "@/lib/db/types";
 import { formatCurrency, formatDuration } from "@/lib/utils";
@@ -181,6 +183,10 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           <ProjectsSection client={client} />
 
           <RetainersSection clientId={client.id} />
+
+          <RateCardsSection clientId={client.id} projects={projects ?? []} />
+
+          <ContractsSection clientId={client.id} projects={projects ?? []} />
 
           <section className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">
