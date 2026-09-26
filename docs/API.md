@@ -31,6 +31,51 @@ Authorization: Bearer <TALLYHAND_API_TOKEN>
 Missing/invalid token → `401 { error: { code: "unauthorized", ... } }`.
 Token unset server-side → `503 { error: { code: "api_disabled", ... } }`.
 
+## Remote MCP
+
+The same deployment also serves the MCP server over **Streamable HTTP**
+(stateless) at `<origin>/api/mcp` — one deployment for web, REST, and MCP.
+It exposes the exact same tools as `tally mcp` (local stdio), so anything
+written against one transport works on the other. Auth is the same Bearer
+token as the REST API.
+
+Point any MCP client at it:
+
+```json
+{
+  "mcpServers": {
+    "tallyhand": {
+      "url": "https://tallyhand.example.com/api/mcp",
+      "headers": { "Authorization": "Bearer <TALLYHAND_API_TOKEN>" }
+    }
+  }
+}
+```
+
+Or with the TypeScript SDK:
+
+```ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+const transport = new StreamableHTTPClientTransport(
+  new URL("https://tallyhand.example.com/api/mcp"),
+  { requestInit: { headers: { Authorization: `Bearer ${process.env.TALLYHAND_API_TOKEN}` } } },
+);
+const client = new Client({ name: "my-agent", version: "1.0.0" });
+await client.connect(transport);
+const { tools } = await client.listTools();
+```
+
+Notes:
+
+- Stateless mode: no `Mcp-Session-Id`, every request stands alone — safe
+  behind any number of instances or serverless functions.
+- Each request is executed with *your* token against this deployment's own
+  `/api/v1`, so auth, validation, and rate limits are identical to REST.
+- `tally mcp` (stdio) remains the pick for local clients like Claude Code;
+  `/api/mcp` is for remote agents that can't spawn a subprocess.
+
 ## The core loop: client → time → invoice → cash
 
 ```bash

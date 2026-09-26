@@ -13,10 +13,13 @@ previews, guard-railed deletes):
   (no auth). Fetch it first when unsure.
 - **CLI**: `tally` (see `cli/`) — `tally clients create --name "Acme"`,
   `tally timer start --project p1`, `tally invoice draft …`, etc.
-- **MCP**: the CLI doubles as an MCP server (`tally mcp`) with 49 tools —
+- **MCP**: the CLI doubles as an MCP server (`tally mcp`, stdio) with 49 tools —
   `create_client`, `log_time`, `bulk_log_time`, `draft_invoice`,
   `send_invoice`, `mark_invoice_paid`, `overdue_invoices`, `revenue_summary`,
   `run_scheduler`, …
+  The same tools are served remotely over Streamable HTTP at
+  `<origin>/api/mcp` (stateless, `Authorization: <redacted>`
+  like the REST API) — one deployment serves web, REST, and MCP.
 
 ## Auth
 

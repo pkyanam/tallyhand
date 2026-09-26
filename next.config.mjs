@@ -22,6 +22,16 @@ const nextConfig = {
         aggregateTimeout: 500,
       };
     }
+    // The /api/mcp route imports the CLI's TypeScript sources (cli/src),
+    // which use NodeNext-style `.js` import specifiers for sibling `.ts`
+    // files. Teach webpack to resolve them the way tsc/vite/tsup already do.
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+      ".jsx": [".tsx", ".jsx"],
+      ".mjs": [".mts", ".mjs"],
+      ".cjs": [".cts", ".cjs"],
+      ...config.resolve.extensionAlias,
+    };
     return config;
   },
 };

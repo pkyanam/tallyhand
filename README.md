@@ -52,13 +52,13 @@ From there: `tally invoice send <id>` when it's ready, `tally invoice paid <id>`
 - **Invoicing** — build invoices from ledger entries or from scratch, preview them live, download as PDF, and track draft → sent → paid.
 - **Recurring invoices and retainers** — set up monthly schedules or prepaid-hour retainers that bill automatically.
 - **Client portal share links** — give any invoice a read-only public link clients can open without an account.
-- **CLI, API, and MCP for agents** — the `tally` CLI, a REST API with an OpenAPI spec, and an MCP server with 23 tools, so scripts and AI agents can track time and bill on your behalf.
+- **CLI, API, and MCP for agents** — the `tally` CLI, a REST API with an OpenAPI spec, and an MCP server with 23 tools, so scripts and AI agents can track time and bill on your behalf. MCP works locally (`tally mcp`, stdio) or remotely over Streamable HTTP at `/api/mcp` — same deployment, same tools.
 - **Local-first and self-hostable** — your data lives in your browser's IndexedDB or your own server's SQLite database. Run it on your laptop, your server, or Vercel — no account required.
 
 ## Docs
 
 - [CLI guide](cli/README.md) — every `tally` command, conventions, and MCP setup for Claude Code / Claude Desktop
-- [API quickstart](docs/API.md) — auth, the REST endpoints, and the track → bill workflow
+- [API quickstart](docs/API.md) — auth, the REST endpoints, remote MCP (`/api/mcp`), and the track → bill workflow
 - [OpenAPI spec](openapi/tallyhand.v1.json) — machine-readable API reference
 
 ## Contributing
