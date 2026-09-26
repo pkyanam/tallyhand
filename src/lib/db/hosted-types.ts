@@ -76,6 +76,8 @@ export const dbOptStr = (r: DbRow, k: string): string | undefined =>
 export const dbNum = (r: DbRow, k: string): number => r[k] as number;
 export const dbOptNum = (r: DbRow, k: string): number | undefined =>
   (r[k] as number | null | undefined) ?? undefined;
+export const dbOptBool = (r: DbRow, k: string): boolean | undefined =>
+  (r[k] as boolean | null | undefined) ?? undefined;
 export const dbStrArr = (r: DbRow, k: string): string[] =>
   Array.isArray(r[k]) ? (r[k] as string[]) : [];
 export const dbJsonArr = (r: DbRow, k: string): unknown[] =>

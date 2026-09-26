@@ -84,6 +84,28 @@ export class TallyhandDB extends Dexie {
       taxPayments: "id, taxYear, quarter, jurisdiction, date, updatedAt",
       rateCards: "id, clientId, projectId, archived, effectiveFrom, updatedAt",
     });
+    // v5: invoice documents may carry localization/payment fields (currency,
+    // taxRegion, per-line taxRate/taxLabel, tax IDs, email visibility,
+    // service period, payment method/URL, bank account/SWIFT, QR controls,
+    // amount-in-words, template). Dexie stores whole documents, so no index
+    // changes are needed — the bump documents the shape change.
+    this.version(5).stores({
+      clients: "id, name, archived, updatedAt",
+      projects: "id, clientId, name, archived, updatedAt",
+      tasks:
+        "id, projectId, startAt, endAt, isBilled, invoiceId, updatedAt, *tags",
+      expenses:
+        "id, clientId, projectId, date, category, isBilled, invoiceId, updatedAt",
+      invoices:
+        "id, clientId, invoiceNumber, status, issueDate, dueDate, publicToken, updatedAt",
+      settings: "id",
+      recurringSchedules: "id, clientId, status, nextRunAt, updatedAt",
+      retainers: "id, clientId, status, updatedAt",
+      mileageEntries: "id, clientId, projectId, date, isBilled, updatedAt",
+      contracts: "id, clientId, projectId, type, endDate, archived, updatedAt",
+      taxPayments: "id, taxYear, quarter, jurisdiction, date, updatedAt",
+      rateCards: "id, clientId, projectId, archived, effectiveFrom, updatedAt",
+    });
   }
 }
 

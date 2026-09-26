@@ -19,13 +19,14 @@ import { CURRENCIES, isKnownCurrency } from "@/core/currencies";
 import type { Invoice, InvoiceLineItem } from "@/core/entities";
 
 function line(partial: Partial<InvoiceLineItem> & { amount: number }): InvoiceLineItem {
+  const { amount, ...rest } = partial;
   return {
     id: "li1",
     description: "work",
     quantity: 1,
-    rate: partial.amount,
-    amount: partial.amount,
-    ...partial,
+    rate: amount,
+    amount,
+    ...rest,
   };
 }
 
