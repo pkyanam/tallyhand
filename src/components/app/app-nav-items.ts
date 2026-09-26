@@ -1,11 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import {
   CalendarRange,
+  ChartColumn,
   LayoutDashboard,
   ListChecks,
   Users,
   FileText,
   Wallet,
+  Landmark,
   Settings,
 } from "lucide-react";
 
@@ -22,5 +24,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/expenses", label: "Expenses", icon: Wallet },
+  { href: "/analytics", label: "Analytics", icon: ChartColumn },
+  { href: "/tax", label: "Tax", icon: Landmark },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

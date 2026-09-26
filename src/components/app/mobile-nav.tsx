@@ -80,7 +80,6 @@ export function MobileNav() {
             >
               Keyboard shortcuts
             </Link>
-            <div className="mt-1 opacity-70">v0.1.0</div>
           </div>
         </DialogContent>
       </Dialog>

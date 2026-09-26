@@ -18,7 +18,7 @@ export function InvoicePreview({
 
   return (
     <div
-      className="rounded-lg border bg-background p-6 text-sm shadow-sm"
+      className="rounded-lg border bg-background p-6 text-sm"
       style={{ minHeight: 600 }}
     >
       <header className="flex flex-wrap items-start justify-between gap-6 border-b pb-6">

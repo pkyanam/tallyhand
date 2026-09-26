@@ -22,8 +22,7 @@ function statusVariant(status: InvoiceStatus): {
     case "paid":
       return {
         label: "Paid",
-        className:
-          "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        className: "badge-positive",
       };
     case "sent":
       return {
@@ -34,8 +33,7 @@ function statusVariant(status: InvoiceStatus): {
     default:
       return {
         label: "Draft",
-        className:
-          "bg-muted text-muted-foreground border-border",
+        className: "badge-quiet",
       };
   }
 }

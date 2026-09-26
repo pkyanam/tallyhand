@@ -2,6 +2,13 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import dynamic from "next/dynamic";
+
+// Code-split: the @clerk/nextjs client bundle only loads when the app
+// actually runs with TALLY_AUTH=clerk. Local mode never downloads it.
+const ClerkAuthProvider = dynamic(() =>
+  import("./clerk-auth-provider").then((m) => m.ClerkAuthProvider),
+);
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -46,6 +53,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Clerk is strictly opt-in: only wrap when the hosted Clerk auth mode is
+  // configured. The publishable key comes from runtime server env so it can
+  // be rotated without rebuilding (unlike NEXT_PUBLIC_* vars).
+  const clerkKey =
+    process.env.TALLY_AUTH === "clerk"
+      ? process.env.CLERK_PUBLISHABLE_KEY
+      : undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -57,7 +71,11 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
+          {clerkKey ? (
+            <ClerkAuthProvider publishableKey={clerkKey}>{children}</ClerkAuthProvider>
+          ) : (
+            children
+          )}
         </ThemeProvider>
       </body>
     </html>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Clock, FileText, ListChecks } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -17,106 +17,51 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-foreground" />
-          <span className="font-semibold tracking-tight">Tallyhand</span>
-        </div>
-        <nav className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <a
-              href="https://github.com/pkyanam/tallyhand"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="GitHub repository"
-            >
-              <GithubIcon className="mr-1.5 h-4 w-4" />
-              GitHub
-            </a>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/dashboard">
-              Launch app
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Link>
-          </Button>
-        </nav>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
+        <span className="font-display text-lg font-semibold tracking-tight">
+          Tallyhand
+        </span>
+        <Button asChild variant="ghost" size="sm">
+          <a
+            href="https://github.com/pkyanam/tallyhand"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub repository"
+          >
+            <GithubIcon className="mr-1.5 h-4 w-4" />
+            GitHub
+          </a>
+        </Button>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 pb-16 pt-12 md:pt-20">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs text-muted-foreground">
-            MIT-licensed · Local-first · No account required
-          </span>
-          <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-            Track, invoice, done.
+      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center px-6">
+        <div className="max-w-xl py-16">
+          <h1 className="font-display text-balance text-5xl font-semibold tracking-tight md:text-6xl">
+            Tallyhand
           </h1>
-          <p className="mt-5 text-balance text-lg text-muted-foreground">
-            Tallyhand is a free, open-source time tracker and invoice generator
-            for independent contractors. Your data lives on your device. No
-            SaaS, no integrations, no surprises. Export a JSON backup from
-            Settings → Data so you never lose your ledger to a browser reset.
+          <p className="mt-6 text-balance text-lg leading-relaxed text-muted-foreground">
+            Time tracking and invoicing for independent contractors. Your data
+            lives on your device — no account, no subscription, nothing to
+            lose.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-10">
             <Button asChild size="lg">
               <Link href="/dashboard">
                 Launch app
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg">
-              <a href="https://github.com/pkyanam/tallyhand" target="_blank" rel="noreferrer">
-                <GithubIcon className="mr-1.5 h-4 w-4" />
-                Star on GitHub
-              </a>
-            </Button>
           </div>
         </div>
-
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          <Feature
-            icon={Clock}
-            title="Track time the honest way"
-            body="Start a timer in one keystroke. The Stop Prompt catches the details while they're still fresh — no blank form before you begin."
-          />
-          <Feature
-            icon={ListChecks}
-            title="One ledger, everything"
-            body="Time and expenses in one chronological view. Filter, search, select, and turn selections straight into invoices."
-          />
-          <Feature
-            icon={FileText}
-            title="Invoices from selections"
-            body="Pick the entries that need billing. A polished PDF, rendered entirely in your browser, in seconds."
-          />
-        </div>
-      </section>
+      </main>
 
       <footer className="border-t">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-6 py-6 text-xs text-muted-foreground">
-          <div>© Tallyhand. MIT-licensed.</div>
-          <div>Local-first · Offline-ready · No tracking.</div>
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5 text-xs text-muted-foreground">
+          <span>MIT-licensed.</span>
+          <span>Local-first · Offline-ready.</span>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function Feature({
-  icon: Icon,
-  title,
-  body,
-}: {
-  icon: typeof Clock;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="rounded-lg border p-5">
-      <Icon className="h-5 w-5" />
-      <h3 className="mt-3 font-medium">{title}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
     </div>
   );
 }

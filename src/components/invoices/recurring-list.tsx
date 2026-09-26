@@ -22,19 +22,17 @@ function statusBadge(status: RecurringStatus): {
     case "active":
       return {
         label: "Active",
-        className:
-          "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        className: "badge-positive",
       };
     case "paused":
       return {
         label: "Paused",
-        className:
-          "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        className: "badge-neutral",
       };
     default:
       return {
         label: "Ended",
-        className: "bg-muted text-muted-foreground border-border",
+        className: "badge-quiet",
       };
   }
 }

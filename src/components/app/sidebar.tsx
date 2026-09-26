@@ -12,8 +12,10 @@ export function Sidebar() {
     <aside className="hidden w-56 shrink-0 border-r bg-background md:flex md:flex-col">
       <div className="flex h-14 items-center border-b px-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-foreground" />
-          <span className="font-semibold tracking-tight">Tallyhand</span>
+          <div className="h-6 w-6 rounded-sm bg-foreground" />
+          <span className="font-display text-base font-semibold tracking-tight">
+            Tallyhand
+          </span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-2">
@@ -46,7 +48,6 @@ export function Sidebar() {
         >
           Keyboard shortcuts
         </Link>
-        <div className="mt-1 opacity-70">v0.1.0</div>
       </div>
     </aside>
   );

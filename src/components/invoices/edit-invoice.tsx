@@ -36,10 +36,7 @@ function statusBadge(status: InvoiceStatus) {
   switch (status) {
     case "paid":
       return (
-        <Badge
-          variant="outline"
-          className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-        >
+        <Badge variant="outline" className="badge-positive">
           Paid
         </Badge>
       );
@@ -54,7 +51,7 @@ function statusBadge(status: InvoiceStatus) {
       );
     default:
       return (
-        <Badge variant="outline" className="bg-muted text-muted-foreground">
+        <Badge variant="outline" className="badge-quiet">
           Draft
         </Badge>
       );
@@ -288,7 +285,7 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
       />
 
       {readOnly ? (
-        <Card className="mb-4 border-emerald-500/30 bg-emerald-500/5">
+        <Card className="mb-4 border-border bg-secondary">
           <CardContent className="p-4 text-sm">
             This invoice is marked paid — editing is locked to preserve the
             record. Delete and recreate if you need to change it.

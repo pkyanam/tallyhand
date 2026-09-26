@@ -30,7 +30,7 @@ export function LocalDataNotice() {
   if (dismissed === null || dismissed) return null;
 
   return (
-    <div className="mb-4 flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
+    <div className="mb-6 flex gap-3 rounded-lg border border-border bg-secondary px-4 py-3 text-sm text-foreground">
       <div className="min-w-0 flex-1">
         <p className="font-medium">Your data stays in this browser</p>
         <p className="mt-1 text-muted-foreground">
