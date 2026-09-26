@@ -21,6 +21,10 @@ export interface LineItemInput {
   amount?: number;
   sourceType?: "task" | "expense" | "manual";
   sourceId?: string;
+  /** Per-line tax rate as a percent (e.g. 8.5 = 8.5% of amount). */
+  taxRate?: number;
+  /** Per-line tax label override. */
+  taxLabel?: string;
 }
 
 export function computeLineAmount(quantity: number, rate: number): number {
@@ -194,13 +198,16 @@ export async function buildUnbilledLineItems(
   return { lineItems, taskCount, expenseCount };
 }
 
-/** Sum line items -> { subtotal, total } (no tax/discount model yet). */
+/** Sum line items -> { subtotal, total }; total = subtotal + per-line tax. */
 export function invoiceTotals(lineItems: LineItemInput[]): {
   subtotal: number;
   total: number;
 } {
-  const subtotal = round2(
-    lineItems.reduce((s, li) => s + (li.amount ?? computeLineAmount(li.quantity, li.rate)), 0),
+  const amountOf = (li: LineItemInput) =>
+    li.amount ?? computeLineAmount(li.quantity, li.rate);
+  const subtotal = round2(lineItems.reduce((s, li) => s + amountOf(li), 0));
+  const tax = round2(
+    lineItems.reduce((s, li) => s + amountOf(li) * ((li.taxRate ?? 0) / 100), 0),
   );
-  return { subtotal, total: subtotal };
+  return { subtotal, total: round2(subtotal + tax) };
 }

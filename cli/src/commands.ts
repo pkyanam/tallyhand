@@ -364,10 +364,43 @@ export async function handleUnbilled(
 
 export async function handleInvoiceDraft(
   api: Api,
-  opts: { client?: string; project?: string; items?: string },
+  opts: {
+    client?: string;
+    project?: string;
+    items?: string;
+    currency?: string;
+    taxRegion?: string;
+    taxRate?: string;
+    paymentMethod?: string;
+    paymentUrl?: string;
+    qr?: boolean;
+    qrDescription?: string;
+    amountInWords?: boolean;
+    template?: string;
+    invoiceType?: string;
+  },
   out: Out,
 ): Promise<void> {
   needAuth(api);
+  // -- flag validation --------------------------------------------------
+  let taxRate: number | undefined;
+  if (opts.taxRate !== undefined) {
+    taxRate = Number(opts.taxRate);
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100)
+      throw new Error("--tax-rate must be a number between 0 and 100.");
+  }
+  let taxRegion: string | undefined;
+  if (opts.taxRegion !== undefined) {
+    if (!["US", "EU"].includes(opts.taxRegion))
+      throw new Error('--tax-region must be "US" or "EU".');
+    taxRegion = opts.taxRegion;
+  }
+  let template: string | undefined;
+  if (opts.template !== undefined) {
+    if (!["default", "stripe"].includes(opts.template))
+      throw new Error('--template must be "default" or "stripe".');
+    template = opts.template;
+  }
   let lineItems: LineItemInput[];
   let clientId: string;
   if (opts.items) {
@@ -387,6 +420,8 @@ export async function handleInvoiceDraft(
         rate,
         amount: computeLineAmount(quantity, rate),
         sourceType: "manual" as const,
+        ...(it.taxRate != null ? { taxRate: Number(it.taxRate) } : {}),
+        ...(it.taxLabel ? { taxLabel: it.taxLabel } : {}),
       };
     });
   } else {
@@ -400,6 +435,12 @@ export async function handleInvoiceDraft(
       throw new Error("Nothing unbilled for this client — nothing to draft.");
     lineItems = built.lineItems;
   }
+  // --tax-rate applies to every line that doesn't set its own taxRate.
+  if (taxRate !== undefined) {
+    lineItems = lineItems.map((li) =>
+      li.taxRate == null ? { ...li, taxRate } : li,
+    );
+  }
   const { subtotal, total } = invoiceTotals(lineItems);
   const now = Date.now();
   const invoice = await api.createInvoice({
@@ -410,6 +451,15 @@ export async function handleInvoiceDraft(
     issueDate: now,
     dueDate: now + 14 * 24 * 3600 * 1000,
     status: "draft",
+    ...(opts.currency ? { currency: opts.currency } : {}),
+    ...(taxRegion ? { taxRegion } : {}),
+    ...(opts.paymentMethod ? { paymentMethod: opts.paymentMethod } : {}),
+    ...(opts.paymentUrl ? { paymentUrl: opts.paymentUrl } : {}),
+    ...(opts.qr !== undefined ? { qrEnabled: opts.qr } : {}),
+    ...(opts.qrDescription ? { qrDescription: opts.qrDescription } : {}),
+    ...(opts.amountInWords !== undefined ? { amountInWords: opts.amountInWords } : {}),
+    ...(template ? { template } : {}),
+    ...(opts.invoiceType ? { invoiceType: opts.invoiceType } : {}),
   });
   emit(out.json, invoice, () => {
     console.log(
@@ -966,7 +1016,21 @@ export async function handleExpenseDelete(
 
 export async function handleInvoiceUpdate(
   api: Api,
-  opts: { id: string; notes?: string; dueDate?: string; number?: string },
+  opts: {
+    id: string;
+    notes?: string;
+    dueDate?: string;
+    number?: string;
+    currency?: string;
+    taxRegion?: string;
+    paymentMethod?: string;
+    paymentUrl?: string;
+    qr?: boolean;
+    qrDescription?: string;
+    amountInWords?: boolean;
+    template?: string;
+    invoiceType?: string;
+  },
   out: Out,
 ): Promise<void> {
   needAuth(api);
@@ -974,6 +1038,23 @@ export async function handleInvoiceUpdate(
   if (opts.notes !== undefined) patch.notes = opts.notes;
   if (opts.dueDate !== undefined) patch.dueDate = parseDate(opts.dueDate);
   if (opts.number !== undefined) patch.invoiceNumber = opts.number;
+  if (opts.currency !== undefined) patch.currency = opts.currency;
+  if (opts.taxRegion !== undefined) {
+    if (!["US", "EU"].includes(opts.taxRegion))
+      throw new Error('--tax-region must be "US" or "EU".');
+    patch.taxRegion = opts.taxRegion;
+  }
+  if (opts.paymentMethod !== undefined) patch.paymentMethod = opts.paymentMethod;
+  if (opts.paymentUrl !== undefined) patch.paymentUrl = opts.paymentUrl;
+  if (opts.qr !== undefined) patch.qrEnabled = opts.qr;
+  if (opts.qrDescription !== undefined) patch.qrDescription = opts.qrDescription;
+  if (opts.amountInWords !== undefined) patch.amountInWords = opts.amountInWords;
+  if (opts.template !== undefined) {
+    if (!["default", "stripe"].includes(opts.template))
+      throw new Error('--template must be "default" or "stripe".');
+    patch.template = opts.template;
+  }
+  if (opts.invoiceType !== undefined) patch.invoiceType = opts.invoiceType;
   if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
   const invoice = await api.updateInvoice(opts.id, patch);
   emit(out.json, invoice, () => console.log(`Invoice ${invoice.invoiceNumber ?? opts.id} updated.`));

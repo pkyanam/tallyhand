@@ -306,6 +306,16 @@ export function buildProgram(): Command {
     .option("--client <id>", "client id (builds from unbilled work)")
     .option("--project <id>", "scope unbilled work to a project")
     .option("--items <json>", 'explicit line items, e.g. \'[{"description":"X","quantity":1,"rate":100}]\'')
+    .option("--currency <code>", "ISO currency code, e.g. USD (server falls back to settings)")
+    .option("--tax-region <US|EU>", "tax-jurisdiction behavior")
+    .option("--tax-rate <pct>", "per-line tax rate 0–100 applied to lines without one")
+    .option("--payment-method <text>", "payment method text, e.g. \"Bank transfer\"")
+    .option("--payment-url <url>", "URL the client can pay at")
+    .option("--qr", "render a payment QR code on the PDF")
+    .option("--qr-description <text>", "text shown under the payment QR code")
+    .option("--amount-in-words", "print the total amount in words on the PDF")
+    .option("--template <default|stripe>", "PDF template variant")
+    .option("--invoice-type <label>", 'document type label, e.g. "Proforma invoice"')
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
       await handleInvoiceDraft(api, opts, out);
@@ -330,11 +340,20 @@ export function buildProgram(): Command {
     }));
   invoice
     .command("update")
-    .description("Update a draft invoice (notes, due date, number)")
+    .description("Update a draft invoice (notes, due date, number, localization, payment)")
     .argument("<id>", "invoice id")
     .option("--notes <text>", "notes")
     .option("--due-date <YYYY-MM-DD>", "due date")
     .option("--number <n>", "invoice number")
+    .option("--currency <code>", "ISO currency code, e.g. USD")
+    .option("--tax-region <US|EU>", "tax-jurisdiction behavior")
+    .option("--payment-method <text>", "payment method text")
+    .option("--payment-url <url>", "URL the client can pay at")
+    .option("--qr", "render a payment QR code on the PDF")
+    .option("--qr-description <text>", "text shown under the payment QR code")
+    .option("--amount-in-words", "print the total amount in words on the PDF")
+    .option("--template <default|stripe>", "PDF template variant")
+    .option("--invoice-type <label>", "document type label")
     .action(wrap(async (cmd, id, opts) => {
       const { api, out } = ctx(cmd);
       await handleInvoiceUpdate(api, { id, ...opts }, out);

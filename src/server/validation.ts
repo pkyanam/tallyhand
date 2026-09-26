@@ -84,6 +84,12 @@ export const expenseCreateSchema = z
 export const expensePatchSchema = expenseCreateSchema.partial();
 
 // -- invoices ------------------------------------------------------------
+/** Per-line tax fields shared by invoice create/patch line-item inputs. */
+const lineItemTaxFields = {
+  taxRate: z.number().min(0).max(100).optional(),
+  taxLabel: z.string().optional(),
+};
+
 export const lineItemInputSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -94,8 +100,34 @@ export const lineItemInputSchema = z
     markupPercent: z.number().optional(),
     sourceType: z.enum(["task", "expense", "manual"]).optional(),
     sourceId: z.string().min(1).optional(),
+    ...lineItemTaxFields,
   })
   .strict();
+
+const currencyCode = z.string().regex(/^[A-Za-z]{3}$/, "currency must be a 3-letter ISO code");
+
+/** Localization/payment fields on an invoice; all optional, all patchable. */
+const invoiceLocalizationFields = {
+  currency: currencyCode.optional(),
+  taxRegion: z.enum(["US", "EU"]).optional(),
+  sellerTaxId: z.string().optional(),
+  sellerTaxIdLabel: z.string().optional(),
+  buyerTaxId: z.string().optional(),
+  sellerEmailVisible: z.boolean().optional(),
+  buyerEmailVisible: z.boolean().optional(),
+  serviceStart: dateMs.optional(),
+  serviceEnd: dateMs.optional(),
+  invoiceType: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  paymentUrl: z.string().optional(),
+  bankAccount: z.string().optional(),
+  swiftBic: z.string().optional(),
+  qrEnabled: z.boolean().optional(),
+  qrPayload: z.string().optional(),
+  qrDescription: z.string().optional(),
+  amountInWords: z.boolean().optional(),
+  template: z.enum(["default", "stripe"]).optional(),
+};
 
 export const invoiceCreateSchema = z
   .object({
@@ -110,6 +142,7 @@ export const invoiceCreateSchema = z
     total: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
+    ...invoiceLocalizationFields,
   })
   .strict();
 export const invoicePatchSchema = z
@@ -124,6 +157,7 @@ export const invoicePatchSchema = z
     total: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
+    ...invoiceLocalizationFields,
   })
   .strict();
 

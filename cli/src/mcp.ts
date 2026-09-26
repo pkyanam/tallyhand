@@ -339,12 +339,29 @@ export function createMcpServer(api: Api): McpServer {
             description: z.string(),
             quantity: z.number(),
             rate: z.number(),
+            taxRate: z.number().min(0).max(100).optional().describe("Per-line tax rate as a percent, e.g. 8.5."),
+            taxLabel: z.string().optional().describe("Per-line tax label override."),
           }),
         )
         .optional()
         .describe("Explicit line items (dollars). Omit to build from unbilled work."),
+      currency: z.string().optional().describe("ISO 4217 currency code, e.g. USD. Falls back to settings."),
+      taxRegion: z.enum(["US", "EU"]).optional().describe("Tax-jurisdiction behavior. Falls back to settings."),
+      taxRate: z
+        .number()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe("Default tax rate percent applied to lines that don't set one."),
+      paymentMethod: z.string().optional().describe('Payment method text, e.g. "Bank transfer".'),
+      paymentUrl: z.string().optional().describe("URL the client can pay at."),
+      qrEnabled: z.boolean().optional().describe("Render a payment QR code on the PDF."),
+      qrDescription: z.string().optional().describe("Text shown under the payment QR code."),
+      amountInWords: z.boolean().optional().describe("Print the total amount in words on the PDF."),
+      template: z.enum(["default", "stripe"]).optional().describe("PDF template variant."),
+      invoiceType: z.string().optional().describe('Document type label, e.g. "Proforma invoice".'),
     },
-    safe(async ({ clientId, projectId, items }) => {
+    safe(async ({ clientId, projectId, items, currency, taxRegion, taxRate, paymentMethod, paymentUrl, qrEnabled, qrDescription, amountInWords, template, invoiceType }) => {
       let lineItems: any[];
       let taskCount = 0;
       let expenseCount = 0;
@@ -355,6 +372,8 @@ export function createMcpServer(api: Api): McpServer {
           rate: it.rate,
           amount: computeLineAmount(it.quantity, it.rate),
           sourceType: "manual",
+          ...(it.taxRate != null ? { taxRate: it.taxRate } : {}),
+          ...(it.taxLabel ? { taxLabel: it.taxLabel } : {}),
         }));
       } else {
         const built = await buildUnbilledLineItems(api, { clientId, projectId });
@@ -363,6 +382,11 @@ export function createMcpServer(api: Api): McpServer {
         lineItems = built.lineItems;
         taskCount = built.taskCount;
         expenseCount = built.expenseCount;
+      }
+      if (taxRate !== undefined) {
+        lineItems = lineItems.map((li) =>
+          li.taxRate == null ? { ...li, taxRate } : li,
+        );
       }
       const { subtotal, total } = invoiceTotals(lineItems);
       const now = Date.now();
@@ -374,6 +398,15 @@ export function createMcpServer(api: Api): McpServer {
         issueDate: now,
         dueDate: now + 14 * 24 * 3600 * 1000,
         status: "draft",
+        ...(currency ? { currency } : {}),
+        ...(taxRegion ? { taxRegion } : {}),
+        ...(paymentMethod ? { paymentMethod } : {}),
+        ...(paymentUrl ? { paymentUrl } : {}),
+        ...(qrEnabled !== undefined ? { qrEnabled } : {}),
+        ...(qrDescription ? { qrDescription } : {}),
+        ...(amountInWords !== undefined ? { amountInWords } : {}),
+        ...(template ? { template } : {}),
+        ...(invoiceType ? { invoiceType } : {}),
       });
       return { invoice, taskCount, expenseCount };
     }),

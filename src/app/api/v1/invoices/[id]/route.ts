@@ -57,6 +57,9 @@ export async function PATCH(
         ...(li.markupPercent != null ? { markupPercent: li.markupPercent } : {}),
         sourceType: li.sourceType ?? "manual",
         ...(li.sourceId ? { sourceId: li.sourceId } : {}),
+        // Per-line tax passes through (PATCH never stamps settings defaults).
+        ...(li.taxRate != null ? { taxRate: li.taxRate } : {}),
+        ...(li.taxLabel ? { taxLabel: li.taxLabel } : {}),
       }));
       const { subtotal, total } = invoiceTotals(items);
       await provider.updateInvoice(params.id, {

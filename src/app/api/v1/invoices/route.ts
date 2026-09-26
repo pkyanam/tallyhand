@@ -29,6 +29,8 @@ async function buildInvoiceInput(
   provider: StorageProvider,
   input: InvoiceCreate,
 ): Promise<InvoiceCreateInput> {
+  const settings = await provider.getSettings();
+  const defaultTaxRate = settings.invoice.defaultTaxRate;
   const lineItems: InvoiceLineItem[] = input.lineItems.map((li) => ({
     id: li.id ?? newId("li"),
     description: li.description,
@@ -38,6 +40,12 @@ async function buildInvoiceInput(
     ...(li.markupPercent != null ? { markupPercent: li.markupPercent } : {}),
     sourceType: li.sourceType ?? "manual",
     ...(li.sourceId ? { sourceId: li.sourceId } : {}),
+    // Stamp the settings default tax rate onto lines that don't set one.
+    ...((() => {
+      const taxRate = li.taxRate ?? (defaultTaxRate > 0 ? defaultTaxRate : undefined);
+      return taxRate != null ? { taxRate } : {};
+    })()),
+    ...(li.taxLabel ? { taxLabel: li.taxLabel } : {}),
   }));
   const { subtotal, total } = invoiceTotals(lineItems);
   return {
@@ -52,6 +60,26 @@ async function buildInvoiceInput(
     total: input.total ?? total,
     ...(input.notes ? { notes: input.notes } : {}),
     publicToken: input.publicToken ?? newInvoicePublicToken(),
+    // -- localization / payment fields (fall back to settings defaults) --
+    currency: input.currency ?? settings.invoice.defaultCurrency,
+    taxRegion: input.taxRegion ?? settings.invoice.defaultTaxRegion,
+    ...(input.sellerTaxId ? { sellerTaxId: input.sellerTaxId } : {}),
+    ...(input.sellerTaxIdLabel ? { sellerTaxIdLabel: input.sellerTaxIdLabel } : {}),
+    ...(input.buyerTaxId ? { buyerTaxId: input.buyerTaxId } : {}),
+    ...(input.sellerEmailVisible != null ? { sellerEmailVisible: input.sellerEmailVisible } : {}),
+    ...(input.buyerEmailVisible != null ? { buyerEmailVisible: input.buyerEmailVisible } : {}),
+    ...(input.serviceStart != null ? { serviceStart: input.serviceStart } : {}),
+    ...(input.serviceEnd != null ? { serviceEnd: input.serviceEnd } : {}),
+    ...(input.invoiceType ? { invoiceType: input.invoiceType } : {}),
+    ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
+    ...(input.paymentUrl ? { paymentUrl: input.paymentUrl } : {}),
+    ...(input.bankAccount ? { bankAccount: input.bankAccount } : {}),
+    ...(input.swiftBic ? { swiftBic: input.swiftBic } : {}),
+    ...(input.qrEnabled != null ? { qrEnabled: input.qrEnabled } : {}),
+    ...(input.qrPayload ? { qrPayload: input.qrPayload } : {}),
+    ...(input.qrDescription ? { qrDescription: input.qrDescription } : {}),
+    ...(input.amountInWords != null ? { amountInWords: input.amountInWords } : {}),
+    ...(input.template ? { template: input.template } : {}),
   };
 }
 

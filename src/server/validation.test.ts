@@ -3,6 +3,7 @@ import {
   clientCreateSchema,
   expenseCreateSchema,
   invoiceCreateSchema,
+  invoicePatchSchema,
   projectCreateSchema,
   recurringScheduleCreateSchema,
   retainerCreateSchema,
@@ -75,23 +76,84 @@ describe("validation schemas", () => {
       });
       expect(r.success).toBe(true);
     });
-    it("rejects bad status enum and line item without description", () => {
+    it("accepts a full localization/payment payload", () => {
+      const r = invoiceCreateSchema.safeParse({
+        clientId: "cli_1",
+        issueDate: 1000,
+        dueDate: 2000,
+        lineItems: [{ description: "work", quantity: 2, rate: 150, taxRate: 8.5, taxLabel: "NY sales tax" }],
+        currency: "eur",
+        taxRegion: "EU",
+        sellerTaxId: "DE123456789",
+        sellerTaxIdLabel: "USt-IdNr.",
+        buyerTaxId: "FR987654321",
+        sellerEmailVisible: false,
+        buyerEmailVisible: true,
+        serviceStart: "2026-09-01",
+        serviceEnd: "2026-09-30",
+        invoiceType: "Proforma invoice",
+        paymentMethod: "Bank transfer",
+        paymentUrl: "https://pay.example.com/i/1",
+        bankAccount: "DE89370400440532013000",
+        swiftBic: "COBADEFFXXX",
+        qrEnabled: true,
+        qrPayload: "https://pay.example.com/i/1",
+        qrDescription: "Scan to pay",
+        amountInWords: true,
+        template: "stripe",
+      });
+      expect(r.success).toBe(true);
+      if (r.success) {
+        expect(r.data.currency).toBe("eur");
+        expect(r.data.taxRegion).toBe("EU");
+        expect(r.data.serviceStart).toBe(Date.parse("2026-09-01"));
+        expect(r.data.lineItems[0].taxRate).toBe(8.5);
+      }
+    });
+    it("rejects out-of-range taxRate, bad currency, and unknown keys", () => {
+      const base = {
+        clientId: "c",
+        issueDate: 1,
+        dueDate: 2,
+        lineItems: [{ description: "work", quantity: 1, rate: 100 }],
+      };
       expect(
         invoiceCreateSchema.safeParse({
-          clientId: "c",
-          issueDate: 1,
-          dueDate: 2,
-          lineItems: [],
-          status: "emailed",
+          ...base,
+          lineItems: [{ description: "work", quantity: 1, rate: 100, taxRate: 101 }],
         }).success,
       ).toBe(false);
       expect(
-        invoiceCreateSchema.safeParse({
-          clientId: "c",
-          issueDate: 1,
-          dueDate: 2,
-          lineItems: [{ quantity: 1, rate: 1 }],
+        invoiceCreateSchema.safeParse({ ...base, currency: "USDD" }).success,
+      ).toBe(false);
+      expect(
+        invoiceCreateSchema.safeParse({ ...base, currency: "U" }).success,
+      ).toBe(false);
+      expect(
+        invoiceCreateSchema.safeParse({ ...base, taxRegion: "UK" }).success,
+      ).toBe(false);
+      expect(
+        invoiceCreateSchema.safeParse({ ...base, template: "fancy" }).success,
+      ).toBe(false);
+      expect(
+        invoiceCreateSchema.safeParse({ ...base, someUnknownField: 1 }).success,
+      ).toBe(false);
+    });
+    it("patch schema accepts new localization fields and rejects bad ones", () => {
+      expect(
+        invoicePatchSchema.safeParse({
+          currency: "GBP",
+          taxRegion: "EU",
+          paymentMethod: "Card",
+          qrEnabled: true,
+          amountInWords: false,
+          template: "default",
+          lineItems: [{ description: "w", quantity: 1, rate: 10, taxRate: 20, taxLabel: "VAT 20%" }],
         }).success,
+      ).toBe(true);
+      expect(invoicePatchSchema.safeParse({ currency: "EURO" }).success).toBe(false);
+      expect(
+        invoicePatchSchema.safeParse({ lineItems: [{ description: "w", quantity: 1, rate: 10, taxRate: -1 }] }).success,
       ).toBe(false);
     });
   });
