@@ -9,7 +9,10 @@
 # curl|bash works: prompts reopen /dev/tty, and when the script isn't running
 # from a checkout it clones the repo into ./tallyhand (or $TALLYHAND_DIR).
 #
-# Two paths:
+# Three paths:
+#   0. tally CLI binary — downloads the prebuilt `tally` binary for your
+#      platform from the latest GitHub Release. No Node, git, or Docker
+#      needed. The CLI talks to a Tallyhand server (local or hosted).
 #   1. Local  — SQLite + no auth, zero-config single-user. No Docker needed.
 #   2. Hosted — Docker Compose + Postgres, with Clerk or builtin magic-link auth.
 #
@@ -199,6 +202,82 @@ write_env() {
 # ------------------------------------------------------------- re-run logic
 
 say "Tallyhand installer"
+
+choose INSTALL_KIND "What would you like to set up?" \
+  "tally CLI binary — instant, no Node/git/Docker (needs a Tallyhand server URL)" \
+  "Full app setup — local SQLite or hosted Docker (interactive)"
+
+# ============================================================== BINARY ===
+
+if [[ "$INSTALL_KIND" == "tally CLI binary"* ]]; then
+  say "tally CLI binary"
+  need_cmd curl
+  OS="$(uname -s)"; ARCH="$(uname -m)"
+  case "$OS/$ARCH" in
+    Linux/x86_64)   TARGET="tally-linux-x64" ;;
+    Darwin/arm64)    TARGET="tally-macos-arm64" ;;
+    Darwin/x86_64)   TARGET="tally-macos-x64" ;;
+    MINGW*/x86_64|MSYS*/x86_64|CYGWIN*/x86_64) TARGET="tally-windows-x64.exe" ;;
+    *) die "No prebuilt binary for $OS/$ARCH — see https://github.com/pkyanam/tallyhand/releases" ;;
+  esac
+  BIN_NAME="tally"; [[ "$TARGET" == *.exe ]] && BIN_NAME="tally.exe"
+  DEST_DIR="${TALLY_BIN_DIR:-$HOME/.local/bin}"
+  mkdir -p "$DEST_DIR"
+  URL="https://github.com/pkyanam/tallyhand/releases/latest/download/$TARGET"
+  info "Downloading $TARGET …"
+  if ! curl -fsSL -o "$DEST_DIR/$BIN_NAME.tmp" "$URL"; then
+    rm -f "$DEST_DIR/$BIN_NAME.tmp"
+    die "Download failed. If no release is published yet, see https://github.com/pkyanam/tallyhand/releases"
+  fi
+  mv "$DEST_DIR/$BIN_NAME.tmp" "$DEST_DIR/$BIN_NAME"
+  chmod +x "$DEST_DIR/$BIN_NAME"
+  if "$DEST_DIR/$BIN_NAME" --help >/dev/null 2>&1; then
+    info "Binary works ✓"
+  else
+    warn "Downloaded binary didn't pass its smoke test — try re-running."
+  fi
+  case ":$PATH:" in
+    *":$DEST_DIR:"*) ;;
+    *) warn "$DEST_DIR is not on your PATH — add it:  export PATH=\"$DEST_DIR:\$PATH\"" ;;
+  esac
+
+  say "Point it at your server"
+  ask TALLY_API "Tallyhand server URL" "http://localhost:3000"
+  ask_secret TALLY_TOKEN "API token (empty = none)"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$HOME/.tallyhand/config.json" "$TALLY_API" "$TALLY_TOKEN" <<'PYEOF'
+import json, os, sys
+p, api, tok = sys.argv[1], sys.argv[2], sys.argv[3]
+cfg = {"apiUrl": api}
+if tok:
+    cfg["token"] = tok
+os.makedirs(os.path.dirname(p), exist_ok=True)
+with open(p, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+os.chmod(p, 0o600)
+PYEOF
+  else
+    mkdir -p "$HOME/.tallyhand"
+    if [ -n "$TALLY_TOKEN" ]; then
+      printf '{\n  "apiUrl": "%s",\n  "token": "%s"\n}\n' "$TALLY_API" "$TALLY_TOKEN" > "$HOME/.tallyhand/config.json"
+    else
+      printf '{\n  "apiUrl": "%s"\n}\n' "$TALLY_API" > "$HOME/.tallyhand/config.json"
+    fi
+    chmod 600 "$HOME/.tallyhand/config.json"
+  fi
+  info "Config written to ~/.tallyhand/config.json (mode 600)"
+
+  say "Done ✓"
+  info "Try:  tally --help"
+  info "      tally mcp        # MCP server over stdio for AI agents"
+  info ""
+  info "The CLI needs a running Tallyhand server — run the full installer"
+  info "on your server (or locally) to get one."
+  exit 0
+fi
+
+# ============================================================= RE-RUN ===
 
 if [ -f "$ENV_FILE" ]; then
   info "Found an existing .env"
