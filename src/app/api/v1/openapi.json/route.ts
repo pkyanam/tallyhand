@@ -1,13 +1,16 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { OPENAPI_V1 } from "../_lib/openapi-document";
 
 export const runtime = "nodejs";
 
 /**
  * Serves the OpenAPI 3.1 document for API v1. No auth — the spec itself
  * carries no data. Agents: fetch this first to learn the full surface.
+ *
+ * The document is embedded in the API-owned `_lib` tree (not read from
+ * the repo-root `openapi/` dir) so it always documents the filters,
+ * sorting, aliases, dry-run, idempotency, and bulk endpoints this
+ * version of the API actually implements.
  */
 export async function GET() {
-  const text = readFileSync(join(process.cwd(), "openapi", "tallyhand.v1.json"), "utf8");
-  return new Response(text, { headers: { "content-type": "application/json" } });
+  return Response.json(OPENAPI_V1);
 }

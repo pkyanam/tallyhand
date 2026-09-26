@@ -6,8 +6,8 @@ without a browser. It runs against a **server-side SQLite database**
 browser app uses with IndexedDB. A Postgres provider for the hosted deployment
 arrives in Phase 4; the API surface stays the same.
 
-Full machine-readable spec: `GET /api/v1/openapi.json` (also at
-[`openapi/tallyhand.v1.json`](../openapi/tallyhand.v1.json)).
+Full machine-readable spec: `GET /api/v1/openapi.json` (served from the API
+tree itself, so it always matches the running server).
 
 ## Enabling
 
@@ -88,18 +88,58 @@ uninvoiced tasks + expenses into a draft each run instead.
 - **Pagination**: `?limit=` (default 50, max 200), `?cursor=` (opaque base64 from
   `meta.nextCursor`; `null` = last page).
 - **Filtering**: `?clientId`, `?projectId`, `?status` (invoices, schedules, retainers),
-  `?isBilled=true|false` (tasks, expenses) where sensible — see openapi.json.
-- **Idempotency**: send `Idempotency-Key: <uuid>` on POSTs. Retries with the same
-  key replay the stored response instead of double-executing. Use it for every
-  create in a retry loop.
+  `?isBilled=true|false` (tasks, expenses), `?overdue=true` (sent invoices past
+  due), `?category` (expenses), `?type` (retainers), `?search` (name substring).
+  Snake_case aliases work everywhere: `client_id`, `project_id`, `is_billed`,
+  `include_archived`.
+- **Date ranges**: `?date_from=` / `?date_to=` accept ms epochs or ISO-8601 strings
+  (invalid values → 400).
+- **Sorting**: `?sort=<field>` or `?sort=-<field>` for descending. Allowed fields
+  are per-entity (e.g. tasks: `startAt,endAt,durationMinutes,name,createdAt`;
+  invoices: `issueDate,dueDate,total,invoiceNumber,createdAt`); an invalid field
+  → 400 naming the allowed ones.
+- **Idempotency**: send `Idempotency-Key: <uuid>` on POST, PATCH, and PUT.
+  Retries with the same key replay the stored response instead of
+  double-executing. Use it for every mutation in a retry loop.
+- **Dry-run previews**: `?dry_run=true` on deletes, invoice send/paid,
+  `POST /scheduler/run`, and per-schedule runs returns what *would* happen
+  without mutating. Dry runs never consume idempotency keys.
 - **Dates**: millisecond epochs; ISO-8601 strings are accepted and coerced.
 - **Money units**: invoice line items are decimal **dollars**; retainer
   `amountCents` is integer **cents**. Don't mix them up.
 - **Billing = send**: creating an invoice never marks work billed — only
-  `POST /invoices/{id}/send` does (atomically). The scheduler is the exception:
+  `POST /invoices/{id}/send` does. The scheduler is the exception:
   it claims sources at draft-generation time because it runs unattended.
-- **Timers**: no server-side running timer exists. Log the completed entry when
-  the timer stops (the CLI/MCP layer manages the running state client-side).
+- **Timers**: an `endAt` of `0` (or omitted) means an open/running timer —
+  `timer start` in the CLI creates one; `timer stop` patches `endAt`. Otherwise
+  `endAt` must be >= `startAt`.
+
+## Bulk import
+
+```bash
+# Up to 200 items per batch; { items: [...] } or a bare JSON array.
+# Every item is validated before the first write — one bad item 400s the
+# whole batch with per-index details and creates nothing.
+curl -s -X POST $BASE/tasks/bulk -H "$H" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <uuid>' \
+  -d '{"items":[{"projectId":"'$PRJ'","name":"Review","startAt":"2026-09-20","endAt":"2026-09-20T01:00:00Z","durationMinutes":60}]}'
+
+curl -s -X POST $BASE/expenses/bulk -H "$H" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <uuid>' \
+  -d '{"items":[{"clientId":"'$CLI'","date":"2026-09-20","amount":42.50,"category":"travel"}]}'
+```
+
+## Invoice lifecycle & deletion guards
+
+- Invoices are **always created as drafts** (initial `status` must be omitted or
+  `draft`). `PATCH /invoices/{id}` never accepts `status` — advance it only via
+  `POST /invoices/{id}/send` (draft → sent, marks sources billed) then
+  `POST /invoices/{id}/paid` (sent → paid). Wrong transitions → 409.
+- Deletes are guard-railed: clients/projects/tasks/expenses/schedules refuse with
+  **409** while related records exist (`error.details` carries per-relation
+  counts, e.g. `taskCount`, `invoiceCount`). Only draft invoices can be
+  deleted; deleting one unclaims its billed tasks/expenses.
+- Preview anything destructive first with `?dry_run=true`.
 
 ## Settings worth setting once
 

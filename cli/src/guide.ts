@@ -26,11 +26,23 @@ Every route except GET /health and GET /openapi.json needs
   a task; \`timer stop\` patches \`endAt\` + \`durationMinutes\`. Never invent
   your own representation.
 - **Idempotency**: every POST carries an auto-generated \`Idempotency-Key\`,
-  so retrying a timed-out POST will not double-create.
-- **Pagination**: lists default to 50, max 200, cursor-based. Pass \`all: true\`
-  (client) or keep following \`meta.page.cursor\` until null.
-- **Errors**: \`{ "error": { "code", "message" } }\`. 401 = bad/missing token,
-  404 = unknown id, 422/400 = validation (read the message).
+  so retrying a timed-out POST will not double-create. The API also honors a
+  client-supplied \`Idempotency-Key\` on POST/PUT/PATCH — always send one for
+  writes in agentic loops (one key = one logical write).
+- **Pagination**: lists default to 50, max 200, cursor-based. Follow
+  \`meta.nextCursor\` until null (the CLI does this automatically).
+- **Filtering & sorting**: lists take \`?sort=<field>\` / \`?sort=-<field>\`
+  (descending), plus filters like \`status\`, \`clientId\`, \`isBilled\`,
+  \`date_from\`/\`date_to\` (ms epoch or ISO date). Examples: list overdue
+  invoices with \`overdue=true\`; tasks for a month with
+  \`date_from=2026-09-01&date_to=2026-09-30&sort=-startAt\`.
+- **Dry run**: append \`?dry_run=true\` (CLI: \`--dry-run\`) to deletes,
+  \`invoice send\`/\`paid\`, and scheduler runs to preview the change without
+  mutating. Use it before any destructive step you are unsure about.
+- **Errors**: \`{ "error": { "code", "message", "details?" } }\`. 400 =
+  validation (details carry zod issues), 401 = bad/missing token, 404 =
+  unknown id, 409 = valid request but forbidden by current state (e.g.
+  deleting a client that still has projects — details explain why).
 
 ## Typical flows
 
@@ -49,12 +61,25 @@ runs due schedules.
 **Retainers:** \`retainer create --client <id> --name "Q3 block" --type
 prepaid-hours --hours 40 --amount-cents 600000\` (cents here: $6,000).
 
+**Month-end:** \`report revenue --month 2026-09\` (paid invoices issued that
+month); \`invoice list --overdue\` shows sent-but-unpaid past due.
+
+**Bulk import:** \`POST /api/v1/tasks/bulk\` and \`/expenses/bulk\` take
+\`{ items: [...] }\` — validated before anything is written: one bad item
+400s the whole batch with per-index details and creates nothing, so you never
+reconcile partial validation failures.
+
 ## Gotchas
 
 - \`timer stop\` with zero running timers errors ("no running timer"); with
   several it errors and tells you to pass \`--id\`. Use \`timer status\` first.
 - \`invoice draft\` only creates a **draft** — nothing is marked billed until
   \`invoice send\`. Drafts are safe to create and discard.
+- Invoice **status is a lifecycle, not a field**: change it only via
+  \`invoice send\` / \`invoice paid\` (API: \`POST /invoices/{id}/send|/paid\`) —
+  PATCH rejects status changes, and \`send\` is refused (409) on paid invoices.
+- Deletes are guarded: clients/projects with children, billed tasks/expenses,
+  and sent/paid invoices all 409 with an explanation — read \`error.details\`.
 - \`--items\` / \`--line-items\` take a **JSON array string** — quote it for
   your shell: \`'[{"description":"X","quantity":1,"rate":100}]'\`.
 - \`export --entity all\` dumps every entity; prefer \`--format csv --out file\`

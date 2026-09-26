@@ -1,12 +1,24 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
 import { badRequest, created, paginated, parsePagination } from "@/server/http";
-import { withIdempotency } from "@/server/idempotency";
+import { withIdempotency } from "../_lib/idempotency";
 import { invoiceCreateSchema, type InvoiceCreate } from "@/server/validation";
 import { newId, newInvoicePublicToken } from "@/core/id";
 import { computeLineAmount, invoiceTotals } from "@/core/invoice";
 import type { InvoiceCreateInput, StorageProvider } from "@/core/storage";
 import type { InvoiceLineItem } from "@/core/entities";
+import {
+  aliasedParam,
+  applySort,
+  filterDateRange,
+  parseDateRange,
+  parseSort,
+  sortUsage,
+} from "../_lib/query";
+
+export const runtime = "nodejs";
+
+const SORT_FIELDS = ["issueDate", "dueDate", "total", "invoiceNumber", "createdAt"] as const;
 
 /**
  * Fill server-side defaults for an invoice create: line-item ids/amounts,
@@ -43,22 +55,36 @@ async function buildInvoiceInput(
   };
 }
 
-export const runtime = "nodejs";
-
 export async function GET(req: Request) {
   const authErr = requireApiToken(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
   const provider = getServerProvider();
   const search = new URL(req.url).searchParams;
-  const clientId = search.get("clientId");
+  const clientId = aliasedParam(search, "clientId", "client_id");
   const status = search.get("status");
+  const overdue = search.get("overdue") === "true";
+
+  const range = parseDateRange(req);
+  if (range === "invalid") {
+    return badRequest("date_from/date_to must be ms epoch or ISO-8601 dates");
+  }
+  const sort = parseSort(req, SORT_FIELDS);
+  if (sort === "invalid") {
+    return badRequest(`sort must be one of: ${sortUsage(SORT_FIELDS)}`);
+  }
 
   let invoices = await provider.listInvoices();
   if (clientId) invoices = invoices.filter((i) => i.clientId === clientId);
   if (status === "draft" || status === "sent" || status === "paid") {
     invoices = invoices.filter((i) => i.status === status);
   }
+  if (overdue) {
+    const now = Date.now();
+    invoices = invoices.filter((i) => i.status === "sent" && i.dueDate < now);
+  }
+  invoices = filterDateRange(invoices, (i) => i.issueDate, range);
+  if (sort) invoices = applySort(invoices, sort);
 
   return paginated(invoices, limit, cursor);
 }
@@ -79,6 +105,11 @@ export async function POST(req: Request) {
     }
     if (parsed.data.dueDate < parsed.data.issueDate) {
       return badRequest("dueDate must be >= issueDate");
+    }
+    if (parsed.data.status && parsed.data.status !== "draft") {
+      return badRequest(
+        'Invoices are always created as drafts — change status via POST /invoices/{id}/send and /paid',
+      );
     }
     const invoice = await provider.createInvoice(
       await buildInvoiceInput(provider, parsed.data),

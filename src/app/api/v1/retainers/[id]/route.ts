@@ -1,8 +1,10 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
 import { badRequest, noContent, notFound, ok } from "@/server/http";
+import { withIdempotency } from "../../_lib/idempotency";
 import { retainerPatchSchema } from "@/server/validation";
 import type { RecurringCapableProvider } from "@/server/scheduler";
+import { isDryRun } from "../../_lib/query";
 
 export const runtime = "nodejs";
 
@@ -27,17 +29,19 @@ export async function PATCH(
 ) {
   const authErr = requireApiToken(req);
   if (authErr) return authErr;
-  const provider = asRetainers(getServerProvider());
-  const existing = await provider.getRetainer(params.id);
-  if (!existing) return notFound("retainer");
-  const body: unknown = await req.json().catch(() => null);
-  const parsed = retainerPatchSchema.safeParse(body);
-  if (!parsed.success) {
-    return badRequest("Invalid retainer patch", parsed.error.issues);
-  }
-  await provider.updateRetainer(params.id, parsed.data);
-  const updated = await provider.getRetainer(params.id);
-  return ok(updated);
+  return withIdempotency(req, async () => {
+    const provider = asRetainers(getServerProvider());
+    const existing = await provider.getRetainer(params.id);
+    if (!existing) return notFound("retainer");
+    const body: unknown = await req.json().catch(() => null);
+    const parsed = retainerPatchSchema.safeParse(body);
+    if (!parsed.success) {
+      return badRequest("Invalid retainer patch", parsed.error.issues);
+    }
+    await provider.updateRetainer(params.id, parsed.data);
+    const updated = await provider.getRetainer(params.id);
+    return ok(updated);
+  });
 }
 
 export async function DELETE(
@@ -49,6 +53,17 @@ export async function DELETE(
   const provider = asRetainers(getServerProvider());
   const existing = await provider.getRetainer(params.id);
   if (!existing) return notFound("retainer");
+  if (isDryRun(req)) {
+    return ok({
+      dryRun: true,
+      wouldDelete: {
+        entity: "retainer",
+        id: existing.id,
+        name: existing.name,
+        status: existing.status,
+      },
+    });
+  }
   await provider.removeRetainer(params.id);
   return noContent();
 }

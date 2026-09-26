@@ -23,18 +23,45 @@ import {
   handleLog,
   handleClientsList,
   handleClientsCreate,
+  handleClientShow,
+  handleClientUpdate,
+  handleClientDelete,
   handleProjectsList,
   handleProjectsCreate,
+  handleProjectShow,
+  handleProjectUpdate,
+  handleProjectDelete,
+  handleTasksList,
+  handleTasksBulk,
+  handleTaskShow,
+  handleTaskUpdate,
+  handleTaskDelete,
   handleUnbilled,
   handleInvoiceDraft,
   handleInvoiceList,
   handleInvoiceShow,
+  handleInvoiceUpdate,
+  handleInvoiceDelete,
   handleRecurringList,
   handleRecurringCreate,
+  handleRecurringShow,
+  handleRecurringUpdate,
+  handleRecurringDelete,
   handleRecurringRun,
   handleRetainerList,
   handleRetainerCreate,
+  handleRetainerShow,
+  handleRetainerUpdate,
+  handleRetainerDelete,
   handleExpenseAdd,
+  handleExpensesList,
+  handleExpensesBulk,
+  handleExpenseShow,
+  handleExpenseUpdate,
+  handleExpenseDelete,
+  handleSettingsShow,
+  handleSettingsSet,
+  handleReportRevenue,
   handleExport,
   handleDoctor,
 } from "./commands.js";
@@ -126,6 +153,37 @@ export function buildProgram(): Command {
       const { api, out } = ctx(cmd);
       await handleClientsCreate(api, opts, out);
     }));
+  clients
+    .command("show")
+    .description("Show one client")
+    .argument("<id>", "client id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleClientShow(api, id, out);
+    }));
+  clients
+    .command("update")
+    .description("Update a client")
+    .argument("<id>", "client id")
+    .option("--name <name>", "new name")
+    .option("--email <email>", "contact email")
+    .option("--rate <dollars>", "default hourly rate")
+    .option("--notes <text>", "notes")
+    .option("--archived", "archive the client")
+    .option("--no-archived", "unarchive the client")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleClientUpdate(api, { id, ...opts }, out);
+    }));
+  clients
+    .command("delete")
+    .description("Delete a client (refused when projects/invoices exist)")
+    .argument("<id>", "client id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleClientDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
 
   const projects = program.command("projects").description("Manage projects");
   projects
@@ -145,6 +203,90 @@ export function buildProgram(): Command {
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
       await handleProjectsCreate(api, opts, out);
+    }));
+  projects
+    .command("show")
+    .description("Show one project")
+    .argument("<id>", "project id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleProjectShow(api, id, out);
+    }));
+  projects
+    .command("update")
+    .description("Update a project")
+    .argument("<id>", "project id")
+    .option("--name <name>", "new name")
+    .option("--client <id>", "move to another client")
+    .option("--rate <dollars>", "hourly rate override")
+    .option("--archived", "archive the project")
+    .option("--no-archived", "unarchive the project")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleProjectUpdate(api, { id, ...opts }, out);
+    }));
+  projects
+    .command("delete")
+    .description("Delete a project (refused when tasks/expenses exist)")
+    .argument("<id>", "project id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleProjectDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
+
+  const tasks = program.command("tasks").description("Manage time entries");
+  tasks
+    .command("list")
+    .description("List time entries")
+    .option("--project <id>", "filter by project")
+    .option("--client <id>", "filter by client")
+    .option("--billed", "only billed entries")
+    .option("--unbilled", "only unbilled entries")
+    .option("--from <YYYY-MM-DD>", "entries on/after this day")
+    .option("--to <YYYY-MM-DD>", "entries on/before this day")
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleTasksList(api, opts, out);
+    }));
+  tasks
+    .command("show")
+    .description("Show one time entry")
+    .argument("<id>", "task id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleTaskShow(api, id, out);
+    }));
+  tasks
+    .command("update")
+    .description("Update a time entry")
+    .argument("<id>", "task id")
+    .option("--minutes <n>", "set duration in minutes")
+    .option("--date <YYYY-MM-DD>", "move the entry to this day (keeps duration)")
+    .option("--note <text>", "set the note")
+    .option("--project <id>", "move to another project")
+    .option("--billed", "mark billed")
+    .option("--unbilled", "mark unbilled")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleTaskUpdate(api, { id, ...opts }, out);
+    }));
+  tasks
+    .command("delete")
+    .description("Delete a time entry (refused when billed)")
+    .argument("<id>", "task id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleTaskDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
+  tasks
+    .command("bulk")
+    .description("Log many time entries at once (validated batch, up to 200)")
+    .requiredOption("--items <json>", 'JSON array, e.g. \'[{"projectId":"p1","minutes":60,"date":"2026-09-20","note":"Review"}]\'')
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleTasksBulk(api, opts, out);
     }));
 
   program
@@ -173,6 +315,7 @@ export function buildProgram(): Command {
     .description("List invoices")
     .option("--status <draft|sent|paid>", "filter by status")
     .option("--client <id>", "filter by client")
+    .option("--overdue", "only sent invoices past their due date")
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
       await handleInvoiceList(api, opts, out);
@@ -186,24 +329,56 @@ export function buildProgram(): Command {
       await handleInvoiceShow(api, id, out);
     }));
   invoice
-    .command("send")
-    .description("Mark an invoice sent")
+    .command("update")
+    .description("Update a draft invoice (notes, due date, number)")
     .argument("<id>", "invoice id")
-    .action(wrap(async (cmd, id) => {
+    .option("--notes <text>", "notes")
+    .option("--due-date <YYYY-MM-DD>", "due date")
+    .option("--number <n>", "invoice number")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleInvoiceUpdate(api, { id, ...opts }, out);
+    }));
+  invoice
+    .command("delete")
+    .description("Delete a draft invoice (refused once sent/paid)")
+    .argument("<id>", "invoice id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleInvoiceDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
+  invoice
+    .command("send")
+    .description("Mark an invoice sent (marks source tasks/expenses billed)")
+    .argument("<id>", "invoice id")
+    .option("--dry-run", "preview the billed-marking without mutating")
+    .action(wrap(async (cmd, id, opts) => {
       const { api, out } = ctx(cmd);
       needAuth(api);
-      const inv = await api.sendInvoice(id);
-      emit(out.json, inv, () => console.log(`Invoice ${inv.invoiceNumber ?? id} sent.`));
+      const inv = await api.sendInvoice(id, { dryRun: opts.dryRun });
+      emit(out.json, inv, () => {
+        if (inv?.dryRun) {
+          const n = inv.wouldMarkBilled.taskIds.length + inv.wouldMarkBilled.expenseIds.length;
+          console.log(`Dry run — would send invoice ${inv.invoiceNumber} and mark ${n} source item(s) billed.`);
+        } else {
+          console.log(`Invoice ${inv.invoiceNumber ?? id} sent.`);
+        }
+      });
     }));
   invoice
     .command("paid")
     .description("Mark an invoice paid")
     .argument("<id>", "invoice id")
-    .action(wrap(async (cmd, id) => {
+    .option("--dry-run", "preview without mutating")
+    .action(wrap(async (cmd, id, opts) => {
       const { api, out } = ctx(cmd);
       needAuth(api);
-      const inv = await api.markInvoicePaid(id);
-      emit(out.json, inv, () => console.log(`Invoice ${inv.invoiceNumber ?? id} marked paid.`));
+      const inv = await api.markInvoicePaid(id, { dryRun: opts.dryRun });
+      emit(out.json, inv, () => {
+        if (inv?.dryRun) console.log(`Dry run — would mark invoice ${inv.invoiceNumber} paid.`);
+        else console.log(`Invoice ${inv.invoiceNumber ?? id} marked paid.`);
+      });
     }));
 
   const recurring = program.command("recurring").description("Recurring invoice schedules");
@@ -235,9 +410,38 @@ export function buildProgram(): Command {
     .command("run")
     .description("Run due schedules now (or one schedule with --id)")
     .option("--id <scheduleId>", "run a single schedule")
+    .option("--dry-run", "preview due schedules without creating invoices")
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
       await handleRecurringRun(api, opts, out);
+    }));
+  recurring
+    .command("show")
+    .description("Show one schedule")
+    .argument("<id>", "schedule id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleRecurringShow(api, id, out);
+    }));
+  recurring
+    .command("update")
+    .description("Update a schedule (name, status, notes)")
+    .argument("<id>", "schedule id")
+    .option("--name <name>", "new name")
+    .option("--status <active|paused|ended>", "new status")
+    .option("--notes <text>", "notes")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleRecurringUpdate(api, { id, ...opts }, out);
+    }));
+  recurring
+    .command("delete")
+    .description("Delete a schedule")
+    .argument("<id>", "schedule id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleRecurringDelete(api, { id, dryRun: opts.dryRun }, out);
     }));
 
   const retainer = program.command("retainer").description("Client retainers");
@@ -262,6 +466,34 @@ export function buildProgram(): Command {
       const { api, out } = ctx(cmd);
       await handleRetainerCreate(api, opts, out);
     }));
+  retainer
+    .command("show")
+    .description("Show one retainer")
+    .argument("<id>", "retainer id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleRetainerShow(api, id, out);
+    }));
+  retainer
+    .command("update")
+    .description("Update a retainer (name, status, notes)")
+    .argument("<id>", "retainer id")
+    .option("--name <name>", "new name")
+    .option("--status <active|paused|depleted|ended>", "new status")
+    .option("--notes <text>", "notes")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleRetainerUpdate(api, { id, ...opts }, out);
+    }));
+  retainer
+    .command("delete")
+    .description("Delete a retainer")
+    .argument("<id>", "retainer id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleRetainerDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
 
   const expense = program.command("expense").description("Track expenses");
   expense
@@ -276,6 +508,87 @@ export function buildProgram(): Command {
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
       await handleExpenseAdd(api, opts, out);
+    }));
+  expense
+    .command("list")
+    .description("List expenses")
+    .option("--client <id>", "filter by client")
+    .option("--project <id>", "filter by project")
+    .option("--category <category>", "filter by category")
+    .option("--billed", "only billed expenses")
+    .option("--unbilled", "only unbilled expenses")
+    .option("--from <YYYY-MM-DD>", "expenses on/after this day")
+    .option("--to <YYYY-MM-DD>", "expenses on/before this day")
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleExpensesList(api, opts, out);
+    }));
+  expense
+    .command("show")
+    .description("Show one expense")
+    .argument("<id>", "expense id")
+    .action(wrap(async (cmd, id) => {
+      const { api, out } = ctx(cmd);
+      await handleExpenseShow(api, id, out);
+    }));
+  expense
+    .command("update")
+    .description("Update an expense")
+    .argument("<id>", "expense id")
+    .option("--amount <dollars>", "new amount")
+    .option("--category <category>", "new category")
+    .option("--note <text>", "note")
+    .option("--date <YYYY-MM-DD>", "expense date")
+    .option("--client <id>", "client id")
+    .option("--project <id>", "project id")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleExpenseUpdate(api, { id, ...opts }, out);
+    }));
+  expense
+    .command("delete")
+    .description("Delete an expense (refused when billed)")
+    .argument("<id>", "expense id")
+    .option("--dry-run", "show what would be deleted without deleting")
+    .action(wrap(async (cmd, id, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleExpenseDelete(api, { id, dryRun: opts.dryRun }, out);
+    }));
+  expense
+    .command("bulk")
+    .description("Log many expenses at once (validated batch, up to 200)")
+    .requiredOption("--items <json>", 'JSON array, e.g. \'[{"amount":42.5,"category":"travel","date":"2026-09-20"}]\'')
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleExpensesBulk(api, opts, out);
+    }));
+
+  const settings = program.command("settings").description("Server settings");
+  settings
+    .command("show")
+    .description("Show server settings")
+    .action(wrap(async (cmd) => {
+      const { api, out } = ctx(cmd);
+      await handleSettingsShow(api, out);
+    }));
+  settings
+    .command("set")
+    .description("Patch server settings with a JSON object")
+    .requiredOption("--patch <json>", "e.g. '{\"invoice\":{\"paymentTermsDays\":30}}'")
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleSettingsSet(api, opts, out);
+    }));
+
+  const report = program.command("report").description("Summaries and reports");
+  report
+    .command("revenue")
+    .description("Monthly revenue summary (paid invoices issued that month)")
+    .requiredOption("--month <YYYY-MM>", "month, e.g. 2026-09")
+    .option("--client <id>", "scope to one client")
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd);
+      await handleReportRevenue(api, opts, out);
     }));
 
   program

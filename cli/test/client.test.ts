@@ -100,8 +100,8 @@ describe("pagination auto-follow", () => {
     mockFetch((url) => {
       const cursor = url.searchParams.get("cursor");
       if (!cursor)
-        return { status: 200, json: { data: [{ id: "a" }], meta: { page: { cursor: "c2", limit: 200 } } } };
-      return { status: 200, json: { data: [{ id: "b" }], meta: { page: { cursor: null, limit: 200 } } } };
+        return { status: 200, json: { data: [{ id: "a" }], meta: { nextCursor: "c2", limit: 200 } } };
+      return { status: 200, json: { data: [{ id: "b" }], meta: { nextCursor: null, limit: 200 } } };
     });
     const c = new TallyhandClient({ baseUrl: "http://test.local", token: "x" });
     const items = (await c.listClients({ all: true })) as any[];

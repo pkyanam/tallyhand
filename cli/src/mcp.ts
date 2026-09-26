@@ -247,6 +247,69 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
+  const timeItem = z.object({
+    projectId: z.string().describe("Project id."),
+    minutes: z.number().positive().describe("Duration in minutes."),
+    date: dateArg("Work date."),
+    note: z.string().optional().describe("Note."),
+    tags: z.array(z.string()).optional(),
+  });
+
+  server.tool(
+    "bulk_log_time",
+    `Log many time entries at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any entry is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    { items: z.array(timeItem).min(1).max(200).describe("Time entries to log.") },
+    safe(async ({ items }) =>
+      api.bulkCreateTasks(
+        items.map((i: any) => {
+          const day = parseDate(i.date);
+          return {
+            projectId: i.projectId,
+            name: i.note ?? "Work",
+            notes: i.note,
+            startAt: day,
+            endAt: day + Math.round(i.minutes * 60000),
+            durationMinutes: round2(i.minutes),
+            tags: i.tags,
+          };
+        }),
+      ),
+    ),
+  );
+
+  server.tool(
+    "bulk_log_expenses",
+    `Log many expenses at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any expense is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    {
+      items: z
+        .array(
+          z.object({
+            amount: z.number().positive().describe("Amount in dollars."),
+            category: z.string(),
+            clientId: z.string().optional(),
+            projectId: z.string().optional(),
+            date: dateArg("Expense date."),
+            note: z.string().optional().describe("Note."),
+          }),
+        )
+        .min(1)
+        .max(200)
+        .describe("Expenses to log."),
+    },
+    safe(async ({ items }) =>
+      api.bulkCreateExpenses(
+        items.map((i: any) => ({
+          amount: round2(i.amount),
+          category: i.category,
+          clientId: i.clientId,
+          projectId: i.projectId,
+          date: parseDate(i.date),
+          note: i.note,
+        })),
+      ),
+    ),
+  );
+
   server.tool(
     "list_invoices",
     "List invoices, optionally filtered by status and/or client.",
@@ -318,16 +381,22 @@ export function createMcpServer(api: Api): McpServer {
 
   server.tool(
     "send_invoice",
-    "Mark an invoice SENT. This is the point of no return for billing state — source tasks/expenses get marked billed. Only send after the client has reviewed the draft.",
-    { id: z.string().describe("Invoice id.") },
-    safe(async ({ id }) => api.sendInvoice(id)),
+    "Mark an invoice SENT. This is the point of no return for billing state — source tasks/expenses get marked billed. Only send after the client has reviewed the draft. dryRun previews the billed-marking without mutating.",
+    {
+      id: z.string().describe("Invoice id."),
+      dryRun: z.boolean().optional().describe("Preview only; the invoice stays a draft."),
+    },
+    safe(async ({ id, dryRun }) => api.sendInvoice(id, { dryRun })),
   );
 
   server.tool(
     "mark_invoice_paid",
-    "Mark an invoice PAID. Only call when payment is confirmed.",
-    { id: z.string().describe("Invoice id.") },
-    safe(async ({ id }) => api.markInvoicePaid(id)),
+    "Mark an invoice PAID. Only call when payment is confirmed. dryRun previews without mutating.",
+    {
+      id: z.string().describe("Invoice id."),
+      dryRun: z.boolean().optional().describe("Preview only."),
+    },
+    safe(async ({ id, dryRun }) => api.markInvoicePaid(id, { dryRun })),
   );
 
   server.tool(
@@ -389,10 +458,15 @@ export function createMcpServer(api: Api): McpServer {
 
   server.tool(
     "run_recurring_schedules",
-    "Force-run due schedules now (or one schedule by id). The server scheduler also runs these automatically; use this to bill immediately.",
-    { scheduleId: z.string().optional().describe("Run one schedule only.") },
-    safe(async ({ scheduleId }) =>
-      scheduleId ? api.runSchedule(scheduleId) : api.runScheduler(),
+    "Force-run due schedules now (or one schedule by id). The server scheduler also runs these automatically; use this to bill immediately. dryRun previews what would be generated without creating invoices.",
+    {
+      scheduleId: z.string().optional().describe("Run one schedule only."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is created."),
+    },
+    safe(async ({ scheduleId, dryRun }) =>
+      scheduleId
+        ? api.runSchedule(scheduleId, { dryRun })
+        : api.runScheduler({ dryRun }),
     ),
   );
 
@@ -430,10 +504,345 @@ export function createMcpServer(api: Api): McpServer {
   );
 
   server.tool(
+    "update_client",
+    "Update a client (name, email, defaultRate, notes, archived). Pass only the fields to change.",
+    {
+      id: z.string().describe("Client id."),
+      name: z.string().optional(),
+      email: z.string().optional(),
+      defaultRate: z.number().optional().describe("Dollars/hour."),
+      notes: z.string().optional(),
+      archived: z.boolean().optional(),
+    },
+    safe(async ({ id, ...patch }) => api.updateClient(id, patch)),
+  );
+
+  server.tool(
+    "delete_client",
+    "Delete a client. Refused (409) while it still has projects or invoices — delete those first or archive it (update_client with archived: true). dryRun previews without deleting.",
+    {
+      id: z.string().describe("Client id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteClient(id, { dryRun })),
+  );
+
+  server.tool(
+    "get_project",
+    "Fetch one project by id.",
+    { id: z.string().describe("Project id.") },
+    safe(async ({ id }) => api.getProject(id)),
+  );
+
+  server.tool(
+    "update_project",
+    "Update a project (name, clientId, rateOverride, archived). Pass only the fields to change.",
+    {
+      id: z.string().describe("Project id."),
+      name: z.string().optional(),
+      clientId: z.string().optional().describe("Move the project to another client."),
+      rateOverride: z.number().optional().describe("Dollars/hour."),
+      archived: z.boolean().optional(),
+    },
+    safe(async ({ id, ...patch }) => api.updateProject(id, patch)),
+  );
+
+  server.tool(
+    "delete_project",
+    "Delete a project. Refused (409) while it still has tasks or expenses — archive it instead. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Project id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteProject(id, { dryRun })),
+  );
+
+  server.tool(
+    "list_tasks",
+    "List time entries with filters. Use this to inspect/correct entries (e.g. find last week's entries to fix), or to feed bulk analysis. Sort with e.g. '-startAt'.",
+    {
+      projectId: z.string().optional(),
+      clientId: z.string().optional(),
+      isBilled: z.boolean().optional().describe("Filter billed/unbilled entries."),
+      dateFrom: dateArg("Only entries starting on/after this day."),
+      dateTo: dateArg("Only entries starting on/before this day."),
+      sort: z.string().optional().describe("Sort field, prefix '-' for desc. One of: startAt, endAt, durationMinutes, name, createdAt."),
+    },
+    safe(async (a) =>
+      api.listTasks({
+        all: true,
+        projectId: a.projectId,
+        clientId: a.clientId,
+        isBilled: a.isBilled,
+        date_from: a.dateFrom ? parseDate(a.dateFrom) : undefined,
+        date_to: a.dateTo ? parseDate(a.dateTo) : undefined,
+        sort: a.sort,
+      }),
+    ),
+  );
+
+  server.tool(
+    "get_task",
+    "Fetch one time entry by id.",
+    { id: z.string().describe("Task id.") },
+    safe(async ({ id }) => api.getTask(id)),
+  );
+
+  server.tool(
+    "update_task",
+    "Fix a time entry: minutes rewrites duration (and endAt from startAt), date moves it to another day keeping duration. Pass only the fields to change.",
+    {
+      id: z.string().describe("Task id."),
+      minutes: z.number().optional().describe("New duration in minutes."),
+      date: dateArg("Move the entry to this day (keeps duration)."),
+      note: z.string().optional().describe("New note."),
+      projectId: z.string().optional().describe("Move to another project."),
+      isBilled: z.boolean().optional(),
+    },
+    safe(async ({ id, minutes, date, note, projectId, isBilled }) => {
+      const patch: Record<string, unknown> = {};
+      if (minutes !== undefined) {
+        if (!(minutes > 0)) throw new Error("minutes must be positive.");
+        const existing = (await api.getTask(id)) as any;
+        patch.durationMinutes = round2(minutes);
+        patch.endAt = existing.startAt + Math.round(minutes * 60000);
+      }
+      if (date !== undefined) {
+        const day = parseDate(date);
+        const existing = (await api.getTask(id)) as any;
+        const durMs = (existing.endAt || Date.now()) - existing.startAt;
+        patch.startAt = day;
+        if (existing.endAt) patch.endAt = day + durMs;
+      }
+      if (note !== undefined) patch.notes = note;
+      if (projectId !== undefined) patch.projectId = projectId;
+      if (isBilled !== undefined) patch.isBilled = isBilled;
+      return api.updateTask(id, patch);
+    }),
+  );
+
+  server.tool(
+    "delete_task",
+    "Delete a time entry. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Task id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteTask(id, { dryRun })),
+  );
+
+  server.tool(
+    "list_expenses",
+    "List expenses with filters. Sort with e.g. '-date' or '-amount'.",
+    {
+      clientId: z.string().optional(),
+      projectId: z.string().optional(),
+      category: z.string().optional(),
+      isBilled: z.boolean().optional().describe("Filter billed/unbilled expenses."),
+      dateFrom: dateArg("Only expenses on/after this day."),
+      dateTo: dateArg("Only expenses on/before this day."),
+      sort: z.string().optional().describe("Sort field, prefix '-' for desc. One of: date, amount, category, createdAt."),
+    },
+    safe(async (a) =>
+      api.listExpenses({
+        all: true,
+        clientId: a.clientId,
+        projectId: a.projectId,
+        category: a.category,
+        isBilled: a.isBilled,
+        date_from: a.dateFrom ? parseDate(a.dateFrom) : undefined,
+        date_to: a.dateTo ? parseDate(a.dateTo) : undefined,
+        sort: a.sort,
+      }),
+    ),
+  );
+
+  server.tool(
+    "get_expense",
+    "Fetch one expense by id.",
+    { id: z.string().describe("Expense id.") },
+    safe(async ({ id }) => api.getExpense(id)),
+  );
+
+  server.tool(
+    "update_expense",
+    "Update an expense (amount, category, note, date, clientId, projectId). Pass only the fields to change.",
+    {
+      id: z.string().describe("Expense id."),
+      amount: z.number().optional().describe("Dollars."),
+      category: z.string().optional(),
+      note: z.string().optional(),
+      date: dateArg("Expense date."),
+      clientId: z.string().optional(),
+      projectId: z.string().optional(),
+    },
+    safe(async ({ id, amount, date, ...rest }) => {
+      const patch: Record<string, unknown> = { ...rest };
+      if (amount !== undefined) {
+        if (!(amount > 0)) throw new Error("amount must be positive (dollars).");
+        patch.amount = round2(amount);
+      }
+      if (date !== undefined) patch.date = parseDate(date);
+      return api.updateExpense(id, patch);
+    }),
+  );
+
+  server.tool(
+    "delete_expense",
+    "Delete an expense. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Expense id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteExpense(id, { dryRun })),
+  );
+
+  server.tool(
+    "update_invoice",
+    "Update a draft invoice's notes, due date, or invoice number. STATUS cannot change here — use send_invoice / mark_invoice_paid for the lifecycle.",
+    {
+      id: z.string().describe("Invoice id."),
+      notes: z.string().optional(),
+      dueDate: dateArg("New due date."),
+      invoiceNumber: z.string().optional(),
+    },
+    safe(async ({ id, dueDate, ...rest }) =>
+      api.updateInvoice(id, {
+        ...rest,
+        ...(dueDate !== undefined ? { dueDate: parseDate(dueDate) } : {}),
+      }),
+    ),
+  );
+
+  server.tool(
+    "delete_invoice",
+    "Delete a DRAFT invoice. Refused (409) once sent or paid — the money trail is kept. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Invoice id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteInvoice(id, { dryRun })),
+  );
+
+  server.tool(
+    "get_recurring_schedule",
+    "Fetch one recurring schedule by id.",
+    { id: z.string().describe("Schedule id.") },
+    safe(async ({ id }) => api.getSchedule(id)),
+  );
+
+  server.tool(
+    "update_recurring_schedule",
+    "Update a schedule (name, status, notes). Use status 'paused' to temporarily stop billing without deleting.",
+    {
+      id: z.string().describe("Schedule id."),
+      name: z.string().optional(),
+      status: z.enum(["active", "paused", "ended"]).optional(),
+      notes: z.string().optional(),
+    },
+    safe(async ({ id, ...patch }) => api.updateSchedule(id, patch)),
+  );
+
+  server.tool(
+    "delete_recurring_schedule",
+    "Delete a recurring schedule. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Schedule id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteSchedule(id, { dryRun })),
+  );
+
+  server.tool(
+    "get_retainer",
+    "Fetch one retainer by id.",
+    { id: z.string().describe("Retainer id.") },
+    safe(async ({ id }) => api.getRetainer(id)),
+  );
+
+  server.tool(
+    "update_retainer",
+    "Update a retainer (name, status, notes).",
+    {
+      id: z.string().describe("Retainer id."),
+      name: z.string().optional(),
+      status: z.enum(["active", "paused", "depleted", "ended"]).optional(),
+      notes: z.string().optional(),
+    },
+    safe(async ({ id, ...patch }) => api.updateRetainer(id, patch)),
+  );
+
+  server.tool(
+    "delete_retainer",
+    "Delete a retainer. dryRun previews without deleting.",
+    {
+      id: z.string().describe("Retainer id."),
+      dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
+    },
+    safe(async ({ id, dryRun }) => api.deleteRetainer(id, { dryRun })),
+  );
+
+  server.tool(
+    "list_overdue_invoices",
+    "Invoices that are SENT but past their due date — the follow-up list. Optionally scoped to one client.",
+    {
+      clientId: z.string().optional().describe("Scope to one client."),
+    },
+    safe(async ({ clientId }) =>
+      api.listInvoices({ all: true, overdue: true, clientId }),
+    ),
+  );
+
+  server.tool(
+    "revenue_summary",
+    "Monthly revenue summary: paid invoices issued in YYYY-MM, with totals and per-client breakdown. Dollars.",
+    {
+      month: z.string().describe('Month as "YYYY-MM", e.g. "2026-09".'),
+      clientId: z.string().optional().describe("Scope to one client."),
+    },
+    safe(async ({ month, clientId }) => {
+      const m = /^(\d{4})-(\d{2})$/.exec(month.trim());
+      if (!m || Number(m[2]) < 1 || Number(m[2]) > 12)
+        throw new Error('month must be "YYYY-MM", e.g. "2026-09".');
+      const start = Date.UTC(Number(m[1]), Number(m[2]) - 1, 1);
+      const end = Date.UTC(Number(m[1]), Number(m[2]), 1);
+      const invoices = (await api.listInvoices({
+        all: true,
+        status: "paid",
+        date_from: start,
+        date_to: end - 1,
+        clientId,
+      })) as any[];
+      const byClient = new Map<string, { count: number; total: number }>();
+      for (const inv of invoices) {
+        const row = byClient.get(inv.clientId) ?? { count: 0, total: 0 };
+        row.count += 1;
+        row.total = round2(row.total + (inv.total ?? 0));
+        byClient.set(inv.clientId, row);
+      }
+      return {
+        month,
+        invoices: invoices.length,
+        revenue: round2(invoices.reduce((s, i) => s + (i.total ?? 0), 0)),
+        byClient: [...byClient.entries()].map(([cid, r]) => ({ clientId: cid, ...r })),
+      };
+    }),
+  );
+
+  server.tool(
     "get_settings",
     "Read server settings (business profile, invoice numbering, payment terms). Useful for due-date math and invoice prefixes.",
     {},
     safe(async () => api.getSettings()),
+  );
+
+  server.tool(
+    "update_settings",
+    "Patch server settings, e.g. { invoice: { paymentTermsDays: 30 } } or { business: { name: 'Acme Consulting' } }. Nested objects merge key-wise.",
+    {
+      patch: z.record(z.string(), z.unknown()).describe("Settings patch object, e.g. { invoice: { paymentTermsDays: 30 } }."),
+    },
+    safe(async ({ patch }) => api.updateSettings(patch)),
   );
 
   server.resource(

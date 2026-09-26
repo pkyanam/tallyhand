@@ -173,6 +173,109 @@ export const retainerCreateSchema = z
   .strict();
 export const retainerPatchSchema = retainerCreateSchema.partial();
 
+// -- mileage -------------------------------------------------------------
+export const mileageCreateSchema = z
+  .object({
+    id: optionalId,
+    date: dateMs,
+    miles: z.number().positive("miles must be positive"),
+    rate: z.number().positive().optional(),
+    purpose: z.string().min(1, "purpose is required"),
+    clientId: z.string().min(1).optional(),
+    projectId: z.string().min(1).optional(),
+    origin: z.string().optional(),
+    destination: z.string().optional(),
+    vehicleNote: z.string().optional(),
+    isBilled: z.boolean().optional(),
+  })
+  .strict();
+export const mileagePatchSchema = mileageCreateSchema.partial();
+
+// -- contracts -----------------------------------------------------------
+export const contractCreateSchema = z
+  .object({
+    id: optionalId,
+    clientId: z.string().min(1, "clientId is required"),
+    projectId: z.string().min(1).optional(),
+    type: z.enum(["sow", "msa", "nda", "other"]),
+    title: z.string().min(1, "title is required"),
+    startDate: dateMs,
+    endDate: dateMs.optional(),
+    renewalNoticeDays: z.number().int().nonnegative().optional(),
+    autoRenew: z.boolean().optional(),
+    fileB64: z.string().optional(),
+    fileName: z.string().optional(),
+    notes: z.string().optional(),
+    archived: z.boolean().optional(),
+  })
+  .strict();
+export const contractPatchSchema = contractCreateSchema.partial();
+
+// -- tax payments --------------------------------------------------------
+export const taxPaymentCreateSchema = z
+  .object({
+    id: optionalId,
+    taxYear: z.number().int().min(2000).max(2100),
+    quarter: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+    ]),
+    date: dateMs,
+    amount: z.number().nonnegative(),
+    jurisdiction: z.enum(["federal", "state"]),
+    method: z.string().optional(),
+    note: z.string().optional(),
+  })
+  .strict();
+export const taxPaymentPatchSchema = taxPaymentCreateSchema.partial();
+
+// -- rate cards ----------------------------------------------------------
+export const rateCardLineInputSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    label: z.string().min(1, "label is required"),
+    rate: z.number().nonnegative(),
+  })
+  .strict();
+
+export const rateCardCreateSchema = z
+  .object({
+    id: optionalId,
+    clientId: z.string().min(1, "clientId is required"),
+    projectId: z.string().min(1).optional(),
+    name: z.string().min(1, "name is required"),
+    defaultRate: z.number().nonnegative(),
+    lines: z.array(rateCardLineInputSchema).optional(),
+    effectiveFrom: dateMs,
+    effectiveTo: dateMs.optional(),
+    archived: z.boolean().optional(),
+  })
+  .strict();
+export const rateCardPatchSchema = rateCardCreateSchema.partial();
+
+// -- dunning (settings sub-schema) ----------------------------------------
+export const dunningSettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    reminderDays: z.array(z.number().int().nonnegative()).optional(),
+    escalatingTone: z.boolean().optional(),
+    lateFee: z
+      .object({
+        enabled: z.boolean().optional(),
+        type: z.enum(["flat", "percent"]).optional(),
+        amount: z.number().nonnegative().optional(),
+        graceDays: z.number().int().nonnegative().optional(),
+        recurring: z.enum(["once", "monthly"]).optional(),
+        maxTotal: z.number().nonnegative().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
+
 // -- settings ------------------------------------------------------------
 export const settingsPatchSchema = z
   .object({
@@ -214,6 +317,23 @@ export const settingsPatchSchema = z
       })
       .strict()
       .optional(),
+    dunning: dunningSettingsSchema,
+    tax: z
+      .object({
+        setAsidePercent: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+    analytics: z
+      .object({
+        weeklyBillableTargetHours: z.number().nonnegative().optional(),
+        monthlyRevenueTarget: z.number().nonnegative().optional(),
+      })
+      .strict()
+      .optional(),
+    pluginSettings: z
+      .record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])))
+      .optional(),
   })
   .strict();
 
@@ -221,3 +341,11 @@ export type ClientCreate = z.infer<typeof clientCreateSchema>;
 export type InvoiceCreate = z.infer<typeof invoiceCreateSchema>;
 export type RecurringScheduleCreate = z.infer<typeof recurringScheduleCreateSchema>;
 export type RetainerCreate = z.infer<typeof retainerCreateSchema>;
+export type MileageCreate = z.infer<typeof mileageCreateSchema>;
+export type MileagePatch = z.infer<typeof mileagePatchSchema>;
+export type ContractCreate = z.infer<typeof contractCreateSchema>;
+export type ContractPatch = z.infer<typeof contractPatchSchema>;
+export type TaxPaymentCreate = z.infer<typeof taxPaymentCreateSchema>;
+export type TaxPaymentPatch = z.infer<typeof taxPaymentPatchSchema>;
+export type RateCardCreate = z.infer<typeof rateCardCreateSchema>;
+export type RateCardPatch = z.infer<typeof rateCardPatchSchema>;

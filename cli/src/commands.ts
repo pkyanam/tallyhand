@@ -15,6 +15,7 @@ import {
 import {
   table,
   fmtMoney,
+  fmtCents,
   fmtDate,
   fmtDay,
   fmtDuration,
@@ -42,26 +43,46 @@ export interface Api {
   listClients(p?: any): Promise<any>;
   createClient(i: any): Promise<any>;
   getClient(id: string): Promise<any>;
+  updateClient(id: string, p: any): Promise<any>;
+  deleteClient(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   listProjects(p?: any): Promise<any>;
   createProject(i: any): Promise<any>;
   getProject(id: string): Promise<any>;
+  updateProject(id: string, p: any): Promise<any>;
+  deleteProject(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   listTasks(p?: any): Promise<any>;
   createTask(i: any): Promise<any>;
+  getTask(id: string): Promise<any>;
   updateTask(id: string, p: any): Promise<any>;
+  deleteTask(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  bulkCreateTasks(items: any[]): Promise<any>;
   listExpenses(p?: any): Promise<any>;
   createExpense(i: any): Promise<any>;
+  getExpense(id: string): Promise<any>;
+  updateExpense(id: string, p: any): Promise<any>;
+  deleteExpense(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  bulkCreateExpenses(items: any[]): Promise<any>;
   listInvoices(p?: any): Promise<any>;
   createInvoice(i: any): Promise<any>;
   getInvoice(id: string): Promise<any>;
-  sendInvoice(id: string): Promise<any>;
-  markInvoicePaid(id: string): Promise<any>;
+  updateInvoice(id: string, p: any): Promise<any>;
+  deleteInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  sendInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  markInvoicePaid(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   listSchedules(p?: any): Promise<any>;
   createSchedule(i: any): Promise<any>;
-  runSchedule(id: string): Promise<any>;
-  runScheduler(): Promise<any>;
+  getSchedule(id: string): Promise<any>;
+  updateSchedule(id: string, p: any): Promise<any>;
+  deleteSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  runSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any>;
+  runScheduler(opts?: { dryRun?: boolean }): Promise<any>;
   listRetainers(p?: any): Promise<any>;
   createRetainer(i: any): Promise<any>;
+  getRetainer(id: string): Promise<any>;
+  updateRetainer(id: string, p: any): Promise<any>;
+  deleteRetainer(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   getSettings(): Promise<any>;
+  updateSettings(p: any): Promise<any>;
 }
 
 export interface Out {
@@ -400,7 +421,7 @@ export async function handleInvoiceDraft(
 
 export async function handleInvoiceList(
   api: Api,
-  opts: { status?: string; client?: string },
+  opts: { status?: string; client?: string; overdue?: boolean },
   out: Out,
 ): Promise<void> {
   needAuth(api);
@@ -408,6 +429,7 @@ export async function handleInvoiceList(
     all: true,
     status: opts.status,
     clientId: opts.client,
+    overdue: opts.overdue,
   })) as any[];
   emit(out.json, invoices, () => {
     if (invoices.length === 0) {
@@ -551,12 +573,36 @@ export async function handleRecurringCreate(
 
 export async function handleRecurringRun(
   api: Api,
-  opts: { id?: string },
+  opts: { id?: string; dryRun?: boolean },
   out: Out,
 ): Promise<void> {
   needAuth(api);
-  const result = opts.id ? await api.runSchedule(opts.id) : await api.runScheduler();
+  const dryRun = { dryRun: opts.dryRun };
+  const result = opts.id
+    ? await api.runSchedule(opts.id, dryRun)
+    : await api.runScheduler(dryRun);
   emit(out.json, result, () => {
+    if (result?.dryRun) {
+      const due = result.due ?? [result.preview].filter(Boolean);
+      if (due.length === 0) {
+        console.log("Dry run — no schedules are due.");
+        return;
+      }
+      console.log("Dry run — due schedules (nothing created):");
+      console.log(
+        table(
+          ["SCHEDULE", "WOULD CREATE", "ITEMS", "EST. TOTAL", "NEXT RUN"],
+          due.map((d: any) => [
+            d.name ?? d.scheduleId,
+            d.wouldCreateInvoice ? "yes" : "no (empty)",
+            d.lineItemCount,
+            fmtMoney(d.estimatedTotal),
+            fmtDay(d.nextRunAt),
+          ]),
+        ),
+      );
+      return;
+    }
     console.log(
       typeof result === "object" && result !== null
         ? `Scheduler run complete: ${JSON.stringify(result)}`
@@ -657,6 +703,466 @@ export async function handleExpenseAdd(
 
 const EXPORT_ENTITIES = ["clients", "projects", "tasks", "expenses", "invoices"] as const;
 
+/* ------------------------------------------------------------------ */
+/* CRUD completions (show / update / delete per entity)                 */
+/* ------------------------------------------------------------------ */
+
+export async function handleClientShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const c = await api.getClient(id);
+  emit(out.json, c, () => {
+    console.log(`Client "${c.name}" (${c.id})`);
+    if (c.email) console.log(`Email: ${c.email}`);
+    if (c.defaultRate != null) console.log(`Default rate: ${fmtMoney(c.defaultRate)}/h`);
+    if (c.address) console.log(`Address: ${c.address}`);
+    if (c.notes) console.log(`Notes: ${c.notes}`);
+    if (c.archived) console.log("Archived: yes");
+  });
+}
+
+export async function handleClientUpdate(
+  api: Api,
+  opts: { id: string; name?: string; email?: string; rate?: number; notes?: string; archived?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.email !== undefined) patch.email = opts.email || undefined;
+  if (opts.rate !== undefined) patch.defaultRate = Number(opts.rate);
+  if (opts.notes !== undefined) patch.notes = opts.notes;
+  if (opts.archived !== undefined) patch.archived = opts.archived;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const client = await api.updateClient(opts.id, patch);
+  emit(out.json, client, () => console.log(`Client "${client.name}" updated.`));
+}
+
+export async function handleClientDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteClient(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete client "${res.wouldDelete.name}" (${res.wouldDelete.id}).`);
+    else console.log(`Client ${opts.id} deleted.`);
+  });
+}
+
+export async function handleProjectShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const p = await api.getProject(id);
+  emit(out.json, p, () => {
+    console.log(`Project "${p.name}" (${p.id})`);
+    console.log(`Client: ${p.clientId}`);
+    if (p.rateOverride != null) console.log(`Rate override: ${fmtMoney(p.rateOverride)}/h`);
+    if (p.archived) console.log("Archived: yes");
+  });
+}
+
+export async function handleProjectUpdate(
+  api: Api,
+  opts: { id: string; name?: string; client?: string; rate?: number; archived?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.client !== undefined) patch.clientId = opts.client;
+  if (opts.rate !== undefined) patch.rateOverride = Number(opts.rate);
+  if (opts.archived !== undefined) patch.archived = opts.archived;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const project = await api.updateProject(opts.id, patch);
+  emit(out.json, project, () => console.log(`Project "${project.name}" updated.`));
+}
+
+export async function handleProjectDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteProject(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete project "${res.wouldDelete.name}" (${res.wouldDelete.id}).`);
+    else console.log(`Project ${opts.id} deleted.`);
+  });
+}
+
+export async function handleTasksList(
+  api: Api,
+  opts: { project?: string; client?: string; billed?: boolean; unbilled?: boolean; from?: string; to?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const params: Record<string, unknown> = { all: true };
+  if (opts.project) params.projectId = opts.project;
+  if (opts.client) params.clientId = opts.client;
+  if (opts.billed) params.isBilled = true;
+  if (opts.unbilled) params.isBilled = false;
+  if (opts.from) params.date_from = parseDate(opts.from);
+  if (opts.to) params.date_to = parseDate(opts.to) + 86400000 - 1;
+  const tasks = (await api.listTasks(params)) as any[];
+  emit(out.json, tasks, () => {
+    if (tasks.length === 0) {
+      console.log("No tasks match.");
+      return;
+    }
+    console.log(
+      table(
+        ["ID", "NAME", "PROJECT", "STARTED", "DURATION", "BILLED"],
+        tasks.map((t) => [
+          t.id,
+          t.name,
+          t.projectId,
+          fmtDate(t.startAt),
+          !t.endAt ? "running" : fmtDuration(t.endAt - t.startAt),
+          t.isBilled ? "yes" : "",
+        ]),
+      ),
+    );
+  });
+}
+
+export async function handleTaskShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const t = await api.getTask(id);
+  emit(out.json, t, () => {
+    console.log(`Task "${t.name}" (${t.id})`);
+    console.log(`Project: ${t.projectId}   Started: ${fmtDate(t.startAt)}`);
+    console.log(`Duration: ${!t.endAt ? "running" : fmtDuration(t.endAt - t.startAt)} (${t.durationMinutes} min)`);
+    if (t.notes) console.log(`Notes: ${t.notes}`);
+    if (t.tags?.length) console.log(`Tags: ${t.tags.join(", ")}`);
+    console.log(`Billed: ${t.isBilled ? `yes (${t.invoiceId})` : "no"}`);
+  });
+}
+
+export async function handleTaskUpdate(
+  api: Api,
+  opts: { id: string; minutes?: number; date?: string; note?: string; project?: string; billed?: boolean; unbilled?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.project !== undefined) patch.projectId = opts.project;
+  if (opts.note !== undefined) patch.notes = opts.note;
+  if (opts.minutes !== undefined) {
+    const minutes = Number(opts.minutes);
+    if (!Number.isFinite(minutes) || minutes <= 0) throw new Error("--minutes must be positive.");
+    const existing = await api.getTask(opts.id);
+    const startAt = existing.startAt;
+    patch.durationMinutes = round2(minutes);
+    patch.endAt = startAt + Math.round(minutes * 60000);
+  }
+  if (opts.date !== undefined) {
+    const day = parseDate(opts.date);
+    const existing = await api.getTask(opts.id);
+    const durMs = (existing.endAt || Date.now()) - existing.startAt;
+    patch.startAt = day;
+    if (existing.endAt) patch.endAt = day + durMs;
+  }
+  if (opts.billed) patch.isBilled = true;
+  if (opts.unbilled) patch.isBilled = false;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const task = await api.updateTask(opts.id, patch);
+  emit(out.json, task, () => console.log(`Task "${task.name}" updated.`));
+}
+
+export async function handleTaskDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteTask(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete task "${res.wouldDelete.name}" (${res.wouldDelete.id}).`);
+    else console.log(`Task ${opts.id} deleted.`);
+  });
+}
+
+export async function handleExpensesList(
+  api: Api,
+  opts: { client?: string; project?: string; category?: string; billed?: boolean; unbilled?: boolean; from?: string; to?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const params: Record<string, unknown> = { all: true };
+  if (opts.client) params.clientId = opts.client;
+  if (opts.project) params.projectId = opts.project;
+  if (opts.category) params.category = opts.category;
+  if (opts.billed) params.isBilled = true;
+  if (opts.unbilled) params.isBilled = false;
+  if (opts.from) params.date_from = parseDate(opts.from);
+  if (opts.to) params.date_to = parseDate(opts.to) + 86400000 - 1;
+  const expenses = (await api.listExpenses(params)) as any[];
+  emit(out.json, expenses, () => {
+    if (expenses.length === 0) {
+      console.log("No expenses match.");
+      return;
+    }
+    console.log(
+      table(
+        ["ID", "DATE", "CATEGORY", "AMOUNT", "CLIENT", "BILLED"],
+        expenses.map((e) => [
+          e.id,
+          fmtDay(e.date),
+          e.category,
+          fmtMoney(e.amount),
+          e.clientId ?? "",
+          e.isBilled ? "yes" : "",
+        ]),
+      ),
+    );
+  });
+}
+
+export async function handleExpenseShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const e = await api.getExpense(id);
+  emit(out.json, e, () => {
+    console.log(`Expense ${fmtMoney(e.amount)} (${e.category}) — ${e.id}`);
+    console.log(`Date: ${fmtDay(e.date)}   Client: ${e.clientId ?? "-"}   Project: ${e.projectId ?? "-"}`);
+    if (e.note) console.log(`Note: ${e.note}`);
+    console.log(`Billed: ${e.isBilled ? `yes (${e.invoiceId})` : "no"}`);
+  });
+}
+
+export async function handleExpenseUpdate(
+  api: Api,
+  opts: { id: string; amount?: number; category?: string; note?: string; date?: string; client?: string; project?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.amount !== undefined) {
+    const amount = Number(opts.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("--amount must be positive.");
+    patch.amount = round2(amount);
+  }
+  if (opts.category !== undefined) patch.category = opts.category;
+  if (opts.note !== undefined) patch.note = opts.note;
+  if (opts.date !== undefined) patch.date = parseDate(opts.date);
+  if (opts.client !== undefined) patch.clientId = opts.client || undefined;
+  if (opts.project !== undefined) patch.projectId = opts.project || undefined;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const expense = await api.updateExpense(opts.id, patch);
+  emit(out.json, expense, () => console.log(`Expense ${expense.id} updated.`));
+}
+
+export async function handleExpenseDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteExpense(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete expense ${fmtMoney(res.wouldDelete.amount)} (${res.wouldDelete.id}).`);
+    else console.log(`Expense ${opts.id} deleted.`);
+  });
+}
+
+export async function handleInvoiceUpdate(
+  api: Api,
+  opts: { id: string; notes?: string; dueDate?: string; number?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.notes !== undefined) patch.notes = opts.notes;
+  if (opts.dueDate !== undefined) patch.dueDate = parseDate(opts.dueDate);
+  if (opts.number !== undefined) patch.invoiceNumber = opts.number;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const invoice = await api.updateInvoice(opts.id, patch);
+  emit(out.json, invoice, () => console.log(`Invoice ${invoice.invoiceNumber ?? opts.id} updated.`));
+}
+
+export async function handleInvoiceDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteInvoice(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete invoice ${res.wouldDelete.invoiceNumber} (${res.wouldDelete.id}).`);
+    else console.log(`Invoice ${opts.id} deleted.`);
+  });
+}
+
+export async function handleRecurringShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const s = await api.getSchedule(id);
+  emit(out.json, s, () => {
+    console.log(`Schedule "${s.name}" (${s.id}) — ${s.status}`);
+    console.log(`Client: ${s.clientId}   Mode: ${s.mode}   Every: ${s.interval} ${s.frequency}`);
+    console.log(`Next run: ${fmtDay(s.nextRunAt)}   Occurrences: ${s.occurrences ?? 0}`);
+    if (s.lineItems?.length) {
+      console.log(
+        table(
+          ["DESCRIPTION", "QTY", "RATE"],
+          s.lineItems.map((li: any) => [li.description, li.quantity, fmtMoney(li.rate)]),
+        ),
+      );
+    }
+  });
+}
+
+export async function handleRecurringUpdate(
+  api: Api,
+  opts: { id: string; name?: string; status?: string; notes?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.status !== undefined) {
+    if (!["active", "paused", "ended"].includes(opts.status))
+      throw new Error('--status must be "active", "paused", or "ended".');
+    patch.status = opts.status;
+  }
+  if (opts.notes !== undefined) patch.notes = opts.notes;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const schedule = await api.updateSchedule(opts.id, patch);
+  emit(out.json, schedule, () => console.log(`Schedule "${schedule.name}" updated.`));
+}
+
+export async function handleRecurringDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteSchedule(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete schedule "${res.wouldDelete.name}" (${res.wouldDelete.id}).`);
+    else console.log(`Schedule ${opts.id} deleted.`);
+  });
+}
+
+export async function handleRetainerShow(api: Api, id: string, out: Out): Promise<void> {
+  needAuth(api);
+  const r = await api.getRetainer(id);
+  emit(out.json, r, () => {
+    console.log(`Retainer "${r.name}" (${r.id}) — ${r.status}`);
+    console.log(`Client: ${r.clientId}   Type: ${r.type}`);
+    if (r.totalHours != null) console.log(`Hours: ${r.totalHours}`);
+    if (r.amountCents != null) console.log(`Amount: ${fmtCents(r.amountCents)}`);
+    console.log(`Start: ${fmtDay(r.startDate)}`);
+    if (r.notes) console.log(`Notes: ${r.notes}`);
+  });
+}
+
+export async function handleRetainerUpdate(
+  api: Api,
+  opts: { id: string; name?: string; status?: string; notes?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const patch: Record<string, unknown> = {};
+  if (opts.name !== undefined) patch.name = opts.name;
+  if (opts.status !== undefined) {
+    if (!["active", "paused", "depleted", "ended"].includes(opts.status))
+      throw new Error('--status must be "active", "paused", "depleted", or "ended".');
+    patch.status = opts.status;
+  }
+  if (opts.notes !== undefined) patch.notes = opts.notes;
+  if (Object.keys(patch).length === 0) throw new Error("Nothing to update — pass at least one field.");
+  const retainer = await api.updateRetainer(opts.id, patch);
+  emit(out.json, retainer, () => console.log(`Retainer "${retainer.name}" updated.`));
+}
+
+export async function handleRetainerDelete(
+  api: Api,
+  opts: { id: string; dryRun?: boolean },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const res = await api.deleteRetainer(opts.id, { dryRun: opts.dryRun });
+  emit(out.json, res ?? { deleted: opts.id }, () => {
+    if (res?.dryRun) console.log(`Dry run — would delete retainer "${res.wouldDelete.name}" (${res.wouldDelete.id}).`);
+    else console.log(`Retainer ${opts.id} deleted.`);
+  });
+}
+
+export async function handleSettingsShow(api: Api, out: Out): Promise<void> {
+  needAuth(api);
+  const s = await api.getSettings();
+  emit(out.json, s, () => {
+    console.log(`Business: ${s.business?.name ?? "-"} (${s.business?.email ?? "-"})`);
+    console.log(`Invoice prefix: ${s.invoice?.numberPrefix ?? "-"}   Next number: ${s.invoice?.nextNumber ?? "-"}`);
+    console.log(`Payment terms: ${s.invoice?.paymentTermsDays ?? "-"} days`);
+  });
+}
+
+export async function handleSettingsSet(
+  api: Api,
+  opts: { patch: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  let patch: unknown;
+  try {
+    patch = JSON.parse(opts.patch);
+  } catch {
+    throw new Error("--patch must be valid JSON, e.g. '{\"invoice\":{\"paymentTermsDays\":30}}'.");
+  }
+  if (!patch || typeof patch !== "object" || Array.isArray(patch))
+    throw new Error("--patch must be a JSON object.");
+  const updated = await api.updateSettings(patch as Record<string, unknown>);
+  emit(out.json, updated, () => console.log("Settings updated."));
+}
+
+/** Monthly revenue summary: paid invoices issued in YYYY-MM. */
+export async function handleReportRevenue(
+  api: Api,
+  opts: { month: string; client?: string },
+  out: Out,
+): Promise<void> {
+  needAuth(api);
+  const m = /^(\d{4})-(\d{2})$/.exec(opts.month.trim());
+  if (!m) throw new Error('--month must be "YYYY-MM", e.g. 2026-09.');
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) throw new Error('--month must be "YYYY-MM", e.g. 2026-09.');
+  const start = Date.UTC(year, month - 1, 1);
+  const end = Date.UTC(year, month, 1);
+  const invoices = (await api.listInvoices({
+    all: true,
+    status: "paid",
+    date_from: start,
+    date_to: end - 1,
+    clientId: opts.client,
+  })) as any[];
+  const byClient = new Map<string, { count: number; total: number }>();
+  for (const inv of invoices) {
+    const row = byClient.get(inv.clientId) ?? { count: 0, total: 0 };
+    row.count += 1;
+    row.total = round2(row.total + (inv.total ?? 0));
+    byClient.set(inv.clientId, row);
+  }
+  const total = round2(invoices.reduce((s, i) => s + (i.total ?? 0), 0));
+  const summary = {
+    month: opts.month,
+    invoices: invoices.length,
+    revenue: total,
+    byClient: [...byClient.entries()].map(([clientId, r]) => ({ clientId, ...r })),
+  };
+  emit(out.json, summary, () => {
+    console.log(`Revenue ${opts.month}: ${fmtMoney(total)} across ${invoices.length} paid invoice(s)`);
+    if (summary.byClient.length > 0) {
+      console.log(
+        table(
+          ["CLIENT", "INVOICES", "REVENUE"],
+          summary.byClient.map((r) => [r.clientId, r.count, fmtMoney(r.total)]),
+        ),
+      );
+    }
+  });
+}
+
 export async function handleExport(
   api: Api,
   opts: { entity: string; format?: string; out?: string },
@@ -739,4 +1245,56 @@ export async function handleDoctor(api: TallyhandClient): Promise<void> {
     );
     process.exit(1);
   }
+}
+
+export async function handleTasksBulk(api: Api, opts: { items?: string }, out: Out): Promise<void> {
+  needAuth(api);
+  if (!opts.items) throw new Error("--items JSON array is required, e.g. --items '[{\"projectId\":\"p1\",\"minutes\":60,\"date\":\"2026-09-20\"}]'.");
+  const parsed = parseJsonArray(opts.items, "--items");
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("--items must be a non-empty JSON array.");
+  const items = parsed.map((entry: any) => {
+    if (!entry.projectId) throw new Error("each item needs projectId.");
+    const minutes = Number(entry.minutes);
+    if (!(minutes > 0)) throw new Error("each item needs a positive minutes.");
+    const day = parseDate(entry.date ?? new Date().toISOString().slice(0, 10));
+    return {
+      projectId: entry.projectId,
+      name: entry.note ?? entry.name ?? "Work",
+      notes: entry.note,
+      startAt: day,
+      endAt: day + Math.round(minutes * 60000),
+      durationMinutes: round2(minutes),
+      tags: entry.tags,
+    };
+  });
+  const result = await api.bulkCreateTasks(items);
+  emit(out.json, result, () => {
+    const created = Array.isArray(result?.created) ? result.created.length : items.length;
+    console.log(`Created ${created} task(s).`);
+  });
+}
+
+export async function handleExpensesBulk(api: Api, opts: { items?: string }, out: Out): Promise<void> {
+  needAuth(api);
+  if (!opts.items) throw new Error("--items JSON array is required, e.g. --items '[{\"amount\":42.5,\"category\":\"travel\"}]'.");
+  const parsed = parseJsonArray(opts.items, "--items");
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("--items must be a non-empty JSON array.");
+  const items = parsed.map((entry: any) => {
+    const amount = Number(entry.amount);
+    if (!(amount > 0)) throw new Error("each item needs a positive amount (dollars).");
+    if (!entry.category) throw new Error("each item needs a category.");
+    return {
+      amount: round2(amount),
+      category: entry.category,
+      clientId: entry.client,
+      projectId: entry.project,
+      date: parseDate(entry.date ?? new Date().toISOString().slice(0, 10)),
+      note: entry.note,
+    };
+  });
+  const result = await api.bulkCreateExpenses(items);
+  emit(out.json, result, () => {
+    const created = Array.isArray(result?.created) ? result.created.length : items.length;
+    console.log(`Created ${created} expense(s).`);
+  });
 }

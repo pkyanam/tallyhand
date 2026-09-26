@@ -1,10 +1,20 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
 import { badRequest, created, paginated, parsePagination } from "@/server/http";
-import { withIdempotency } from "@/server/idempotency";
+import { withIdempotency } from "../_lib/idempotency";
 import { taskCreateSchema } from "@/server/validation";
+import {
+  aliasedParam,
+  applySort,
+  filterDateRange,
+  parseDateRange,
+  parseSort,
+  sortUsage,
+} from "../_lib/query";
 
 export const runtime = "nodejs";
+
+const SORT_FIELDS = ["startAt", "endAt", "durationMinutes", "name", "createdAt"] as const;
 
 export async function GET(req: Request) {
   const authErr = requireApiToken(req);
@@ -12,9 +22,18 @@ export async function GET(req: Request) {
   const { limit, cursor } = parsePagination(req);
   const provider = getServerProvider();
   const search = new URL(req.url).searchParams;
-  const projectId = search.get("projectId");
-  const clientId = search.get("clientId");
-  const isBilled = search.get("isBilled");
+  const projectId = aliasedParam(search, "projectId", "project_id");
+  const clientId = aliasedParam(search, "clientId", "client_id");
+  const isBilled = aliasedParam(search, "isBilled", "is_billed");
+
+  const range = parseDateRange(req);
+  if (range === "invalid") {
+    return badRequest("date_from/date_to must be ms epoch or ISO-8601 dates");
+  }
+  const sort = parseSort(req, SORT_FIELDS);
+  if (sort === "invalid") {
+    return badRequest(`sort must be one of: ${sortUsage(SORT_FIELDS)}`);
+  }
 
   let tasks = projectId
     ? await provider.listTasksByProject(projectId)
@@ -27,6 +46,8 @@ export async function GET(req: Request) {
   }
   if (isBilled === "true") tasks = tasks.filter((t) => t.isBilled);
   else if (isBilled === "false") tasks = tasks.filter((t) => !t.isBilled);
+  tasks = filterDateRange(tasks, (t) => t.startAt, range);
+  if (sort) tasks = applySort(tasks, sort);
 
   return paginated(tasks, limit, cursor);
 }
@@ -45,8 +66,8 @@ export async function POST(req: Request) {
     if (!project) {
       return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
     }
-    if (parsed.data.endAt < parsed.data.startAt) {
-      return badRequest("endAt must be >= startAt");
+    if (parsed.data.endAt !== 0 && parsed.data.endAt < parsed.data.startAt) {
+      return badRequest("endAt must be >= startAt (or 0 for an open timer)");
     }
     const task = await provider.createTask(parsed.data);
     return created(task);

@@ -1,24 +1,32 @@
 import { getDB } from "@/lib/db/schema";
 import {
   clientRepo,
+  contractRepo,
   expenseRepo,
   invoiceRepo,
+  mileageRepo,
   projectRepo,
+  rateCardRepo,
   recurringScheduleRepo,
   retainerRepo,
   settingsRepo,
   taskRepo,
+  taxPaymentRepo,
 } from "@/lib/db/repos";
 import { normalizeSettings } from "@/lib/settings-normalize";
 import type { Settings } from "@/lib/db/types";
 import type {
   Client,
+  Contract,
   Expense,
   Invoice,
+  MileageEntry,
   Project,
+  RateCard,
   RecurringSchedule,
   Retainer,
   Task,
+  TaxPayment,
 } from "@/lib/db/types";
 import {
   exportCombinedJson,
@@ -44,6 +52,11 @@ export type TallyhandBundleV1 = {
   /** Optional: absent in bundles exported before recurring/retainers existed. */
   recurringSchedules?: RecurringSchedule[];
   retainers?: Retainer[];
+  /** Optional: absent in bundles exported before Track 3 entities existed. */
+  mileageEntries?: MileageEntry[];
+  contracts?: Contract[];
+  taxPayments?: TaxPayment[];
+  rateCards?: RateCard[];
 };
 
 function buildLedgerRows(
@@ -92,6 +105,10 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     invoices,
     recurringSchedules,
     retainers,
+    mileageEntries,
+    contracts,
+    taxPayments,
+    rateCards,
   ] = await Promise.all([
     settingsRepo.get(),
     clientRepo.list(true),
@@ -101,6 +118,10 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     invoiceRepo.list(),
     recurringScheduleRepo.list(),
     retainerRepo.list(),
+    mileageRepo.list(),
+    contractRepo.list(),
+    taxPaymentRepo.list(),
+    rateCardRepo.list(),
   ]);
   return {
     format: TALLYHAND_BUNDLE_FORMAT,
@@ -113,6 +134,10 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     invoices,
     recurringSchedules,
     retainers,
+    mileageEntries,
+    contracts,
+    taxPayments,
+    rateCards,
   };
 }
 
@@ -201,6 +226,10 @@ export async function importTallyhandBundleV1(bundle: TallyhandBundleV1): Promis
     db.settings,
     db.recurringSchedules,
     db.retainers,
+    db.mileageEntries,
+    db.contracts,
+    db.taxPayments,
+    db.rateCards,
   ];
   await db.transaction("rw", tables, async () => {
     await db.clients.clear();
@@ -211,6 +240,10 @@ export async function importTallyhandBundleV1(bundle: TallyhandBundleV1): Promis
     await db.settings.clear();
     await db.recurringSchedules.clear();
     await db.retainers.clear();
+    await db.mileageEntries.clear();
+    await db.contracts.clear();
+    await db.taxPayments.clear();
+    await db.rateCards.clear();
     if (bundle.clients.length) await db.clients.bulkAdd(bundle.clients);
     if (bundle.projects.length) await db.projects.bulkAdd(bundle.projects);
     if (bundle.tasks.length) await db.tasks.bulkAdd(bundle.tasks);
@@ -218,8 +251,16 @@ export async function importTallyhandBundleV1(bundle: TallyhandBundleV1): Promis
     if (bundle.invoices.length) await db.invoices.bulkAdd(bundle.invoices);
     const schedules = bundle.recurringSchedules ?? [];
     const retainers = bundle.retainers ?? [];
+    const mileageEntries = bundle.mileageEntries ?? [];
+    const contracts = bundle.contracts ?? [];
+    const taxPayments = bundle.taxPayments ?? [];
+    const rateCards = bundle.rateCards ?? [];
     if (schedules.length) await db.recurringSchedules.bulkAdd(schedules);
     if (retainers.length) await db.retainers.bulkAdd(retainers);
+    if (mileageEntries.length) await db.mileageEntries.bulkAdd(mileageEntries);
+    if (contracts.length) await db.contracts.bulkAdd(contracts);
+    if (taxPayments.length) await db.taxPayments.bulkAdd(taxPayments);
+    if (rateCards.length) await db.rateCards.bulkAdd(rateCards);
     await db.settings.put(normalizeSettings(bundle.settings));
   });
 }

@@ -1,10 +1,20 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
 import { badRequest, created, paginated, parsePagination } from "@/server/http";
-import { withIdempotency } from "@/server/idempotency";
+import { withIdempotency } from "../_lib/idempotency";
 import { expenseCreateSchema } from "@/server/validation";
+import {
+  aliasedParam,
+  applySort,
+  filterDateRange,
+  parseDateRange,
+  parseSort,
+  sortUsage,
+} from "../_lib/query";
 
 export const runtime = "nodejs";
+
+const SORT_FIELDS = ["date", "amount", "category", "createdAt"] as const;
 
 export async function GET(req: Request) {
   const authErr = requireApiToken(req);
@@ -12,10 +22,19 @@ export async function GET(req: Request) {
   const { limit, cursor } = parsePagination(req);
   const provider = getServerProvider();
   const search = new URL(req.url).searchParams;
-  const clientId = search.get("clientId");
-  const projectId = search.get("projectId");
-  const isBilled = search.get("isBilled");
+  const clientId = aliasedParam(search, "clientId", "client_id");
+  const projectId = aliasedParam(search, "projectId", "project_id");
+  const isBilled = aliasedParam(search, "isBilled", "is_billed");
   const category = search.get("category");
+
+  const range = parseDateRange(req);
+  if (range === "invalid") {
+    return badRequest("date_from/date_to must be ms epoch or ISO-8601 dates");
+  }
+  const sort = parseSort(req, SORT_FIELDS);
+  if (sort === "invalid") {
+    return badRequest(`sort must be one of: ${sortUsage(SORT_FIELDS)}`);
+  }
 
   let expenses = await provider.listExpenses();
   if (clientId) expenses = expenses.filter((e) => e.clientId === clientId);
@@ -23,6 +42,8 @@ export async function GET(req: Request) {
   if (category) expenses = expenses.filter((e) => e.category === category);
   if (isBilled === "true") expenses = expenses.filter((e) => e.isBilled);
   else if (isBilled === "false") expenses = expenses.filter((e) => !e.isBilled);
+  expenses = filterDateRange(expenses, (e) => e.date, range);
+  if (sort) expenses = applySort(expenses, sort);
 
   return paginated(expenses, limit, cursor);
 }

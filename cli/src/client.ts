@@ -8,8 +8,8 @@
  * - Envelope: success -> { data, meta? }, error -> { error: { code, message } }.
  * - Pagination: ?limit (default 50, max 200) & cursor (opaque). Pass
  *   { all: true } to auto-follow cursors until null.
- * - POST requests always carry an Idempotency-Key header (safe for agents
- *   that retry).
+ * - POST/PATCH/PUT requests always carry an Idempotency-Key header (safe for
+ *   agents that retry).
  * - Money: the API uses dollars for `amount`/`rate`/line-item fields (matches
  *   the Tallyhand domain); fields literally named `*Cents` (retainer
  *   amountCents) are integer cents.
@@ -115,6 +115,10 @@ export class TallyhandClient {
     return !!this.token;
   }
 
+  private dryRunQuery(opts?: { dryRun?: boolean }): Record<string, string> | undefined {
+    return opts?.dryRun ? { dry_run: "true" } : undefined;
+  }
+
   private async request(
     method: string,
     path: string,
@@ -134,7 +138,9 @@ export class TallyhandClient {
       "User-Agent": "tallyhand-cli/0.1.0",
     };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
-    if (method === "POST") headers["Idempotency-Key"] = randomUUID();
+    if (method === "POST" || method === "PATCH" || method === "PUT") {
+      headers["Idempotency-Key"] = randomUUID();
+    }
 
     let res: Response;
     try {
@@ -220,7 +226,7 @@ export class TallyhandClient {
           ? json
           : [];
       items.push(...page);
-      const next = json?.meta?.page?.cursor ?? null;
+      const next = json?.meta?.nextCursor ?? null;
       if (!next) break;
       cursor = next;
     }
@@ -254,8 +260,8 @@ export class TallyhandClient {
   updateClient(id: string, patch: Record<string, unknown>): Promise<any> {
     return this.request("PATCH", `/clients/${id}`, patch);
   }
-  deleteClient(id: string): Promise<any> {
-    return this.request("DELETE", `/clients/${id}`);
+  deleteClient(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/clients/${id}`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- projects -------------------------------------------------------- */
@@ -268,6 +274,12 @@ export class TallyhandClient {
   getProject(id: string): Promise<any> {
     return this.request("GET", `/projects/${id}`);
   }
+  updateProject(id: string, patch: Record<string, unknown>): Promise<any> {
+    return this.request("PATCH", `/projects/${id}`, patch);
+  }
+  deleteProject(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/projects/${id}`, undefined, this.dryRunQuery(opts));
+  }
 
   /* -- tasks ----------------------------------------------------------- */
   listTasks(params?: RequestOpts): Promise<any> {
@@ -276,11 +288,17 @@ export class TallyhandClient {
   createTask(input: Record<string, unknown>): Promise<any> {
     return this.request("POST", "/tasks", input);
   }
+  getTask(id: string): Promise<any> {
+    return this.request("GET", `/tasks/${id}`);
+  }
   updateTask(id: string, patch: Record<string, unknown>): Promise<any> {
     return this.request("PATCH", `/tasks/${id}`, patch);
   }
-  deleteTask(id: string): Promise<any> {
-    return this.request("DELETE", `/tasks/${id}`);
+  deleteTask(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/tasks/${id}`, undefined, this.dryRunQuery(opts));
+  }
+  bulkCreateTasks(items: Record<string, unknown>[]): Promise<any> {
+    return this.request("POST", "/tasks/bulk", { items });
   }
 
   /* -- expenses -------------------------------------------------------- */
@@ -289,6 +307,18 @@ export class TallyhandClient {
   }
   createExpense(input: Record<string, unknown>): Promise<any> {
     return this.request("POST", "/expenses", input);
+  }
+  getExpense(id: string): Promise<any> {
+    return this.request("GET", `/expenses/${id}`);
+  }
+  updateExpense(id: string, patch: Record<string, unknown>): Promise<any> {
+    return this.request("PATCH", `/expenses/${id}`, patch);
+  }
+  deleteExpense(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/expenses/${id}`, undefined, this.dryRunQuery(opts));
+  }
+  bulkCreateExpenses(items: Record<string, unknown>[]): Promise<any> {
+    return this.request("POST", "/expenses/bulk", { items });
   }
 
   /* -- invoices -------------------------------------------------------- */
@@ -301,11 +331,17 @@ export class TallyhandClient {
   getInvoice(id: string): Promise<any> {
     return this.request("GET", `/invoices/${id}`);
   }
-  sendInvoice(id: string): Promise<any> {
-    return this.request("POST", `/invoices/${id}/send`);
+  updateInvoice(id: string, patch: Record<string, unknown>): Promise<any> {
+    return this.request("PATCH", `/invoices/${id}`, patch);
   }
-  markInvoicePaid(id: string): Promise<any> {
-    return this.request("POST", `/invoices/${id}/paid`);
+  deleteInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/invoices/${id}`, undefined, this.dryRunQuery(opts));
+  }
+  sendInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("POST", `/invoices/${id}/send`, undefined, this.dryRunQuery(opts));
+  }
+  markInvoicePaid(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("POST", `/invoices/${id}/paid`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- recurring schedules --------------------------------------------- */
@@ -318,11 +354,17 @@ export class TallyhandClient {
   getSchedule(id: string): Promise<any> {
     return this.request("GET", `/recurring-schedules/${id}`);
   }
-  runSchedule(id: string): Promise<any> {
-    return this.request("POST", `/recurring-schedules/${id}/run`);
+  updateSchedule(id: string, patch: Record<string, unknown>): Promise<any> {
+    return this.request("PATCH", `/recurring-schedules/${id}`, patch);
   }
-  runScheduler(): Promise<any> {
-    return this.request("POST", "/scheduler/run");
+  deleteSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/recurring-schedules/${id}`, undefined, this.dryRunQuery(opts));
+  }
+  runSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("POST", `/recurring-schedules/${id}/run`, undefined, this.dryRunQuery(opts));
+  }
+  runScheduler(opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("POST", "/scheduler/run", undefined, this.dryRunQuery(opts));
   }
 
   /* -- retainers -------------------------------------------------------- */
@@ -334,6 +376,12 @@ export class TallyhandClient {
   }
   getRetainer(id: string): Promise<any> {
     return this.request("GET", `/retainers/${id}`);
+  }
+  updateRetainer(id: string, patch: Record<string, unknown>): Promise<any> {
+    return this.request("PATCH", `/retainers/${id}`, patch);
+  }
+  deleteRetainer(id: string, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("DELETE", `/retainers/${id}`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- settings --------------------------------------------------------- */
