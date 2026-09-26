@@ -1,0 +1,25 @@
+# Never ship local secrets, history, or build artifacts into the image.
+# (Build with: docker build -f deploy/Dockerfile . from the repo root.)
+
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+
+node_modules
+.next
+
+# Local data (sqlite files, attachments, convex local state)
+data
+.tallyhand-attachments
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+.convex
+
+# Installer / deploy scratch
+*.log
+.DS_Store

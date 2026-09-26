@@ -109,7 +109,7 @@ export function PublicInvoiceClient({ token }: { token: string }) {
         </div>
       </header>
       <main className="mx-auto max-w-5xl p-4 sm:p-6">
-        <Card className="mb-4 border-amber-500/30 bg-amber-500/5">
+        <Card className="mb-4 border-border bg-secondary">
           <CardContent className="p-3 text-xs text-muted-foreground">
             Local-only: this page reads from IndexedDB in your browser. It is not
             a hosted document and cannot be verified by a third party without

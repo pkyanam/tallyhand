@@ -52,6 +52,11 @@ import type {
   RetainerCreateInput,
   RetainerStatus,
 } from "@/core/recurring";
+import type { MileageEntry, MileageEntryCreateInput } from "@/core/mileage";
+import { mileageRateForDate } from "@/core/mileage";
+import type { Contract, ContractCreateInput } from "@/core/contracts";
+import type { TaxPayment, TaxPaymentCreateInput } from "@/core/tax";
+import type { RateCard, RateCardCreateInput } from "@/core/rate-cards";
 
 /** Resolve the SQLite file path. Exported for idempotency.ts and tests. */
 export function resolveDbPath(): string {
@@ -140,6 +145,48 @@ CREATE TABLE IF NOT EXISTS retainers (
   updated_at INTEGER NOT NULL,
   data TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS mileage_entries (
+  id TEXT PRIMARY KEY,
+  client_id TEXT,
+  project_id TEXT,
+  date INTEGER NOT NULL,
+  is_billed INTEGER NOT NULL DEFAULT 0,
+  invoice_id TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS contracts (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  project_id TEXT,
+  type TEXT NOT NULL,
+  end_date INTEGER,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tax_payments (
+  id TEXT PRIMARY KEY,
+  tax_year INTEGER NOT NULL,
+  quarter INTEGER NOT NULL,
+  jurisdiction TEXT NOT NULL,
+  date INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS rate_cards (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  project_id TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
+  effective_from INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY,
   data TEXT NOT NULL
@@ -164,6 +211,12 @@ CREATE INDEX IF NOT EXISTS idx_schedules_status ON recurring_schedules (status);
 CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON recurring_schedules (next_run_at);
 CREATE INDEX IF NOT EXISTS idx_retainers_client ON retainers (client_id);
 CREATE INDEX IF NOT EXISTS idx_retainers_status ON retainers (status);
+CREATE INDEX IF NOT EXISTS idx_mileage_client ON mileage_entries (client_id);
+CREATE INDEX IF NOT EXISTS idx_mileage_date ON mileage_entries (date);
+CREATE INDEX IF NOT EXISTS idx_contracts_client ON contracts (client_id);
+CREATE INDEX IF NOT EXISTS idx_contracts_end ON contracts (end_date);
+CREATE INDEX IF NOT EXISTS idx_taxpay_year ON tax_payments (tax_year);
+CREATE INDEX IF NOT EXISTS idx_ratecards_client ON rate_cards (client_id);
 `;
 
 type SqliteValue = string | number | null;
@@ -570,6 +623,176 @@ export class SqliteStorageProvider implements StorageProvider {
     this.db.prepare("DELETE FROM retainers WHERE id = ?").run(id);
   }
 
+  // -- mileage -----------------------------------------------------------
+  async listMileageEntries(): Promise<MileageEntry[]> {
+    return this.allRows("mileage_entries", "ORDER BY date DESC").map(
+      (r) => JSON.parse(r.data) as MileageEntry,
+    );
+  }
+
+  async getMileageEntry(id: ID): Promise<MileageEntry | undefined> {
+    return this.parse<MileageEntry>(this.getRow("mileage_entries", id));
+  }
+
+  async createMileageEntry(
+    input: MileageEntryCreateInput,
+  ): Promise<MileageEntry> {
+    const ts = now();
+    const entry = {
+      id: input.id ?? newId("mil"),
+      isBilled: input.isBilled ?? false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+      // Computed after the spread: an explicit `rate: undefined` in
+      // unchecked runtime input must not clobber the default.
+      rate:
+        (input as { rate?: number }).rate ?? mileageRateForDate(input.date),
+    } as MileageEntry;
+    this.insert(
+      "mileage_entries",
+      ["id", "client_id", "project_id", "date", "is_billed", "invoice_id", "created_at", "updated_at", "data"],
+      [entry.id, entry.clientId ?? null, entry.projectId ?? null, entry.date, entry.isBilled ? 1 : 0, entry.invoiceId ?? null, entry.createdAt, entry.updatedAt, JSON.stringify(entry)],
+    );
+    return entry;
+  }
+
+  async updateMileageEntry(id: ID, patch: Partial<MileageEntry>): Promise<void> {
+    const existing = await this.getMileageEntry(id);
+    if (!existing) return;
+    const next: MileageEntry = { ...existing, ...patch, updatedAt: now() };
+    this.db
+      .prepare("UPDATE mileage_entries SET client_id = ?, project_id = ?, date = ?, is_billed = ?, invoice_id = ?, updated_at = ?, data = ? WHERE id = ?")
+      .run(next.clientId ?? null, next.projectId ?? null, next.date, next.isBilled ? 1 : 0, next.invoiceId ?? null, next.updatedAt, JSON.stringify(next), id);
+  }
+
+  async removeMileageEntry(id: ID): Promise<void> {
+    this.db.prepare("DELETE FROM mileage_entries WHERE id = ?").run(id);
+  }
+
+  // -- contracts ---------------------------------------------------------
+  async listContracts(): Promise<Contract[]> {
+    return this.allRows("contracts", "ORDER BY updated_at DESC").map(
+      (r) => JSON.parse(r.data) as Contract,
+    );
+  }
+
+  async getContract(id: ID): Promise<Contract | undefined> {
+    return this.parse<Contract>(this.getRow("contracts", id));
+  }
+
+  async createContract(input: ContractCreateInput): Promise<Contract> {
+    const ts = now();
+    const contract = {
+      id: input.id ?? newId("ctr"),
+      renewalNoticeDays: 30,
+      archived: input.archived ?? false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as Contract;
+    this.insert(
+      "contracts",
+      ["id", "client_id", "project_id", "type", "end_date", "archived", "created_at", "updated_at", "data"],
+      [contract.id, contract.clientId, contract.projectId ?? null, contract.type, contract.endDate ?? null, contract.archived ? 1 : 0, contract.createdAt, contract.updatedAt, JSON.stringify(contract)],
+    );
+    return contract;
+  }
+
+  async updateContract(id: ID, patch: Partial<Contract>): Promise<void> {
+    const existing = await this.getContract(id);
+    if (!existing) return;
+    const next: Contract = { ...existing, ...patch, updatedAt: now() };
+    this.db
+      .prepare("UPDATE contracts SET client_id = ?, project_id = ?, type = ?, end_date = ?, archived = ?, updated_at = ?, data = ? WHERE id = ?")
+      .run(next.clientId, next.projectId ?? null, next.type, next.endDate ?? null, next.archived ? 1 : 0, next.updatedAt, JSON.stringify(next), id);
+  }
+
+  async removeContract(id: ID): Promise<void> {
+    this.db.prepare("DELETE FROM contracts WHERE id = ?").run(id);
+  }
+
+  // -- tax payments ------------------------------------------------------
+  async listTaxPayments(): Promise<TaxPayment[]> {
+    return this.allRows("tax_payments", "ORDER BY date DESC").map(
+      (r) => JSON.parse(r.data) as TaxPayment,
+    );
+  }
+
+  async getTaxPayment(id: ID): Promise<TaxPayment | undefined> {
+    return this.parse<TaxPayment>(this.getRow("tax_payments", id));
+  }
+
+  async createTaxPayment(input: TaxPaymentCreateInput): Promise<TaxPayment> {
+    const ts = now();
+    const payment = {
+      id: input.id ?? newId("txp"),
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as TaxPayment;
+    this.insert(
+      "tax_payments",
+      ["id", "tax_year", "quarter", "jurisdiction", "date", "created_at", "updated_at", "data"],
+      [payment.id, payment.taxYear, payment.quarter, payment.jurisdiction, payment.date, payment.createdAt, payment.updatedAt, JSON.stringify(payment)],
+    );
+    return payment;
+  }
+
+  async updateTaxPayment(id: ID, patch: Partial<TaxPayment>): Promise<void> {
+    const existing = await this.getTaxPayment(id);
+    if (!existing) return;
+    const next: TaxPayment = { ...existing, ...patch, updatedAt: now() };
+    this.db
+      .prepare("UPDATE tax_payments SET tax_year = ?, quarter = ?, jurisdiction = ?, date = ?, updated_at = ?, data = ? WHERE id = ?")
+      .run(next.taxYear, next.quarter, next.jurisdiction, next.date, next.updatedAt, JSON.stringify(next), id);
+  }
+
+  async removeTaxPayment(id: ID): Promise<void> {
+    this.db.prepare("DELETE FROM tax_payments WHERE id = ?").run(id);
+  }
+
+  // -- rate cards --------------------------------------------------------
+  async listRateCards(): Promise<RateCard[]> {
+    return this.allRows("rate_cards", "ORDER BY updated_at DESC").map(
+      (r) => JSON.parse(r.data) as RateCard,
+    );
+  }
+
+  async getRateCard(id: ID): Promise<RateCard | undefined> {
+    return this.parse<RateCard>(this.getRow("rate_cards", id));
+  }
+
+  async createRateCard(input: RateCardCreateInput): Promise<RateCard> {
+    const ts = now();
+    const card = {
+      id: input.id ?? newId("rc"),
+      archived: input.archived ?? false,
+      createdAt: ts,
+      updatedAt: ts,
+      ...input,
+    } as RateCard;
+    this.insert(
+      "rate_cards",
+      ["id", "client_id", "project_id", "archived", "effective_from", "created_at", "updated_at", "data"],
+      [card.id, card.clientId, card.projectId ?? null, card.archived ? 1 : 0, card.effectiveFrom, card.createdAt, card.updatedAt, JSON.stringify(card)],
+    );
+    return card;
+  }
+
+  async updateRateCard(id: ID, patch: Partial<RateCard>): Promise<void> {
+    const existing = await this.getRateCard(id);
+    if (!existing) return;
+    const next: RateCard = { ...existing, ...patch, updatedAt: now() };
+    this.db
+      .prepare("UPDATE rate_cards SET client_id = ?, project_id = ?, archived = ?, effective_from = ?, updated_at = ?, data = ? WHERE id = ?")
+      .run(next.clientId, next.projectId ?? null, next.archived ? 1 : 0, next.effectiveFrom, next.updatedAt, JSON.stringify(next), id);
+  }
+
+  async removeRateCard(id: ID): Promise<void> {
+    this.db.prepare("DELETE FROM rate_cards WHERE id = ?").run(id);
+  }
+
   // -- settings ----------------------------------------------------------
   async readSettings(): Promise<Settings | undefined> {
     return this.parse<Settings>(this.getRow("settings", "singleton"));
@@ -609,6 +832,17 @@ export class SqliteStorageProvider implements StorageProvider {
         ...(patch.appearance ?? {}),
       },
       expenseCategories: patch.expenseCategories ?? current.expenseCategories,
+      dunning: {
+        ...current.dunning,
+        ...(patch.dunning ?? {}),
+        lateFee: {
+          ...current.dunning.lateFee,
+          ...(patch.dunning?.lateFee ?? {}),
+        },
+      },
+      tax: { ...current.tax, ...(patch.tax ?? {}) },
+      analytics: { ...current.analytics, ...(patch.analytics ?? {}) },
+      pluginSettings: patch.pluginSettings ?? current.pluginSettings,
     });
     this.db
       .prepare("INSERT OR REPLACE INTO settings (id, data) VALUES (?, ?)")
@@ -685,5 +919,7 @@ export class SqliteStorageProvider implements StorageProvider {
 
 /** Test factory: build a provider against an explicit DB file. */
 export function makeSqliteProvider(dbPath?: string): SqliteStorageProvider {
-  return new SqliteStorageProvider(dbPath ?? tempDbPath());
+  // Server default: the persistent local database (TALLYHAND_DB_PATH or
+  // ~/.tallyhand/tallyhand.db). Tests pass an explicit temp path.
+  return new SqliteStorageProvider(dbPath ?? resolveDbPath());
 }

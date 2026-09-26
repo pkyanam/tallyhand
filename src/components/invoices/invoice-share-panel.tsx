@@ -35,8 +35,7 @@ const REACHABILITY_COPY: Record<
 > = {
   device: {
     badge: "This device only",
-    badgeClass:
-      "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    badgeClass: "border-border bg-secondary text-secondary-foreground",
     message: (
       <>
         You&rsquo;re running Tallyhand on this device only. If you send this
@@ -48,8 +47,7 @@ const REACHABILITY_COPY: Record<
   },
   lan: {
     badge: "Local network",
-    badgeClass:
-      "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    badgeClass: "border-border text-foreground",
     message: (
       <>
         Devices on your local network — like your phone on the same Wi-Fi —
@@ -60,8 +58,7 @@ const REACHABILITY_COPY: Record<
   },
   internet: {
     badge: "Anyone with the link",
-    badgeClass:
-      "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    badgeClass: "badge-positive",
     message: (
       <>
         This Tallyhand is reachable from the internet, so anyone you send the
@@ -214,7 +211,7 @@ export function InvoiceSharePanel({
             it opens in any browser and prints cleanly.
           </p>
           {dirty && savedInvoice ? (
-            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+            <p className="flex items-start gap-1.5 text-xs text-foreground">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               You have unsaved changes — the file will contain the last saved
               version.

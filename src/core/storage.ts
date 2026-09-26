@@ -15,6 +15,10 @@ import type {
   RetainerCreateInput,
   RetainerStatus,
 } from "@/core/recurring";
+import type { MileageEntry, MileageEntryCreateInput } from "@/core/mileage";
+import type { Contract, ContractCreateInput } from "@/core/contracts";
+import type { TaxPayment, TaxPaymentCreateInput } from "@/core/tax";
+import type { RateCard, RateCardCreateInput } from "@/core/rate-cards";
 
 // Re-exported so consumers can import every create-input type from the
 // storage contract module.
@@ -23,6 +27,10 @@ export type {
   RetainerCreateInput,
   RecurringStatus,
   RetainerStatus,
+  MileageEntryCreateInput,
+  ContractCreateInput,
+  TaxPaymentCreateInput,
+  RateCardCreateInput,
 };
 
 type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
@@ -38,6 +46,12 @@ export type SettingsPatch = {
   reckoning?: Partial<Settings["reckoning"]>;
   appearance?: Partial<Settings["appearance"]>;
   expenseCategories?: string[];
+  dunning?: Partial<Omit<Settings["dunning"], "lateFee">> & {
+    lateFee?: Partial<Settings["dunning"]["lateFee"]>;
+  };
+  tax?: Partial<Settings["tax"]>;
+  analytics?: Partial<Settings["analytics"]>;
+  pluginSettings?: Record<string, Record<string, string | number | boolean>>;
 };
 
 export type ClientCreateInput = Optional<
@@ -171,4 +185,38 @@ export interface StorageProvider {
   markInvoiceSent(invoice: Invoice): Promise<void>;
   /** Flip the invoice to "paid". */
   markInvoicePaid(invoiceId: ID): Promise<void>;
+
+  // -- optional extension stores -------------------------------------------
+  //
+  // Newer entities (mileage, contracts, tax payments, rate cards). These are
+  // OPTIONAL so older providers (Postgres, Convex) keep compiling: the Dexie
+  // (browser) and SQLite (server) providers implement them, and the repos
+  // layer throws a clear "unsupported" error otherwise. `create*` defaults
+  // mirror the main contract: `id` via `newId`, `createdAt`/`updatedAt` =
+  // now, plus entity defaults (`isBilled: false`, `archived: false`).
+  // `update*` always refreshes `updatedAt`.
+
+  listMileageEntries?(): Promise<MileageEntry[]>;
+  getMileageEntry?(id: ID): Promise<MileageEntry | undefined>;
+  createMileageEntry?(input: MileageEntryCreateInput): Promise<MileageEntry>;
+  updateMileageEntry?(id: ID, patch: Partial<MileageEntry>): Promise<void>;
+  removeMileageEntry?(id: ID): Promise<void>;
+
+  listContracts?(): Promise<Contract[]>;
+  getContract?(id: ID): Promise<Contract | undefined>;
+  createContract?(input: ContractCreateInput): Promise<Contract>;
+  updateContract?(id: ID, patch: Partial<Contract>): Promise<void>;
+  removeContract?(id: ID): Promise<void>;
+
+  listTaxPayments?(): Promise<TaxPayment[]>;
+  getTaxPayment?(id: ID): Promise<TaxPayment | undefined>;
+  createTaxPayment?(input: TaxPaymentCreateInput): Promise<TaxPayment>;
+  updateTaxPayment?(id: ID, patch: Partial<TaxPayment>): Promise<void>;
+  removeTaxPayment?(id: ID): Promise<void>;
+
+  listRateCards?(): Promise<RateCard[]>;
+  getRateCard?(id: ID): Promise<RateCard | undefined>;
+  createRateCard?(input: RateCardCreateInput): Promise<RateCard>;
+  updateRateCard?(id: ID, patch: Partial<RateCard>): Promise<void>;
+  removeRateCard?(id: ID): Promise<void>;
 }
