@@ -88,7 +88,7 @@ jobs:
       - name: Smoke test binary
         working-directory: cli
         shell: bash
-        run: ./\"${{ matrix.binary }}\" --help | grep -q "Usage:"
+        run: ./"${{ matrix.binary }}" --help | grep -q "Usage:"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
