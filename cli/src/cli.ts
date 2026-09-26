@@ -653,7 +653,25 @@ export function buildProgram(): Command {
   return program;
 }
 
-const entry = process.argv[1] ?? "";
-if (entry.endsWith("/dist/cli.js") || entry.endsWith("dist\\cli.js") || entry.endsWith("/src/cli.ts")) {
+/**
+ * Decide whether this module was launched as the CLI entry point.
+ *
+ * Classic `node dist/cli.js` / `tsx src/cli.ts`: argv[1] is the script path.
+ * Single-file binaries (`bun build --compile`, Node SEA, pkg): argv[0] is the
+ * binary itself and argv[1] is already the first user argument (a flag, a
+ * subcommand, or empty) — never a script path. Without the second branch a
+ * packaged binary would exit silently having run nothing.
+ */
+export function shouldAutoRun(argv1: string | undefined): boolean {
+  const entry = argv1 ?? "";
+  const launchedAsScript =
+    entry.endsWith("/dist/cli.js") ||
+    entry.endsWith("dist\\cli.js") ||
+    entry.endsWith("/src/cli.ts");
+  const launchedAsBinary = !/\.[cm]?[jt]s$/i.test(entry);
+  return launchedAsScript || launchedAsBinary;
+}
+
+if (shouldAutoRun(process.argv[1])) {
   buildProgram().parseAsync(process.argv).catch(fail);
 }

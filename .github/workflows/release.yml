@@ -1,25 +1,27 @@
 name: Release
 
-# Publishes standalone `tally` binaries via Node SEA (Single Executable Applications).
+# Publishes standalone `tally` binaries via `bun build --compile`.
 #
 # Flow per matrix target:
 #   1. tsup bundles the CLI (cli/src/cli.ts) into a single self-contained file: cli/dist/cli.js
-#   2. `node --experimental-sea-config sea-config.json` compiles that bundle into a SEA blob
-#   3. The blob is injected into a copy of the runner's own Node 22 binary with postject
-#      (NODE_SEA_BLOB / NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b6 sentinel)
-#   4. macOS: ad-hoc signature removed (codesign --remove-signature) so Gatekeeper doesn't
-#      reject the modified binary; Windows: the binary is named *.exe
+#      (kept as the canonical bundle step — the same artifact `npm run build` produces)
+#   2. `bun build --compile` turns that bundle into a single-file executable for the
+#      matrix target. No postject, no blob injection, no code-signature surgery.
+#   3. macOS: ad-hoc sign (`codesign -s -`) so the binary isn't flagged as damaged.
+#      Windows: the binary is named *.exe.
+#   4. Smoke test asserts the binary actually runs its entry point (`Usage:` in
+#      --help output — a bare exit-0 check would pass even for a dead binary).
 #   5. Artifacts are collected, checksummed into SHA256SUMS, and attached to a GitHub
 #      Release for the tag.
 #
-# Assumptions (verify before the first tagged release):
-#   - Node 22's `node --experimental-sea-config` accepts the ESM bundle (dist/cli.js is
-#     format: esm). SEA historically preferred CJS; if the blob step fails on ESM,
-#     switch tsup `format` to cjs for the release build.
-#   - The `macos-15-intel` runner label still exists at release time; fall back to
-#     `macos-13` if it has been retired.
-#   - postject is fetchable via npx in the runner (network access required).
-#   - `tally --help` exit code 0 is a sufficient smoke test (commander handles --help).
+# Why bun and not Node SEA: postject (the SEA blob injector) cannot parse current
+# official Node binaries (~256 .note sections break its section parser, so the
+# post-injection sentinel lookup fails on every platform). Bun's compiler embeds
+# its own runtime and needs no injection step.
+#
+# Note: the CLI's entry guard (shouldAutoRun in cli/src/cli.ts) must keep its
+# "packaged binary" branch — in a compiled binary argv[1] is the first user
+# argument, not the script path.
 
 on:
   push:
@@ -36,15 +38,19 @@ jobs:
           - target: linux-x64
             os: ubuntu-latest
             binary: tally-linux-x64
+            bun_target: bun-linux-x64
           - target: macos-arm64
             os: macos-14
             binary: tally-macos-arm64
+            bun_target: bun-darwin-arm64
           - target: macos-x64
             os: macos-15-intel
             binary: tally-macos-x64
+            bun_target: bun-darwin-x64
           - target: windows-x64
             os: windows-latest
             binary: tally-windows-x64.exe
+            bun_target: bun-windows-x64
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +61,11 @@ jobs:
           cache: npm
           cache-dependency-path: cli/package-lock.json
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install CLI dependencies
         working-directory: cli
         run: npm ci
@@ -63,52 +74,21 @@ jobs:
         working-directory: cli
         run: npm run build
 
-      - name: Generate SEA blob
+      - name: Compile standalone binary
         working-directory: cli
         shell: bash
-        run: |
-          cat > sea-config.json <<'EOF'
-          {
-            "main": "dist/cli.js",
-            "output": "sea-prep.blob",
-            "disableExperimentalSEAWarning": true
-          }
-          EOF
-          node --experimental-sea-config sea-config.json
+        run: bun build --compile ./dist/cli.js --outfile "${{ matrix.binary }}" --target "${{ matrix.bun_target }}"
 
-      - name: Inject blob into Node binary
-        if: runner.os != 'Windows'
-        working-directory: cli
-        shell: bash
-        run: |
-          NODE_BIN="$(node -e 'console.log(process.execPath)')"
-          cp "$NODE_BIN" "${{ matrix.binary }}"
-          chmod +x "${{ matrix.binary }}"
-          npx --yes postject "${{ matrix.binary }}" NODE_SEA_BLOB sea-prep.blob \
-            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b6
-          rm -f sea-prep.blob sea-config.json
-
-      - name: Inject blob into Node binary (Windows)
-        if: runner.os == 'Windows'
-        working-directory: cli
-        shell: pwsh
-        run: |
-          $nodeBin = node -e "console.log(process.execPath)"
-          Copy-Item $nodeBin "${{ matrix.binary }}"
-          npx --yes postject "${{ matrix.binary }}" NODE_SEA_BLOB sea-prep.blob `
-            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b6
-          Remove-Item sea-prep.blob, sea-config.json
-
-      - name: Remove macOS code signature
+      - name: Ad-hoc sign macOS binary
         if: startsWith(matrix.target, 'macos')
         working-directory: cli
         shell: bash
-        run: codesign --remove-signature "${{ matrix.binary }}"
+        run: codesign --sign - --force "${{ matrix.binary }}"
 
       - name: Smoke test binary
         working-directory: cli
         shell: bash
-        run: ./"${{ matrix.binary }}" --help
+        run: ./\"${{ matrix.binary }}\" --help | grep -q "Usage:"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
