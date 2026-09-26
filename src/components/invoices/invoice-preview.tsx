@@ -3,6 +3,11 @@
 import * as React from "react";
 import type { Client, Invoice, Settings } from "@/lib/db/types";
 import { formatCurrency } from "@/lib/utils";
+import { invoicePdfModel } from "./invoice-pdf-model";
+
+function formatDate(ms: number): string {
+  return new Date(ms).toLocaleDateString();
+}
 
 export function InvoicePreview({
   invoice,
@@ -15,6 +20,16 @@ export function InvoicePreview({
 }) {
   const accent =
     settings.invoice.accentColor?.trim() || "hsl(var(--foreground))";
+  const model = invoicePdfModel(invoice, settings, client);
+  const colCount = model.hasTaxColumn ? 5 : 4;
+  const servicePeriod =
+    model.servicePeriod?.start != null && model.servicePeriod?.end != null
+      ? `${formatDate(model.servicePeriod.start)} – ${formatDate(model.servicePeriod.end)}`
+      : model.servicePeriod?.start != null
+        ? `from ${formatDate(model.servicePeriod.start)}`
+        : model.servicePeriod?.end != null
+          ? `through ${formatDate(model.servicePeriod.end)}`
+          : null;
 
   return (
     <div
@@ -44,14 +59,14 @@ export function InvoicePreview({
               {settings.business.address}
             </div>
           ) : null}
-          {settings.business.email ? (
+          {settings.business.email && model.showSellerEmail ? (
             <div className="text-xs text-muted-foreground">
               {settings.business.email}
             </div>
           ) : null}
-          {settings.business.taxId ? (
+          {model.sellerTaxId ? (
             <div className="text-xs text-muted-foreground">
-              Tax ID: {settings.business.taxId}
+              {model.sellerTaxIdLabel}: {model.sellerTaxId}
             </div>
           ) : null}
         </div>
@@ -60,17 +75,22 @@ export function InvoicePreview({
             className="text-xs font-medium uppercase tracking-widest"
             style={{ color: accent }}
           >
-            Invoice
+            {model.documentType}
           </div>
           <div className="mt-1 font-mono text-lg">
             {invoice.invoiceNumber || "—"}
           </div>
           <div className="mt-3 text-xs text-muted-foreground">
-            Issued {new Date(invoice.issueDate).toLocaleDateString()}
+            Issued {formatDate(invoice.issueDate)}
           </div>
           <div className="text-xs text-muted-foreground">
-            Due {new Date(invoice.dueDate).toLocaleDateString()}
+            Due {formatDate(invoice.dueDate)}
           </div>
+          {servicePeriod ? (
+            <div className="text-xs text-muted-foreground">
+              Service {servicePeriod}
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -79,12 +99,17 @@ export function InvoicePreview({
           Bill to
         </div>
         <div className="mt-1 font-medium">{client?.name ?? "—"}</div>
-        {client?.email ? (
+        {client?.email && model.showBuyerEmail ? (
           <div className="text-xs text-muted-foreground">{client.email}</div>
         ) : null}
         {client?.address ? (
           <div className="whitespace-pre-wrap text-xs text-muted-foreground">
             {client.address}
+          </div>
+        ) : null}
+        {model.buyerTaxId ? (
+          <div className="text-xs text-muted-foreground">
+            {model.buyerTaxIdLabel}: {model.buyerTaxId}
           </div>
         ) : null}
       </section>
@@ -105,6 +130,11 @@ export function InvoicePreview({
               <th className="py-2 pr-2 text-right font-medium uppercase tracking-wider">
                 Rate
               </th>
+              {model.hasTaxColumn ? (
+                <th className="py-2 pr-2 text-right font-medium uppercase tracking-wider">
+                  {model.taxLabel}
+                </th>
+              ) : null}
               <th className="py-2 text-right font-medium uppercase tracking-wider">
                 Amount
               </th>
@@ -114,7 +144,7 @@ export function InvoicePreview({
             {invoice.lineItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={colCount}
                   className="py-8 text-center text-muted-foreground"
                 >
                   No line items.
@@ -128,10 +158,15 @@ export function InvoicePreview({
                     {item.quantity}
                   </td>
                   <td className="py-2 pr-2 text-right font-mono tabular-nums">
-                    {formatCurrency(item.rate)}
+                    {formatCurrency(item.rate, model.currency)}
                   </td>
+                  {model.hasTaxColumn ? (
+                    <td className="py-2 pr-2 text-right font-mono tabular-nums text-muted-foreground">
+                      {item.taxRate ? `${item.taxRate}%` : "—"}
+                    </td>
+                  ) : null}
                   <td className="py-2 text-right font-mono tabular-nums">
-                    {formatCurrency(item.amount)}
+                    {formatCurrency(item.amount, model.currency)}
                   </td>
                 </tr>
               ))
@@ -144,18 +179,31 @@ export function InvoicePreview({
         <div className="flex w-60 justify-between text-xs">
           <span className="text-muted-foreground">Subtotal</span>
           <span className="font-mono tabular-nums">
-            {formatCurrency(invoice.subtotal)}
+            {formatCurrency(model.subtotal, model.currency)}
           </span>
         </div>
+        {model.taxGroups.map((group) => (
+          <div key={group.rate} className="flex w-60 justify-between text-xs">
+            <span className="text-muted-foreground">{group.label}</span>
+            <span className="font-mono tabular-nums">
+              {formatCurrency(group.tax, model.currency)}
+            </span>
+          </div>
+        ))}
         <div
           className="flex w-60 justify-between border-t pt-2 text-sm font-semibold"
           style={{ borderColor: accent }}
         >
           <span>Total due</span>
           <span className="font-mono tabular-nums">
-            {formatCurrency(invoice.total)}
+            {formatCurrency(model.total, model.currency)}
           </span>
         </div>
+        {model.amountInWordsText ? (
+          <div className="w-60 text-right text-xs italic text-muted-foreground">
+            {model.amountInWordsText}
+          </div>
+        ) : null}
       </section>
 
       {invoice.notes ? (
@@ -164,6 +212,31 @@ export function InvoicePreview({
             Notes
           </div>
           <p className="mt-1 whitespace-pre-wrap text-xs">{invoice.notes}</p>
+        </section>
+      ) : null}
+
+      {model.hasPaymentBlock ? (
+        <section className="mt-4 border-t pt-4">
+          <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            Payment
+          </div>
+          <div className="mt-1 space-y-0.5 text-xs">
+            {model.paymentMethod ? <p>{model.paymentMethod}</p> : null}
+            {model.paymentUrl ? (
+              <p className="text-muted-foreground">{model.paymentUrl}</p>
+            ) : null}
+            {model.bankAccount ? (
+              <p>
+                {model.bankAccountLabel}:{" "}
+                <span className="font-mono">{model.bankAccount}</span>
+              </p>
+            ) : null}
+            {model.swiftBic ? (
+              <p>
+                SWIFT/BIC: <span className="font-mono">{model.swiftBic}</span>
+              </p>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
