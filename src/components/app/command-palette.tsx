@@ -82,6 +82,16 @@ export function CommandPalette() {
     [projects],
   );
 
+  // O(1) lookups for rows rendered below (replaces per-row .find() scans).
+  const projectById = React.useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, p] as const)),
+    [projects],
+  );
+  const clientById = React.useMemo(
+    () => new Map((clients ?? []).map((c) => [c.id, c] as const)),
+    [clients],
+  );
+
   const recentTasks = React.useMemo(() => {
     if (!tasks) return [];
     return [...tasks]
@@ -98,20 +108,20 @@ export function CommandPalette() {
 
   const filteredProjects = React.useMemo(() => {
     return activeProjects.filter((p) => {
-      const c = clients?.find((x) => x.id === p.clientId);
+      const c = clientById.get(p.clientId);
       const blob = `${p.name} ${c?.name ?? ""}`;
       return matchesQuery(blob, q);
     });
-  }, [activeProjects, clients, q]);
+  }, [activeProjects, clientById, q]);
 
   const filteredTasks = React.useMemo(() => {
     return recentTasks.filter((t) => {
-      const p = projects?.find((x) => x.id === t.projectId);
-      const c = p ? clients?.find((x) => x.id === p.clientId) : null;
+      const p = projectById.get(t.projectId);
+      const c = p ? clientById.get(p.clientId) : undefined;
       const blob = `${t.name} ${p?.name ?? ""} ${c?.name ?? ""} ${t.tags.join(" ")}`;
       return matchesQuery(blob, q);
     });
-  }, [recentTasks, projects, clients, q]);
+  }, [recentTasks, projectById, clientById, q]);
 
   const filteredInvoices = React.useMemo(() => {
     if (!invoices) return [];
@@ -284,7 +294,7 @@ export function CommandPalette() {
 
           <CommandGroup heading="Projects">
             {filteredProjects.slice(0, 25).map((p) => {
-              const c = clients?.find((x) => x.id === p.clientId);
+              const c = clientById.get(p.clientId);
               return (
                 <CommandItem
                   key={p.id}
@@ -307,8 +317,8 @@ export function CommandPalette() {
 
           <CommandGroup heading="Recent tasks">
             {filteredTasks.slice(0, 25).map((t) => {
-              const p = projects?.find((x) => x.id === t.projectId);
-              const c = p ? clients?.find((x) => x.id === p.clientId) : null;
+              const p = projectById.get(t.projectId);
+              const c = p ? clientById.get(p.clientId) : undefined;
               return (
                 <CommandItem
                   key={t.id}

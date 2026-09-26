@@ -1,0 +1,65 @@
+import { getServerProvider } from "@/server/provider";
+import { requireApiToken } from "@/server/auth";
+import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { withIdempotency } from "@/server/idempotency";
+import { recurringScheduleCreateSchema } from "@/server/validation";
+import type { RecurringCapableProvider } from "@/server/scheduler";
+import type { RecurringStatus } from "@/core/recurring";
+
+export const runtime = "nodejs";
+
+function asRecurring(provider: unknown): RecurringCapableProvider {
+  return provider as RecurringCapableProvider;
+}
+
+const STATUSES: RecurringStatus[] = ["active", "paused", "ended"];
+
+export async function GET(req: Request) {
+  const authErr = requireApiToken(req);
+  if (authErr) return authErr;
+  const { limit, cursor } = parsePagination(req);
+  const provider = asRecurring(getServerProvider());
+  const search = new URL(req.url).searchParams;
+  const clientId = search.get("clientId");
+  const statusParam = search.get("status");
+  const status = STATUSES.includes(statusParam as RecurringStatus)
+    ? (statusParam as RecurringStatus)
+    : undefined;
+
+  const schedules = clientId
+    ? await provider.listRecurringSchedulesByClient(clientId)
+    : await provider.listRecurringSchedules(status);
+  const filtered = status && clientId ? schedules.filter((s) => s.status === status) : schedules;
+  return paginated(filtered, limit, cursor);
+}
+
+export async function POST(req: Request) {
+  const authErr = requireApiToken(req);
+  if (authErr) return authErr;
+  return withIdempotency(req, async () => {
+    const body: unknown = await req.json().catch(() => null);
+    const parsed = recurringScheduleCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return badRequest("Invalid recurring schedule", parsed.error.issues);
+    }
+    const provider = asRecurring(getServerProvider());
+    const client = await provider.getClient(parsed.data.clientId);
+    if (!client) {
+      return badRequest(`clientId "${parsed.data.clientId}" does not exist`);
+    }
+    if (parsed.data.projectId) {
+      const project = await provider.getProject(parsed.data.projectId);
+      if (!project) {
+        return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
+      }
+    }
+    if (parsed.data.endDate != null && parsed.data.endDate < parsed.data.startDate) {
+      return badRequest("endDate must be >= startDate");
+    }
+    if (parsed.data.mode === "fixed" && parsed.data.lineItems.length === 0) {
+      return badRequest("fixed-mode schedules need at least one line item");
+    }
+    const schedule = await provider.createRecurringSchedule(parsed.data);
+    return created(schedule);
+  });
+}

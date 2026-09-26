@@ -211,7 +211,6 @@ export function LedgerContent() {
         return true;
       }
       const e = row.expense;
-      if (tagNeedle) return false;
       if (fromMs != null && e.date < fromMs) return false;
       if (toMs != null && e.date > toMs) return false;
       if (clientId) {
@@ -293,7 +292,10 @@ export function LedgerContent() {
     }
   };
 
-  const exportRows = React.useMemo((): LedgerExportRow[] => {
+  // Built on demand when the user clicks an export button — never eagerly.
+  // Keeps idle memory O(1) instead of holding three O(n) wrapper arrays that
+  // get rebuilt on every keystroke.
+  const buildExportRows = React.useCallback((): LedgerExportRow[] => {
     const out: LedgerExportRow[] = [];
     for (const row of filtered) {
       if (row.kind === "task") {
@@ -317,22 +319,17 @@ export function LedgerContent() {
     return out;
   }, [filtered, resolveClientProject, resolveExpenseContext]);
 
-  const taskExportRows = React.useMemo(
-    () => exportRows.filter((r): r is LedgerExportTask => r.kind === "task"),
-    [exportRows],
-  );
-  const expenseExportRows = React.useMemo(
-    () =>
-      exportRows.filter((r): r is LedgerExportExpense => r.kind === "expense"),
-    [exportRows],
-  );
-
   const parentRef = React.useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 76,
+    // Rows vary in height (tags, inline editors), so measure each row's real
+    // height instead of assuming a fixed size. A fixed estimate clipped rows
+    // and made them overlap. ResizeObserver re-measures on content change.
+    estimateSize: () => 92,
     overscan: 12,
+    getItemKey: (index) => rowKey(filtered[index]),
+    measureElement: (el) => el.getBoundingClientRect().height,
   });
 
   const allTags = React.useMemo(() => {
@@ -436,7 +433,7 @@ export function LedgerContent() {
       <div className="sticky top-0 z-20 space-y-3 rounded-lg border bg-background/95 p-4 backdrop-blur">
         <div className="flex flex-wrap items-end gap-2">
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">From</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">From</span>
             <Input
               type="date"
               className="h-9 w-[11rem]"
@@ -445,7 +442,7 @@ export function LedgerContent() {
             />
           </div>
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">To</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">To</span>
             <Input
               type="date"
               className="h-9 w-[11rem]"
@@ -552,7 +549,7 @@ export function LedgerContent() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          <span className="text-xs text-muted-foreground">Export</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Export</span>
           <Button
             type="button"
             variant="outline"
@@ -561,7 +558,11 @@ export function LedgerContent() {
             onClick={() =>
               downloadText(
                 "tallyhand-tasks.csv",
-                exportTasksCsv(taskExportRows),
+                exportTasksCsv(
+                  buildExportRows().filter(
+                    (r): r is LedgerExportTask => r.kind === "task",
+                  ),
+                ),
                 "text/csv;charset=utf-8",
               )
             }
@@ -577,7 +578,11 @@ export function LedgerContent() {
             onClick={() =>
               downloadText(
                 "tallyhand-expenses.csv",
-                exportExpensesCsv(expenseExportRows),
+                exportExpensesCsv(
+                  buildExportRows().filter(
+                    (r): r is LedgerExportExpense => r.kind === "expense",
+                  ),
+                ),
                 "text/csv;charset=utf-8",
               )
             }
@@ -594,7 +599,7 @@ export function LedgerContent() {
               downloadText(
                 "tallyhand-ledger.json",
                 exportCombinedJson(
-                  exportRows,
+                  buildExportRows(),
                   clients ?? [],
                   projects ?? [],
                 ),
@@ -613,7 +618,7 @@ export function LedgerContent() {
             onClick={() =>
               downloadText(
                 "tallyhand-ledger.md",
-                exportMarkdownLedger(exportRows),
+                exportMarkdownLedger(buildExportRows()),
                 "text/markdown;charset=utf-8",
               )
             }
@@ -698,9 +703,15 @@ export function LedgerContent() {
             {rowVirtualizer.getVirtualItems().map((vi) => {
               const row = filtered[vi.index];
               const key = rowKey(row);
+              const ctx =
+                row.kind === "task"
+                  ? resolveClientProject(row.task)
+                  : resolveExpenseContext(row.expense);
               return (
                 <div
-                  key={key}
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
                   className="absolute left-0 top-0 w-full border-b"
                   style={{
                     height: `${vi.size}px`,
@@ -713,6 +724,8 @@ export function LedgerContent() {
                   {row.kind === "task" ? (
                     <TaskRow
                       row={row}
+                      project={ctx.project}
+                      client={ctx.client}
                       selected={selected.has(key)}
                       onSelect={(checked) =>
                         onRowSelect(
@@ -722,11 +735,12 @@ export function LedgerContent() {
                           shiftRef.current,
                         )
                       }
-                      resolve={() => resolveClientProject(row.task)}
                     />
                   ) : (
                     <ExpenseRow
                       row={row}
+                      project={ctx.project}
+                      client={ctx.client}
                       selected={selected.has(key)}
                       onSelect={(checked) =>
                         onRowSelect(
@@ -736,7 +750,6 @@ export function LedgerContent() {
                           shiftRef.current,
                         )
                       }
-                      resolve={() => resolveExpenseContext(row.expense)}
                     />
                   )}
                 </div>
@@ -751,17 +764,18 @@ export function LedgerContent() {
 
 function TaskRow({
   row,
+  project,
+  client,
   selected,
   onSelect,
-  resolve,
 }: {
   row: Extract<UnifiedRow, { kind: "task" }>;
+  project?: Project;
+  client?: Client;
   selected: boolean;
   onSelect: (checked: boolean) => void;
-  resolve: () => { project?: Project; client?: Client };
 }) {
   const t = row.task;
-  const { project, client } = resolve();
   const [edit, setEdit] = React.useState<
     null | "name" | "minutes" | "tags"
   >(null);
@@ -964,17 +978,18 @@ function TaskRow({
 
 function ExpenseRow({
   row,
+  project,
+  client,
   selected,
   onSelect,
-  resolve,
 }: {
   row: Extract<UnifiedRow, { kind: "expense" }>;
+  project?: Project;
+  client?: Client;
   selected: boolean;
   onSelect: (checked: boolean) => void;
-  resolve: () => { project?: Project; client?: Client };
 }) {
   const e = row.expense;
-  const { project, client } = resolve();
   const [edit, setEdit] = React.useState<null | "amount" | "category" | "note">(
     null,
   );

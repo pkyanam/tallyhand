@@ -17,8 +17,10 @@ import {
   clientRepo,
   invoiceRepo,
   projectRepo,
+  recurringScheduleRepo,
   taskRepo,
 } from "@/lib/db/repos";
+import { describeFrequency } from "@/core/recurring";
 import {
   recentEntries,
   startOfWeekMonday,
@@ -32,6 +34,12 @@ export function DashboardContent() {
   const projects = useLiveQuery(() => projectRepo.list(), []);
   const clients = useLiveQuery(() => clientRepo.list(true), []);
   const invoices = useLiveQuery(() => invoiceRepo.list(), []);
+  const recurring = useLiveQuery(() => recurringScheduleRepo.list("active"), []);
+
+  const upcomingRecurring = React.useMemo(
+    () => (recurring ?? []).slice(0, 3),
+    [recurring],
+  );
 
   const weekStart = React.useMemo(() => startOfWeekMonday(new Date()), []);
 
@@ -65,6 +73,16 @@ export function DashboardContent() {
   const recent = React.useMemo(
     () => recentEntries(tasks ?? [], 10),
     [tasks],
+  );
+
+  // O(1) lookups for the recent-activity rows (replaces per-row .find()).
+  const projectById = React.useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, p] as const)),
+    [projects],
+  );
+  const clientById = React.useMemo(
+    () => new Map((clients ?? []).map((c) => [c.id, c] as const)),
+    [clients],
   );
 
   return (
@@ -166,6 +184,49 @@ export function DashboardContent() {
             ) : null}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming recurring</CardTitle>
+            <CardDescription>
+              Next automated billing runs, soonest first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {recurring === undefined ? (
+              <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+            ) : upcomingRecurring.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">
+                No active schedules.{" "}
+                <Link href="/invoices/recurring/new" className="underline">
+                  Create one
+                </Link>{" "}
+                to automate repeat billing.
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {upcomingRecurring.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 px-6 py-3 text-sm"
+                  >
+                    <Link
+                      href={`/invoices/recurring/${s.id}/edit`}
+                      className="min-w-0 truncate font-medium hover:underline"
+                    >
+                      {s.name}
+                    </Link>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {describeFrequency(s.frequency, s.interval)}
+                      {" · "}
+                      {new Date(s.nextRunAt).toLocaleDateString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mt-6">
@@ -190,10 +251,10 @@ export function DashboardContent() {
           ) : (
             <ul className="divide-y">
               {recent.map((t) => {
-                const project = projects?.find((p) => p.id === t.projectId);
+                const project = projectById.get(t.projectId);
                 const client = project
-                  ? clients?.find((c) => c.id === project.clientId)
-                  : null;
+                  ? clientById.get(project.clientId)
+                  : undefined;
                 return (
                   <li
                     key={t.id}

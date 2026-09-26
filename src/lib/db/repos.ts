@@ -1,239 +1,214 @@
-import { getDB } from "./schema";
-import { newId, now } from "./id";
-import { normalizeSettings } from "@/lib/settings-normalize";
-import {
-  DEFAULT_SETTINGS,
-  type Client,
-  type Project,
-  type Task,
-  type Expense,
-  type Invoice,
-  type Settings,
-} from "./types";
+import { dexieStorageProvider } from "./dexie-provider";
+import { pluginRegistry } from "@/plugins/registry";
+import type {
+  ClientCreateInput,
+  ExpenseCreateInput,
+  InvoiceCreateInput,
+  ProjectCreateInput,
+  StorageProvider,
+  SettingsPatch,
+  TaskCreateInput,
+} from "@/core/storage";
+import type {
+  Client,
+  Expense,
+  Invoice,
+  Project,
+  Settings,
+  Task,
+} from "@/core/entities";
+import type {
+  RecurringSchedule,
+  RecurringScheduleCreateInput,
+  RecurringStatus,
+  Retainer,
+  RetainerCreateInput,
+  RetainerStatus,
+} from "@/core/recurring";
 
-type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+/**
+ * Active storage backend. Defaults to the Dexie (IndexedDB) provider.
+ * Swap via `setStorageProvider` (e.g. in tests, or for a future sync-server
+ * / hosted Postgres provider). Repos always program against the
+ * `StorageProvider` interface — never against Dexie directly.
+ */
+let activeProvider: StorageProvider = dexieStorageProvider;
+
+export function setStorageProvider(provider: StorageProvider): void {
+  activeProvider = provider;
+}
+
+export function getStorageProvider(): StorageProvider {
+  return activeProvider;
+}
 
 export const clientRepo = {
-  async list(includeArchived = false): Promise<Client[]> {
-    const all = await getDB().clients.orderBy("name").toArray();
-    return includeArchived ? all : all.filter((c) => !c.archived);
+  list(includeArchived = false): Promise<Client[]> {
+    return activeProvider.listClients(includeArchived);
   },
-  async get(id: string) {
-    return getDB().clients.get(id);
+  get(id: string): Promise<Client | undefined> {
+    return activeProvider.getClient(id);
   },
-  async create(
-    input: Optional<Client, "id" | "archived" | "createdAt" | "updatedAt">,
-  ): Promise<Client> {
-    const ts = now();
-    const client: Client = {
-      id: input.id ?? newId("cli"),
-      archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
-      ...input,
-    } as Client;
-    await getDB().clients.add(client);
-    return client;
+  create(input: ClientCreateInput): Promise<Client> {
+    return activeProvider.createClient(input);
   },
-  async update(id: string, patch: Partial<Client>) {
-    await getDB().clients.update(id, { ...patch, updatedAt: now() });
+  update(id: string, patch: Partial<Client>): Promise<void> {
+    return activeProvider.updateClient(id, patch);
   },
-  async archive(id: string) {
-    return this.update(id, { archived: true });
+  archive(id: string): Promise<void> {
+    return activeProvider.updateClient(id, { archived: true });
   },
-  async remove(id: string) {
-    await getDB().clients.delete(id);
+  remove(id: string): Promise<void> {
+    return activeProvider.removeClient(id);
   },
 };
 
 export const projectRepo = {
-  async listByClient(clientId: string): Promise<Project[]> {
-    return getDB().projects.where("clientId").equals(clientId).toArray();
+  listByClient(clientId: string): Promise<Project[]> {
+    return activeProvider.listProjectsByClient(clientId);
   },
-  async list(): Promise<Project[]> {
-    return getDB().projects.toArray();
+  list(): Promise<Project[]> {
+    return activeProvider.listProjects();
   },
-  async get(id: string) {
-    return getDB().projects.get(id);
+  get(id: string): Promise<Project | undefined> {
+    return activeProvider.getProject(id);
   },
-  async create(
-    input: Optional<Project, "id" | "archived" | "createdAt" | "updatedAt">,
-  ): Promise<Project> {
-    const ts = now();
-    const project: Project = {
-      id: input.id ?? newId("prj"),
-      archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
-      ...input,
-    } as Project;
-    await getDB().projects.add(project);
-    return project;
+  create(input: ProjectCreateInput): Promise<Project> {
+    return activeProvider.createProject(input);
   },
-  async update(id: string, patch: Partial<Project>) {
-    await getDB().projects.update(id, { ...patch, updatedAt: now() });
+  update(id: string, patch: Partial<Project>): Promise<void> {
+    return activeProvider.updateProject(id, patch);
   },
-  async remove(id: string) {
-    await getDB().projects.delete(id);
+  remove(id: string): Promise<void> {
+    return activeProvider.removeProject(id);
   },
 };
 
 export const taskRepo = {
-  async list(): Promise<Task[]> {
-    return getDB().tasks.orderBy("startAt").reverse().toArray();
+  list(): Promise<Task[]> {
+    return activeProvider.listTasks();
   },
-  async get(id: string) {
-    return getDB().tasks.get(id);
+  get(id: string): Promise<Task | undefined> {
+    return activeProvider.getTask(id);
   },
-  async listByProject(projectId: string) {
-    return getDB().tasks.where("projectId").equals(projectId).toArray();
+  listByProject(projectId: string): Promise<Task[]> {
+    return activeProvider.listTasksByProject(projectId);
   },
-  async listUnbilled() {
-    return getDB().tasks.filter((t) => !t.isBilled).toArray();
+  listUnbilled(): Promise<Task[]> {
+    return activeProvider.listUnbilledTasks();
   },
-  async create(
-    input: Optional<
-      Task,
-      "id" | "isBilled" | "tags" | "createdAt" | "updatedAt" | "durationMinutes"
-    >,
-  ): Promise<Task> {
-    const ts = now();
-    const durationMinutes =
-      input.durationMinutes ??
-      Math.max(0, Math.round((input.endAt - input.startAt) / 60000));
-    const task: Task = {
-      id: input.id ?? newId("tsk"),
-      isBilled: input.isBilled ?? false,
-      tags: input.tags ?? [],
-      durationMinutes,
-      createdAt: ts,
-      updatedAt: ts,
-      ...input,
-    } as Task;
-    await getDB().tasks.add(task);
+  async create(input: TaskCreateInput): Promise<Task> {
+    const task = await activeProvider.createTask(input);
+    await pluginRegistry.emit("onTaskCreated", task);
     return task;
   },
-  async update(id: string, patch: Partial<Task>) {
-    const next: Partial<Task> = { ...patch, updatedAt: now() };
-    if (patch.startAt != null || patch.endAt != null) {
-      const existing = await getDB().tasks.get(id);
-      if (existing) {
-        const startAt = patch.startAt ?? existing.startAt;
-        const endAt = patch.endAt ?? existing.endAt;
-        next.durationMinutes = Math.max(
-          0,
-          Math.round((endAt - startAt) / 60000),
-        );
-      }
+  async update(id: string, patch: Partial<Task>): Promise<void> {
+    await activeProvider.updateTask(id, patch);
+    const current = await activeProvider.getTask(id);
+    if (current) {
+      await pluginRegistry.emit("onTaskUpdated", current);
     }
-    await getDB().tasks.update(id, next);
   },
-  async remove(id: string) {
-    await getDB().tasks.delete(id);
+  remove(id: string): Promise<void> {
+    return activeProvider.removeTask(id);
   },
 };
 
 export const expenseRepo = {
-  async list(): Promise<Expense[]> {
-    return getDB().expenses.orderBy("date").reverse().toArray();
+  list(): Promise<Expense[]> {
+    return activeProvider.listExpenses();
   },
-  async get(id: string) {
-    return getDB().expenses.get(id);
+  get(id: string): Promise<Expense | undefined> {
+    return activeProvider.getExpense(id);
   },
-  async create(
-    input: Optional<Expense, "id" | "isBilled" | "createdAt" | "updatedAt">,
-  ): Promise<Expense> {
-    const ts = now();
-    const expense: Expense = {
-      id: input.id ?? newId("exp"),
-      isBilled: input.isBilled ?? false,
-      createdAt: ts,
-      updatedAt: ts,
-      ...input,
-    } as Expense;
-    await getDB().expenses.add(expense);
+  async create(input: ExpenseCreateInput): Promise<Expense> {
+    const expense = await activeProvider.createExpense(input);
+    await pluginRegistry.emit("onExpenseCreated", expense);
     return expense;
   },
-  async update(id: string, patch: Partial<Expense>) {
-    await getDB().expenses.update(id, { ...patch, updatedAt: now() });
+  update(id: string, patch: Partial<Expense>): Promise<void> {
+    return activeProvider.updateExpense(id, patch);
   },
-  async remove(id: string) {
-    await getDB().expenses.delete(id);
+  remove(id: string): Promise<void> {
+    return activeProvider.removeExpense(id);
   },
 };
 
 export const invoiceRepo = {
-  async list(): Promise<Invoice[]> {
-    return getDB().invoices.orderBy("issueDate").reverse().toArray();
+  list(): Promise<Invoice[]> {
+    return activeProvider.listInvoices();
   },
-  async get(id: string) {
-    return getDB().invoices.get(id);
+  get(id: string): Promise<Invoice | undefined> {
+    return activeProvider.getInvoice(id);
   },
-  async getByPublicToken(token: string): Promise<Invoice | undefined> {
-    if (!token) return undefined;
-    return getDB().invoices.where("publicToken").equals(token).first();
+  getByPublicToken(token: string): Promise<Invoice | undefined> {
+    return activeProvider.getInvoiceByPublicToken(token);
   },
-  async create(
-    input: Optional<Invoice, "id" | "createdAt" | "updatedAt">,
-  ): Promise<Invoice> {
-    const ts = now();
-    const invoice: Invoice = {
-      id: input.id ?? newId("inv"),
-      createdAt: ts,
-      updatedAt: ts,
-      ...input,
-    } as Invoice;
-    await getDB().invoices.add(invoice);
-    return invoice;
+  create(input: InvoiceCreateInput): Promise<Invoice> {
+    return activeProvider.createInvoice(input);
   },
-  async update(id: string, patch: Partial<Invoice>) {
-    await getDB().invoices.update(id, { ...patch, updatedAt: now() });
+  update(id: string, patch: Partial<Invoice>): Promise<void> {
+    return activeProvider.updateInvoice(id, patch);
   },
-  async remove(id: string) {
-    await getDB().invoices.delete(id);
+  remove(id: string): Promise<void> {
+    return activeProvider.removeInvoice(id);
   },
 };
 
-export const settingsRepo = {
-  // Pure read — safe inside useLiveQuery. Returns undefined if the singleton
-  // row has not been written yet.
-  async read(): Promise<Settings | undefined> {
-    return getDB().settings.get("singleton");
+export const recurringScheduleRepo = {
+  list(status?: RecurringStatus): Promise<RecurringSchedule[]> {
+    return activeProvider.listRecurringSchedules(status);
   },
-  // Read-or-initialize. Writes the default row if missing. Do NOT call this
+  listByClient(clientId: string): Promise<RecurringSchedule[]> {
+    return activeProvider.listRecurringSchedulesByClient(clientId);
+  },
+  get(id: string): Promise<RecurringSchedule | undefined> {
+    return activeProvider.getRecurringSchedule(id);
+  },
+  create(input: RecurringScheduleCreateInput): Promise<RecurringSchedule> {
+    return activeProvider.createRecurringSchedule(input);
+  },
+  update(id: string, patch: Partial<RecurringSchedule>): Promise<void> {
+    return activeProvider.updateRecurringSchedule(id, patch);
+  },
+  remove(id: string): Promise<void> {
+    return activeProvider.removeRecurringSchedule(id);
+  },
+};
+
+export const retainerRepo = {
+  list(status?: RetainerStatus): Promise<Retainer[]> {
+    return activeProvider.listRetainers(status);
+  },
+  listByClient(clientId: string): Promise<Retainer[]> {
+    return activeProvider.listRetainersByClient(clientId);
+  },
+  get(id: string): Promise<Retainer | undefined> {
+    return activeProvider.getRetainer(id);
+  },
+  create(input: RetainerCreateInput): Promise<Retainer> {
+    return activeProvider.createRetainer(input);
+  },
+  update(id: string, patch: Partial<Retainer>): Promise<void> {
+    return activeProvider.updateRetainer(id, patch);
+  },
+  remove(id: string): Promise<void> {
+    return activeProvider.removeRetainer(id);
+  },
+};
+
+export const settingsRepo = {  // Pure read — safe inside useLiveQuery. Returns undefined if the singleton
+  // row has not been written yet.
+  read(): Promise<Settings | undefined> {
+    return activeProvider.readSettings();
+  },
+  // Read-or-initialize. May write the default row if missing. Do NOT call this
   // inside a Dexie liveQuery callback (Dexie forbids writes from querier
   // functions and will silently loop). Call from effects or event handlers.
-  async get(): Promise<Settings> {
-    const existing = await getDB().settings.get("singleton");
-    if (existing) {
-      const merged = normalizeSettings(existing);
-      if (JSON.stringify(merged) !== JSON.stringify(existing)) {
-        await getDB().settings.put(merged);
-      }
-      return merged;
-    }
-    await getDB().settings.put(DEFAULT_SETTINGS);
-    return DEFAULT_SETTINGS;
+  get(): Promise<Settings> {
+    return activeProvider.getSettings();
   },
-  async update(patch: Partial<Settings>) {
-    const current = await this.get();
-    const next = normalizeSettings({
-      ...current,
-      ...patch,
-      id: "singleton",
-      business: { ...current.business, ...patch.business },
-      invoice: { ...current.invoice, ...patch.invoice },
-      reckoning: {
-        ...current.reckoning,
-        ...(patch.reckoning ?? {}),
-      },
-      appearance: {
-        ...current.appearance,
-        ...(patch.appearance ?? {}),
-      },
-      expenseCategories: patch.expenseCategories ?? current.expenseCategories,
-    });
-    await getDB().settings.put(next);
-    return next;
+  update(patch: SettingsPatch): Promise<Settings> {
+    return activeProvider.updateSettings(patch);
   },
 };

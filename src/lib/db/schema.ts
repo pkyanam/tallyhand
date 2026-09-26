@@ -8,6 +8,8 @@ import type {
   Settings,
 } from "./types";
 
+import type { RecurringSchedule, Retainer } from "@/core/recurring";
+
 export class TallyhandDB extends Dexie {
   clients!: Table<Client, string>;
   projects!: Table<Project, string>;
@@ -15,6 +17,8 @@ export class TallyhandDB extends Dexie {
   expenses!: Table<Expense, string>;
   invoices!: Table<Invoice, string>;
   settings!: Table<Settings, string>;
+  recurringSchedules!: Table<RecurringSchedule, string>;
+  retainers!: Table<Retainer, string>;
 
   constructor() {
     super("tallyhand");
@@ -39,6 +43,19 @@ export class TallyhandDB extends Dexie {
       invoices:
         "id, clientId, invoiceNumber, status, issueDate, dueDate, publicToken, updatedAt",
       settings: "id",
+    });
+    this.version(3).stores({
+      clients: "id, name, archived, updatedAt",
+      projects: "id, clientId, name, archived, updatedAt",
+      tasks:
+        "id, projectId, startAt, endAt, isBilled, invoiceId, updatedAt, *tags",
+      expenses:
+        "id, clientId, projectId, date, category, isBilled, invoiceId, updatedAt",
+      invoices:
+        "id, clientId, invoiceNumber, status, issueDate, dueDate, publicToken, updatedAt",
+      settings: "id",
+      recurringSchedules: "id, clientId, status, nextRunAt, updatedAt",
+      retainers: "id, clientId, status, updatedAt",
     });
   }
 }

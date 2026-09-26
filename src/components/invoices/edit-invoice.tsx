@@ -30,7 +30,7 @@ import {
 } from "@/lib/invoice-helpers";
 import type { Invoice, InvoiceStatus } from "@/lib/db/types";
 import { newInvoicePublicToken } from "@/lib/db/id";
-import { InvoicePublicLinkPanel } from "@/components/invoices/invoice-public-link-panel";
+import { InvoiceSharePanel } from "@/components/invoices/invoice-share-panel";
 
 function statusBadge(status: InvoiceStatus) {
   switch (status) {
@@ -296,8 +296,11 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
         </Card>
       ) : null}
 
-      <InvoicePublicLinkPanel
+      <InvoiceSharePanel
         invoice={draft}
+        savedInvoice={invoice}
+        client={clients.find((c) => c.id === draft.clientId) ?? null}
+        settings={settings}
         readOnly={readOnly}
         dirty={dirty}
       />

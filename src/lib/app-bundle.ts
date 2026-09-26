@@ -4,12 +4,22 @@ import {
   expenseRepo,
   invoiceRepo,
   projectRepo,
+  recurringScheduleRepo,
+  retainerRepo,
   settingsRepo,
   taskRepo,
 } from "@/lib/db/repos";
 import { normalizeSettings } from "@/lib/settings-normalize";
 import type { Settings } from "@/lib/db/types";
-import type { Client, Expense, Invoice, Project, Task } from "@/lib/db/types";
+import type {
+  Client,
+  Expense,
+  Invoice,
+  Project,
+  RecurringSchedule,
+  Retainer,
+  Task,
+} from "@/lib/db/types";
 import {
   exportCombinedJson,
   exportExpensesCsv,
@@ -31,6 +41,9 @@ export type TallyhandBundleV1 = {
   tasks: Task[];
   expenses: Expense[];
   invoices: Invoice[];
+  /** Optional: absent in bundles exported before recurring/retainers existed. */
+  recurringSchedules?: RecurringSchedule[];
+  retainers?: Retainer[];
 };
 
 function buildLedgerRows(
@@ -77,6 +90,8 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     tasks,
     expenses,
     invoices,
+    recurringSchedules,
+    retainers,
   ] = await Promise.all([
     settingsRepo.get(),
     clientRepo.list(true),
@@ -84,6 +99,8 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     taskRepo.list(),
     expenseRepo.list(),
     invoiceRepo.list(),
+    recurringScheduleRepo.list(),
+    retainerRepo.list(),
   ]);
   return {
     format: TALLYHAND_BUNDLE_FORMAT,
@@ -94,6 +111,8 @@ export async function exportTallyhandBundleV1(): Promise<TallyhandBundleV1> {
     tasks,
     expenses,
     invoices,
+    recurringSchedules,
+    retainers,
   };
 }
 
@@ -180,6 +199,8 @@ export async function importTallyhandBundleV1(bundle: TallyhandBundleV1): Promis
     db.expenses,
     db.invoices,
     db.settings,
+    db.recurringSchedules,
+    db.retainers,
   ];
   await db.transaction("rw", tables, async () => {
     await db.clients.clear();
@@ -188,11 +209,17 @@ export async function importTallyhandBundleV1(bundle: TallyhandBundleV1): Promis
     await db.expenses.clear();
     await db.invoices.clear();
     await db.settings.clear();
+    await db.recurringSchedules.clear();
+    await db.retainers.clear();
     if (bundle.clients.length) await db.clients.bulkAdd(bundle.clients);
     if (bundle.projects.length) await db.projects.bulkAdd(bundle.projects);
     if (bundle.tasks.length) await db.tasks.bulkAdd(bundle.tasks);
     if (bundle.expenses.length) await db.expenses.bulkAdd(bundle.expenses);
     if (bundle.invoices.length) await db.invoices.bulkAdd(bundle.invoices);
+    const schedules = bundle.recurringSchedules ?? [];
+    const retainers = bundle.retainers ?? [];
+    if (schedules.length) await db.recurringSchedules.bulkAdd(schedules);
+    if (retainers.length) await db.retainers.bulkAdd(retainers);
     await db.settings.put(normalizeSettings(bundle.settings));
   });
 }

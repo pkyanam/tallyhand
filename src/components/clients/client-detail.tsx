@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/app/page-header";
 import { ProjectsSection } from "./projects-section";
+import { RetainersSection } from "./retainers-section";
 import { clientRepo, projectRepo, taskRepo } from "@/lib/db/repos";
 import type { Task } from "@/lib/db/types";
 import { formatCurrency, formatDuration } from "@/lib/utils";
@@ -41,6 +42,12 @@ export function ClientDetail({ clientId }: { clientId: string }) {
       .sort((a, b) => b.startAt - a.startAt)
       .slice(0, 10);
   }, [allTasks, projectIds]);
+
+  // O(1) project lookup for the recent-activity rows below.
+  const projectById = React.useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, p] as const)),
+    [projects],
+  );
 
   if (client === undefined) {
     return (
@@ -173,6 +180,8 @@ export function ClientDetail({ clientId }: { clientId: string }) {
         <div className="space-y-6 lg:col-span-2">
           <ProjectsSection client={client} />
 
+          <RetainersSection clientId={client.id} />
+
           <section className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">
               Recent activity
@@ -192,8 +201,7 @@ export function ClientDetail({ clientId }: { clientId: string }) {
                         key={t.id}
                         task={t}
                         projectName={
-                          (projects ?? []).find((p) => p.id === t.projectId)
-                            ?.name ?? "Unknown"
+                          projectById.get(t.projectId)?.name ?? "Unknown"
                         }
                       />
                     ))}

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, Plus, Trash2, CalendarClock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,12 +83,20 @@ export function InvoicesList() {
         title="Invoices"
         description="Drafts and sent invoices. PDF export included."
         actions={
-          <Button asChild>
-            <Link href="/invoices/new">
-              <Plus className="mr-1 h-4 w-4" />
-              New invoice
-            </Link>
-          </Button>
+          <>
+            <Button asChild variant="outline">
+              <Link href="/invoices/recurring">
+                <CalendarClock className="mr-1 h-4 w-4" />
+                Recurring
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/invoices/new">
+                <Plus className="mr-1 h-4 w-4" />
+                New invoice
+              </Link>
+            </Button>
+          </>
         }
       />
 

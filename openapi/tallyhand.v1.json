@@ -1,0 +1,3612 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tallyhand API v1",
+    "version": "1.0.0",
+    "description": "Tallyhand is a local-first time tracker + invoicing app for freelancers/contractors. This API lets AI agents (and scripts, and the `tally` CLI) drive it without a browser.\n\n## Agent quickstart\n1. **Enable the API**: set `TALLYHAND_API_TOKEN` on the server. Every request (except `/health` and `/openapi.json`) needs `Authorization: Bearer <token>`.\n2. **Typical flow**: create a client → create a project under it → log tasks (time entries) → create an invoice (optionally from unbilled work) → `POST /invoices/{id}/send` to mark it sent (this also marks the linked tasks/expenses billed) → `POST /invoices/{id}/paid` when money arrives.\n3. **Recurring billing**: create a `recurring-schedule` (fixed monthly fee, or auto-sweep of unbilled work), then call `POST /scheduler/run` on a cron to generate draft invoices when due.\n\n## Conventions\n- **Dates/times** are millisecond epoch numbers (UTC). Where the schema says `dateMs`, you may also send an ISO-8601 string; the server coerces it.\n- **Money**: invoice line items use decimal dollars (`rate`, `amount`); retainers use integer **cents** (`amountCents`). Watch the units.\n- **Envelopes**: success is `{ \"data\": ... }`; lists add `\"meta\": { \"limit\", \"nextCursor\", \"total\" }`. Errors are `{ \"error\": { \"code\", \"message\", \"details?\" } }`.\n- **Pagination**: `?limit=` (default 50, max 200), `?cursor=` (opaque base64 token from `meta.nextCursor`; null = last page).\n- **Idempotency**: send `Idempotency-Key: <uuid>` on any POST. Retrying with the same key replays the stored response instead of executing twice. Always use it for creates in agentic loops.\n- **No partial failure**: multi-step writes (invoice numbering, send/paid transitions, scheduler runs) are atomic server-side.\n- **Timers**: there is no server-side 'open timer'. A timer is a client-side concept — create the task when it stops (see the CLI/MCP timer tools, which manage this for you).",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Same origin (the Tallyhand server serves its own API)"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "meta",
+      "description": "Health and API discovery (no auth)"
+    },
+    {
+      "name": "clients",
+      "description": "Billable clients"
+    },
+    {
+      "name": "projects",
+      "description": "Projects belong to one client"
+    },
+    {
+      "name": "tasks",
+      "description": "Time entries — each belongs to a project"
+    },
+    {
+      "name": "expenses",
+      "description": "Billable expenses"
+    },
+    {
+      "name": "invoices",
+      "description": "Invoices and their send/paid lifecycle"
+    },
+    {
+      "name": "recurring",
+      "description": "Recurring invoice schedules + scheduler"
+    },
+    {
+      "name": "retainers",
+      "description": "Retainer agreements (prepaid hours / monthly fee)"
+    },
+    {
+      "name": "settings",
+      "description": "Singleton business/invoice settings"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "security": [],
+        "summary": "Liveness probe",
+        "description": "No auth. Returns { status: 'ok', version }. Use it to check the server is up before doing anything else.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Server is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "security": [],
+        "summary": "This OpenAPI document",
+        "description": "No auth. Returns this exact spec as JSON. Fetch it when you need the precise schema for an operation.",
+        "operationId": "getOpenApi",
+        "responses": {
+          "200": {
+            "description": "The OpenAPI 3.1 document"
+          }
+        }
+      }
+    },
+    "/clients": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "List clients",
+        "description": "Alphabetical by name. Archived clients are hidden unless `?includeArchived=true`.",
+        "operationId": "listClients",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Include archived clients"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiDisabled"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Create a client",
+        "description": "The root of everything billable: projects belong to clients, invoices bill clients. Set `defaultRate` (dollars/hour) once and every task logged under this client's projects inherits it on invoices.",
+        "operationId": "createClient",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientInput"
+              },
+              "examples": {
+                "typical": {
+                  "value": {
+                    "name": "Acme Corp",
+                    "email": "billing@acme.com",
+                    "defaultRate": 150
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiDisabled"
+          }
+        }
+      }
+    },
+    "/clients/{id}": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Get a client",
+        "operationId": "getClient",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Update a client",
+        "description": "Partial update — only send the fields you're changing. `updatedAt` is refreshed server-side.",
+        "operationId": "updateClient",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Delete a client",
+        "description": "Hard delete. Prefer archiving (PATCH { archived: true }) — deleting orphans the client's projects/tasks/invoices, which keep existing but lose their parent.",
+        "operationId": "deleteClient",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "List projects",
+        "description": "Filter by `?clientId=`. `rateOverride` (dollars/hour) on a project beats the client's `defaultRate` when building invoice line items.",
+        "operationId": "listProjects",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Create a project",
+        "description": "A project belongs to exactly one client. Tasks are logged against projects, never directly against clients.",
+        "operationId": "createProject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              },
+              "examples": {
+                "typical": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "name": "Website redesign",
+                    "rateOverride": 175
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/projects/{id}": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Get a project",
+        "operationId": "getProject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Update a project",
+        "operationId": "updateProject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Delete a project",
+        "description": "Hard delete. Prefer archiving. Tasks already logged under it are NOT deleted (they become orphaned).",
+        "operationId": "deleteProject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "List tasks (time entries)",
+        "description": "Newest first. Filter by `?projectId=`, `?clientId=`, `?isBilled=true|false`. The `?isBilled=false` view is your 'uninvoiced work' queue — the input to invoice drafting.",
+        "operationId": "listTasks",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isBilled",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Log a time entry",
+        "description": "Creates one task. `durationMinutes` is derived from `startAt`/`endAt` when omitted — prefer sending both timestamps and letting the server compute it. `endAt` must be >= `startAt`. There is no server-side running timer: when a timer stops, POST the completed entry.",
+        "operationId": "createTask",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskInput"
+              },
+              "examples": {
+                "typical": {
+                  "value": {
+                    "projectId": "prj_abc",
+                    "name": "API integration",
+                    "startAt": 1758852000000,
+                    "endAt": 1758859200000,
+                    "tags": [
+                      "backend"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Get a task",
+        "operationId": "getTask",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Update a task",
+        "description": "Partial update. Changing `startAt`/`endAt` recomputes `durationMinutes` server-side. Do not hand-edit `isBilled`/`invoiceId` to bill work — use the invoice send flow so books stay consistent.",
+        "operationId": "updateTask",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Delete a task",
+        "operationId": "deleteTask",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "List expenses",
+        "description": "Newest first. Filter by `?clientId=`, `?projectId=`, `?category=`, `?isBilled=true|false`.",
+        "operationId": "listExpenses",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isBilled",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of expenses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Create an expense",
+        "description": "`amount` is in dollars (>= 0). Attach to a client, a project, or neither (unattached expenses can still be added to invoices manually).",
+        "operationId": "createExpense",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseInput"
+              },
+              "examples": {
+                "typical": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "date": 1758852000000,
+                    "amount": 42.5,
+                    "category": "Travel",
+                    "note": "Train to client site"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/expenses/{id}": {
+      "get": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Get an expense",
+        "operationId": "getExpense",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The expense",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Update an expense",
+        "operationId": "updateExpense",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpensePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated expense",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Delete an expense",
+        "operationId": "deleteExpense",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/invoices": {
+      "get": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "List invoices",
+        "description": "Newest first. Filter by `?clientId=` and `?status=draft|sent|paid`. `?status=draft` is your review queue; `?status=sent` is your outstanding receivables.",
+        "operationId": "listInvoices",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "sent",
+                "paid"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of invoices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Create an invoice",
+        "description": "Creates an invoice (default `draft`). The server fills in what you omit: `invoiceNumber` (atomic sequential numbering), `subtotal`/`total` (from line items), line-item `id`/`amount`, and `publicToken`. To link entries, set `sourceType: 'task'|'expense'` + `sourceId` on a line item — `POST /invoices/{id}/send` then marks those entries billed. Gotcha: creating the invoice does NOT mark anything billed; only sending does.",
+        "operationId": "createInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceInput"
+              },
+              "examples": {
+                "manual": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "issueDate": 1758852000000,
+                    "dueDate": 1760061600000,
+                    "lineItems": [
+                      {
+                        "description": "Website redesign — September",
+                        "quantity": 20,
+                        "rate": 150
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/invoices/{id}": {
+      "get": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Get an invoice",
+        "operationId": "getInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Update an invoice",
+        "description": "Partial update. If you replace `lineItems` without sending `subtotal`/`total`, the server recomputes them. Prefer the dedicated send/paid endpoints for status transitions.",
+        "operationId": "updateInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoicePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Delete an invoice",
+        "description": "Hard delete. Note: tasks/expenses already marked billed by this invoice stay billed — un-bill them manually if you void an invoice.",
+        "operationId": "deleteInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/invoices/{id}/send": {
+      "post": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Mark an invoice sent",
+        "description": "The billing moment: flips status to `sent` and marks every task/expense linked via line items as billed (with this invoice's id). Atomic and idempotent — retry freely; already-sent invoices are a no-op success.",
+        "operationId": "sendInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The sent invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/invoices/{id}/paid": {
+      "post": {
+        "tags": [
+          "invoices"
+        ],
+        "summary": "Mark an invoice paid",
+        "description": "Flips status to `paid`. Idempotent — retry freely. There is no partial-payment model; an invoice is either outstanding or paid.",
+        "operationId": "markInvoicePaid",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The paid invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/recurring-schedules": {
+      "get": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "List recurring schedules",
+        "description": "Ordered by next run time (soonest first). Filter by `?clientId=` and `?status=active|paused|ended`.",
+        "operationId": "listRecurringSchedules",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "ended"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of schedules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringScheduleList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Create a recurring schedule",
+        "description": "Two modes: `fixed` bills the same `lineItems` every run (e.g. a $2,000/mo retainer fee — needs at least one line item); `unbilled` sweeps the client's (optionally one project's) unbilled tasks+expenses into an invoice each run and skips empty runs. `nextRunAt` defaults to `startDate`. Frequency math: weekly = 7d × interval; monthly/quarterly/yearly = calendar months (×1/×3/×12 interval) clamped to month-end (Jan 31 → Feb 28).",
+        "operationId": "createRecurringSchedule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringScheduleInput"
+              },
+              "examples": {
+                "monthlyRetainer": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "name": "Acme monthly retainer",
+                    "mode": "fixed",
+                    "frequency": "monthly",
+                    "interval": 1,
+                    "lineItems": [
+                      {
+                        "description": "Monthly retainer — dev support",
+                        "quantity": 1,
+                        "rate": 2000
+                      }
+                    ],
+                    "startDate": "2026-10-01"
+                  }
+                },
+                "unbilledSweep": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "name": "Acme monthly billing",
+                    "mode": "unbilled",
+                    "frequency": "monthly",
+                    "interval": 1,
+                    "lineItems": [],
+                    "startDate": "2026-10-01"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringScheduleEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/recurring-schedules/{id}": {
+      "get": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Get a recurring schedule",
+        "operationId": "getRecurringSchedule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringScheduleEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Update a recurring schedule",
+        "description": "Partial update. Use `{ status: 'paused' }` to pause billing without deleting the schedule, `{ status: 'active' }` to resume. You can also reschedule by setting `nextRunAt` directly.",
+        "operationId": "updateRecurringSchedule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringSchedulePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringScheduleEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Delete a recurring schedule",
+        "description": "Stops future runs. Invoices already generated are untouched.",
+        "operationId": "deleteRecurringSchedule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/recurring-schedules/{id}/run": {
+      "post": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Force-run one schedule now",
+        "description": "Generates a draft invoice from this schedule immediately — even if it isn't due, even if paused. Counts as an occurrence and advances `nextRunAt`. Use it to bill a client early or to test a schedule. Returns the run result: `{ scheduleId, invoiceId (null when the run found nothing billable), skipped, nextRunAt, occurrences, status }`.",
+        "operationId": "runRecurringSchedule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRunResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/scheduler/run": {
+      "post": {
+        "tags": [
+          "recurring"
+        ],
+        "summary": "Run all due schedules",
+        "description": "The automation hook: finds every `active` schedule with `nextRunAt <= now`, generates a draft invoice per schedule, and advances them. Schedules far past due advance to the next future slot without generating an invoice per missed slot (no back-billing spam). Empty `unbilled` runs are skipped but still count as occurrences. Designed for cron — run it hourly/daily; re-running is safe because schedules advance past due slots. Returns `{ generated: [invoiceIds], results: [per-schedule results] }`.",
+        "operationId": "runScheduler",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduler run summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerRunResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/retainers": {
+      "get": {
+        "tags": [
+          "retainers"
+        ],
+        "summary": "List retainers",
+        "description": "Filter by `?clientId=` and `?status=active|paused|depleted|ended`. A retainer is an agreement wrapper: `prepaid-hours` (client pre-buys N hours; track drawdown yourself via tasks) or `monthly-fee` (usually paired with a recurring schedule via `recurringScheduleId`).",
+        "operationId": "listRetainers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "depleted",
+                "ended"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of retainers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainerList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "retainers"
+        ],
+        "summary": "Create a retainer",
+        "description": "`amountCents` is integer cents (watch the units — unlike invoices). `prepaid-hours` requires `totalHours`. For `monthly-fee`, create the retainer first, then a `fixed` recurring schedule, then PATCH the retainer with `recurringScheduleId` to link them.",
+        "operationId": "createRetainer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetainerInput"
+              },
+              "examples": {
+                "prepaid": {
+                  "value": {
+                    "clientId": "cli_abc",
+                    "name": "Q4 support block",
+                    "type": "prepaid-hours",
+                    "totalHours": 40,
+                    "amountCents": 600000,
+                    "hourlyRate": 150,
+                    "startDate": "2026-10-01"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainerEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/retainers/{id}": {
+      "get": {
+        "tags": [
+          "retainers"
+        ],
+        "summary": "Get a retainer",
+        "operationId": "getRetainer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The retainer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainerEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "retainers"
+        ],
+        "summary": "Update a retainer",
+        "operationId": "updateRetainer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetainerPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated retainer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainerEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "retainers"
+        ],
+        "summary": "Delete a retainer",
+        "operationId": "deleteRetainer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Get settings",
+        "description": "The singleton settings: business profile (name, email, payment instructions shown on invoices), invoice prefs (number prefix, next number, payment terms days), reckoning config, expense categories, appearance.",
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Update settings",
+        "description": "Deep-partial update: nested objects (`business`, `invoice`, …) merge key-wise, so PATCH `{ invoice: { paymentTermsDays: 30 } }` changes only that field. Useful setup call: set your business name, email, and payment instructions once.",
+        "operationId": "updateSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              },
+              "examples": {
+                "business": {
+                  "value": {
+                    "business": {
+                      "name": "Jane Doe Consulting",
+                      "email": "jane@example.com",
+                      "paymentInstructions": "ACH to …"
+                    },
+                    "invoice": {
+                      "paymentTermsDays": 30
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Shared API token. Set TALLYHAND_API_TOKEN on the server, then send Authorization: Bearer <token>."
+      }
+    },
+    "parameters": {
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        },
+        "description": "Page size (default 50, max 200)"
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Opaque base64 page token from a previous response's meta.nextCursor. Omit for the first page."
+      },
+      "Id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Entity id (e.g. cli_..., prj_..., tsk_..., inv_...)"
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Client-generated unique key (e.g. a UUID). Retrying a POST with the same key replays the stored response instead of executing twice. Strongly recommended for all creates in agentic loops."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Validation failed — see error.details (zod issues)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid API token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No entity with that id",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ApiDisabled": {
+        "description": "TALLYHAND_API_TOKEN is not set on the server",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "status",
+              "version"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "example": "ok"
+              },
+              "version": {
+                "type": "string",
+                "example": "0.1.0"
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "bad_request"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "description": "Machine-readable validation issues (zod format)"
+              }
+            }
+          }
+        }
+      },
+      "PageMeta": {
+        "type": "object",
+        "required": [
+          "limit",
+          "nextCursor",
+          "total"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque token for the next page; null on the last page"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total matching records (before paging)"
+          }
+        }
+      },
+      "DateMs": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "Millisecond epoch (UTC), or an ISO-8601 date string — the server coerces strings to ms"
+      },
+      "Client": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "archived",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "defaultRate": {
+            "type": "number",
+            "description": "Dollars/hour inherited by invoice line items"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "ClientInput": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional — server generates (cli_...) when omitted"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "address": {
+            "type": "string"
+          },
+          "defaultRate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClientEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Client"
+          }
+        }
+      },
+      "ClientList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "required": [
+          "id",
+          "clientId",
+          "name",
+          "archived",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rateOverride": {
+            "type": "number",
+            "description": "Dollars/hour; beats the client's defaultRate on invoices"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "ProjectInput": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rateOverride": {
+            "type": "number",
+            "minimum": 0
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Project"
+          }
+        }
+      },
+      "ProjectList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "projectId",
+          "name",
+          "startAt",
+          "endAt",
+          "durationMinutes",
+          "tags",
+          "isBilled",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "integer",
+            "description": "Ms epoch"
+          },
+          "endAt": {
+            "type": "integer",
+            "description": "Ms epoch; must be >= startAt"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "description": "Derived from startAt/endAt when omitted on create"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isBilled": {
+            "type": "boolean",
+            "description": "True once claimed by an invoice — do not hand-edit; use the invoice send flow"
+          },
+          "invoiceId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "TaskInput": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "name",
+          "startAt",
+          "endAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endAt": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isBilled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          }
+        }
+      },
+      "TaskList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "Expense": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "amount",
+          "category",
+          "isBilled",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "integer",
+            "description": "Ms epoch"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Dollars"
+          },
+          "category": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "receiptB64": {
+            "type": "string",
+            "description": "Base64 receipt image (optional)"
+          },
+          "isBilled": {
+            "type": "boolean"
+          },
+          "invoiceId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "ExpenseInput": {
+        "type": "object",
+        "required": [
+          "date",
+          "amount",
+          "category"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "date": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "category": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "receiptB64": {
+            "type": "string"
+          },
+          "isBilled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpenseEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Expense"
+          }
+        }
+      },
+      "ExpenseList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Expense"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "InvoiceLineItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "description",
+          "quantity",
+          "rate",
+          "amount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "rate": {
+            "type": "number",
+            "description": "Dollars per unit"
+          },
+          "amount": {
+            "type": "number",
+            "description": "quantity × rate (server-computed when omitted)"
+          },
+          "markupPercent": {
+            "type": "number"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "task",
+              "expense",
+              "manual"
+            ]
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Task/expense id this line bills — set on send to mark it billed"
+          }
+        }
+      },
+      "InvoiceLineItemInput": {
+        "type": "object",
+        "required": [
+          "description",
+          "quantity",
+          "rate"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "markupPercent": {
+            "type": "number"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "task",
+              "expense",
+              "manual"
+            ]
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Invoice": {
+        "type": "object",
+        "required": [
+          "id",
+          "clientId",
+          "invoiceNumber",
+          "issueDate",
+          "dueDate",
+          "status",
+          "lineItems",
+          "subtotal",
+          "total",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "invoiceNumber": {
+            "type": "string",
+            "description": "Human-facing number, e.g. INV-0042 (atomic sequential)"
+          },
+          "issueDate": {
+            "type": "integer"
+          },
+          "dueDate": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid"
+            ]
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItem"
+            }
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "publicToken": {
+            "type": "string",
+            "description": "Token for the public read-only invoice link"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "InvoiceInput": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "issueDate",
+          "dueDate",
+          "lineItems"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "invoiceNumber": {
+            "type": "string",
+            "description": "Omit for the next atomic sequential number"
+          },
+          "issueDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "dueDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid"
+            ],
+            "default": "draft"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItemInput"
+            }
+          },
+          "subtotal": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Omit — server computes from line items"
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Omit — server computes from line items"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "publicToken": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InvoiceEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Invoice"
+          }
+        }
+      },
+      "InvoiceList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invoice"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "RecurringScheduleLine": {
+        "type": "object",
+        "required": [
+          "description",
+          "quantity",
+          "rate"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rate": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Dollars per unit"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RecurringSchedule": {
+        "type": "object",
+        "required": [
+          "id",
+          "clientId",
+          "name",
+          "mode",
+          "frequency",
+          "interval",
+          "lineItems",
+          "startDate",
+          "nextRunAt",
+          "occurrences",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Scope unbilled sweeps to one project (unbilled mode)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "unbilled"
+            ],
+            "description": "fixed = bill lineItems every run; unbilled = sweep unbilled tasks+expenses each run"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "monthly",
+              "quarterly",
+              "yearly"
+            ]
+          },
+          "interval": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Every N frequency-units"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringScheduleLine"
+            }
+          },
+          "startDate": {
+            "type": "integer"
+          },
+          "endDate": {
+            "type": "integer"
+          },
+          "maxOccurrences": {
+            "type": "integer"
+          },
+          "nextRunAt": {
+            "type": "integer",
+            "description": "Ms epoch of the next scheduled run"
+          },
+          "lastRunAt": {
+            "type": "integer"
+          },
+          "occurrences": {
+            "type": "integer",
+            "description": "Runs completed so far"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "ended"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "RecurringScheduleInput": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "name",
+          "mode",
+          "frequency",
+          "interval",
+          "lineItems",
+          "startDate"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "unbilled"
+            ]
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "monthly",
+              "quarterly",
+              "yearly"
+            ]
+          },
+          "interval": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringScheduleLine"
+            }
+          },
+          "startDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "maxOccurrences": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "ended"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RecurringScheduleEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecurringSchedule"
+          }
+        }
+      },
+      "RecurringScheduleList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringSchedule"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "ScheduleRunResultObject": {
+        "type": "object",
+        "required": [
+          "scheduleId",
+          "invoiceId",
+          "skipped",
+          "nextRunAt",
+          "occurrences",
+          "status"
+        ],
+        "properties": {
+          "scheduleId": {
+            "type": "string"
+          },
+          "invoiceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Draft invoice created, or null when the run found nothing billable"
+          },
+          "skipped": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "empty",
+              null
+            ],
+            "description": "'empty' when an unbilled-mode run found nothing to bill"
+          },
+          "nextRunAt": {
+            "type": "integer"
+          },
+          "occurrences": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "ended"
+            ]
+          }
+        }
+      },
+      "ScheduleRunResult": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ScheduleRunResultObject"
+          }
+        }
+      },
+      "SchedulerRunResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "generated",
+              "results"
+            ],
+            "properties": {
+              "generated": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Ids of draft invoices created by this run"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScheduleRunResultObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Retainer": {
+        "type": "object",
+        "required": [
+          "id",
+          "clientId",
+          "name",
+          "type",
+          "amountCents",
+          "startDate",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "prepaid-hours",
+              "monthly-fee"
+            ]
+          },
+          "totalHours": {
+            "type": "number",
+            "description": "Required for prepaid-hours: the hour block the client bought"
+          },
+          "amountCents": {
+            "type": "integer",
+            "description": "Integer CENTS (not dollars)"
+          },
+          "hourlyRate": {
+            "type": "number",
+            "description": "Dollars/hour reference rate"
+          },
+          "startDate": {
+            "type": "integer"
+          },
+          "endDate": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "depleted",
+              "ended"
+            ]
+          },
+          "recurringScheduleId": {
+            "type": "string",
+            "description": "Linked monthly-fee billing schedule"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "RetainerInput": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "name",
+          "type",
+          "amountCents",
+          "startDate"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "prepaid-hours",
+              "monthly-fee"
+            ]
+          },
+          "totalHours": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hourlyRate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "depleted",
+              "ended"
+            ]
+          },
+          "recurringScheduleId": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RetainerEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Retainer"
+          }
+        }
+      },
+      "RetainerList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Retainer"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "required": [
+          "id",
+          "business",
+          "invoice",
+          "reckoning",
+          "expenseCategories",
+          "appearance"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "singleton"
+          },
+          "business": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "taxId": {
+                "type": "string"
+              },
+              "paymentInstructions": {
+                "type": "string",
+                "description": "Shown on invoices — set this so clients know how to pay"
+              }
+            }
+          },
+          "invoice": {
+            "type": "object",
+            "properties": {
+              "numberPrefix": {
+                "type": "string",
+                "example": "INV-"
+              },
+              "nextNumber": {
+                "type": "integer"
+              },
+              "logoB64": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "footerText": {
+                "type": "string"
+              },
+              "paymentTermsDays": {
+                "type": "integer",
+                "description": "Due date = issue date + this many days"
+              }
+            }
+          },
+          "reckoning": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "dayOfWeek": {
+                "type": "integer"
+              },
+              "hourOfDay": {
+                "type": "integer"
+              },
+              "lastCompletedAtMs": {
+                "type": "integer"
+              }
+            }
+          },
+          "expenseCategories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appearance": {
+            "type": "object",
+            "properties": {
+              "theme": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "dark",
+                  "system"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "SettingsPatch": {
+        "type": "object",
+        "description": "Deep-partial: nested objects merge key-wise",
+        "properties": {
+          "business": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "taxId": {
+                "type": "string"
+              },
+              "paymentInstructions": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "invoice": {
+            "type": "object",
+            "properties": {
+              "numberPrefix": {
+                "type": "string"
+              },
+              "nextNumber": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "logoB64": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "footerText": {
+                "type": "string"
+              },
+              "paymentTermsDays": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "reckoning": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "dayOfWeek": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "hourOfDay": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              "lastCompletedAtMs": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "expenseCategories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appearance": {
+            "type": "object",
+            "properties": {
+              "theme": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "dark",
+                  "system"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsEnvelope": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Settings"
+          }
+        }
+      },
+      "ClientPatch": {
+        "type": "object",
+        "description": "Partial client update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional — server generates (cli_...) when omitted"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "address": {
+            "type": "string"
+          },
+          "defaultRate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ProjectPatch": {
+        "type": "object",
+        "description": "Partial project update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rateOverride": {
+            "type": "number",
+            "minimum": 0
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "TaskPatch": {
+        "type": "object",
+        "description": "Partial task update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endAt": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isBilled": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ExpensePatch": {
+        "type": "object",
+        "description": "Partial expense update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "date": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "category": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "receiptB64": {
+            "type": "string"
+          },
+          "isBilled": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "InvoicePatch": {
+        "type": "object",
+        "description": "Partial invoice update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "invoiceNumber": {
+            "type": "string",
+            "description": "Omit for the next atomic sequential number"
+          },
+          "issueDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "dueDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid"
+            ],
+            "default": "draft"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItemInput"
+            }
+          },
+          "subtotal": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Omit — server computes from line items"
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Omit — server computes from line items"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "publicToken": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "RecurringSchedulePatch": {
+        "type": "object",
+        "description": "Partial recurring schedule update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "unbilled"
+            ]
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "monthly",
+              "quarterly",
+              "yearly"
+            ]
+          },
+          "interval": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringScheduleLine"
+            }
+          },
+          "startDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "maxOccurrences": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "ended"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "RetainerPatch": {
+        "type": "object",
+        "description": "Partial retainer update — every field is optional; only the fields you send are changed.",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "prepaid-hours",
+              "monthly-fee"
+            ]
+          },
+          "totalHours": {
+            "type": "number",
+            "minimum": 0
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hourlyRate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "endDate": {
+            "$ref": "#/components/schemas/DateMs"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "depleted",
+              "ended"
+            ]
+          },
+          "recurringScheduleId": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+}

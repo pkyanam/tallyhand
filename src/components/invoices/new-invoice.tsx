@@ -21,19 +21,13 @@ import {
 import { newId, newInvoicePublicToken } from "@/lib/db/id";
 import {
   assignNextInvoiceNumber,
+  buildUnbilledLineItems,
   computeDueDate,
-  expenseToLineItem,
   formatInvoiceNumber,
   inferClientIdFromSelection,
   invoiceTotals,
-  taskToLineItem,
 } from "@/lib/invoice-helpers";
-import type {
-  Expense,
-  Invoice,
-  InvoiceLineItem,
-  Task,
-} from "@/lib/db/types";
+import type { Expense, Invoice, Task } from "@/lib/db/types";
 
 function parseIds(raw: string | null): string[] {
   if (!raw) return [];
@@ -143,15 +137,12 @@ export function NewInvoiceContent() {
       projects,
     );
 
-    const lineItems: InvoiceLineItem[] = [];
-    for (const t of tasks) {
-      const project = projectById.get(t.projectId);
-      const client = project ? clientById.get(project.clientId) : undefined;
-      lineItems.push(taskToLineItem(t, project, client));
-    }
-    for (const e of expenses) {
-      lineItems.push(expenseToLineItem(e));
-    }
+    const lineItems = buildUnbilledLineItems(
+      tasks,
+      expenses,
+      projectById,
+      clientById,
+    );
 
     const { subtotal, total } = invoiceTotals(lineItems);
     const issueDate = Date.now();
