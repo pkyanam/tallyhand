@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run web tests
+        run: npx vitest run
+
+      - name: Build web app
+        run: npm run build
+
+  cli:
+    name: tally CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install CLI dependencies
+        working-directory: cli
+        run: npm ci
+
+      # cli/package.json has no "lint" script; typecheck is the static check
+      - name: Typecheck CLI
+        working-directory: cli
+        run: npm run typecheck
+
+      - name: Run CLI tests
+        working-directory: cli
+        run: npm test
+
+      - name: Build CLI bundle
+        working-directory: cli
+        run: npm run build
