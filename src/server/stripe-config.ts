@@ -1,0 +1,4 @@
+export interface StripeConfig { secretKey: string; appUrl: string; mode: StripeKeyMode }
+export type StripeKeyMode = "test" | "live" | "unknown";
+export function stripeKeyMode(secretKey: string): StripeKeyMode { if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) return "test"; if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) return "live"; return "unknown"; }
+export function getStripeConfig(env: Record<string,string|undefined> = process.env): StripeConfig | null { const secretKey=env.STRIPE_SECRET_KEY; if (!secretKey) return null; const vercel=env.VERCEL_URL ? `https://${env.VERCEL_URL.replace(/^https?:\/\//,"")}` : ""; const appUrl=(env.TALLYHAND_APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? vercel ?? "").replace(/\/+$/,""); return {secretKey,appUrl,mode:stripeKeyMode(secretKey)}; }

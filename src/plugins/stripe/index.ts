@@ -26,7 +26,9 @@
  */
 
 import { onSharePaymentRequested } from "@/lib/share/payment-slot";
-import { getServerProvider } from "@/server/provider";
+import { getServerProvider, getServerProviderForUser } from "@/server/provider";
+import { getShareDeps } from "@/lib/share/server-deps";
+import { resolveShareToken } from "@/lib/share/service";
 import {
   createInvoiceCheckoutSession,
   getStripeConfig,
@@ -58,11 +60,13 @@ export const stripePlugin: Plugin = {
     }
 
     onSharePaymentRequested(async (req) => {
-      const provider = getServerProvider();
+      let ownerId: string | undefined;
+      try { ownerId = (await resolveShareToken(getShareDeps(), req.shareToken, "invoice")).link.userId; } catch { /* retain legacy provider scope when share lookup is unavailable */ }
+      const provider = ownerId ? getServerProviderForUser(ownerId) : getServerProvider();
       const checkout = await createInvoiceCheckoutSession(
         provider,
         req.invoiceId,
-        { shareToken: req.shareToken },
+        { shareToken: req.shareToken, userId: ownerId },
       );
       return { checkoutUrl: checkout.url };
     });

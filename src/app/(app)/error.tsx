@@ -21,7 +21,7 @@ export default function AppError({
         <CardContent className="space-y-4 p-6 text-center">
           <h2 className="text-lg font-semibold">Something went wrong</h2>
           <p className="text-sm text-muted-foreground">
-            {error.message || "An unexpected error occurred in this view."}
+            We couldn&apos;t load this page. Please try again.
           </p>
           <Button type="button" onClick={reset}>
             Try again

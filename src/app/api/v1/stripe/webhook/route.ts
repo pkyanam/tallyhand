@@ -38,6 +38,7 @@ export async function POST(req: Request) {
 
   let event: {
     type?: string;
+    account?: string;
     data?: { object?: Record<string, unknown> };
   };
   try {
@@ -56,7 +57,14 @@ export async function POST(req: Request) {
     };
     const invoiceId = session.metadata?.invoiceId;
     if (invoiceId) {
-      const provider = getServerProvider();
+      let provider = getServerProvider();
+      if (event.account) {
+        const { findUserIdByStripeAccount } = await import("@/lib/stripe-connect/store");
+        const userId = await findUserIdByStripeAccount(event.account);
+        if (!userId) return ok({ received: true });
+        const { getServerProviderForUser } = await import("@/server/provider");
+        provider = getServerProviderForUser(userId);
+      }
       const invoice = await provider.getInvoice(invoiceId);
       if (invoice && invoice.status !== "paid") {
         // Verify the session actually represents a completed payment for

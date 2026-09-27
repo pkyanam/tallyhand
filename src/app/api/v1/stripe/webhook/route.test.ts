@@ -1,14 +1,18 @@
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetServerProvider, mockEmit } = vi.hoisted(() => ({
+const { mockGetServerProvider, mockGetServerProviderForUser, mockEmit, mockFindUser } = vi.hoisted(() => ({
   mockGetServerProvider: vi.fn(),
+  mockGetServerProviderForUser: vi.fn(),
   mockEmit: vi.fn(),
+  mockFindUser: vi.fn(),
 }));
 
 vi.mock("@/server/provider", () => ({
   getServerProvider: mockGetServerProvider,
+  getServerProviderForUser: mockGetServerProviderForUser,
 }));
+vi.mock("@/lib/stripe-connect/store", () => ({ findUserIdByStripeAccount: mockFindUser }));
 vi.mock("@/plugins", () => ({
   pluginRegistry: { emit: mockEmit },
 }));
@@ -62,6 +66,8 @@ describe("POST /api/v1/stripe/webhook", () => {
       getInvoice,
       markInvoicePaid,
     });
+    mockGetServerProviderForUser.mockReturnValue({getInvoice,markInvoicePaid});
+    mockFindUser.mockReset();
     mockEmit.mockReset();
   });
 
@@ -212,5 +218,18 @@ describe("POST /api/v1/stripe/webhook", () => {
   it("rejects an invalid JSON payload after signature verification", async () => {
     const res = await POST(signedRequest("not json{{"));
     expect(res.status).toBe(400);
+  });
+
+  it("routes connected events to the owning user's provider", async () => {
+    mockFindUser.mockResolvedValue("owner");
+    getInvoice.mockResolvedValue({id:"inv_1",invoiceNumber:"INV-001",status:"sent",total:123.45,currency:"usd"}).mockResolvedValueOnce({id:"inv_1",invoiceNumber:"INV-001",status:"sent",total:123.45,currency:"usd"}).mockResolvedValueOnce({id:"inv_1",invoiceNumber:"INV-001",status:"paid",total:123.45,currency:"usd"});
+    const e=JSON.parse(sessionEvent(baseSession));e.account="acct_123";
+    await POST(signedRequest(JSON.stringify(e)));
+    expect(mockGetServerProviderForUser).toHaveBeenCalledWith("owner");
+  });
+  it("acks unknown connected accounts without touching invoices", async () => {
+    mockFindUser.mockResolvedValue(null); const e=JSON.parse(sessionEvent(baseSession));e.account="acct_unknown";
+    const res=await POST(signedRequest(JSON.stringify(e)));
+    expect(res.status).toBe(200);expect(getInvoice).not.toHaveBeenCalled();
   });
 });

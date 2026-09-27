@@ -11,6 +11,12 @@ import { notifyDataChanged } from "./data-events";
 
 type Envelope<T> = { data?: T; meta?: { nextCursor: string | null } };
 
+function isStatusError(error: unknown, method: string, path: string, status: number): boolean {
+  if (!(error instanceof Error)) return false;
+  const details = error as Error & { method?: string; path?: string; status?: number };
+  return details.method === method && details.path === path && details.status === status;
+}
+
 export class NotSupportedError extends Error {
   constructor(message = "This feature is not supported by the cloud provider.") {
     super(message);
@@ -30,7 +36,18 @@ export class RestStorageProvider implements StorageProvider {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (allow404 && response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`REST ${method} ${path} failed (${response.status})`);
+    if (!response.ok) {
+      let message = "Something went wrong while loading your data. Please try again.";
+      try {
+        const payload = (await response.clone().json()) as { error?: { message?: string } };
+        if (payload.error?.message) message = payload.error.message;
+      } catch {
+        // Keep the user-facing fallback when the server did not return JSON.
+      }
+      const error = new Error(message) as Error & { status: number; method: string; path: string };
+      Object.assign(error, { status: response.status, method, path });
+      throw error;
+    }
     if (response.status === 204) return undefined;
     return (await response.json()) as T;
   }
@@ -70,11 +87,11 @@ export class RestStorageProvider implements StorageProvider {
 
   private async extList<T>(path: string): Promise<T[]> {
     try { return await this.list<T>(path); }
-    catch (error) { if (error instanceof Error && error.message === `REST GET ${path} failed (501)`) return []; throw error; }
+    catch (error) { if (isStatusError(error, "GET", path, 501)) return []; throw error; }
   }
   private async extGet<T>(path: string): Promise<T | undefined> {
     try { return await this.get<T>(path); }
-    catch (error) { if (error instanceof Error && error.message === `REST GET ${path} failed (501)`) return undefined; throw error; }
+    catch (error) { if (isStatusError(error, "GET", path, 501)) return undefined; throw error; }
   }
   private async extCreate<T>(path: string, body: unknown): Promise<T> {
     try {
@@ -82,11 +99,11 @@ export class RestStorageProvider implements StorageProvider {
       notifyDataChanged();
       return result?.data as T;
     }
-    catch (error) { if (error instanceof Error && error.message === `REST POST ${path} failed (501)`) throw new NotSupportedError(); throw error; }
+    catch (error) { if (isStatusError(error, "POST", path, 501)) throw new NotSupportedError(); throw error; }
   }
   private async extWrite(path: string, method: "PATCH" | "DELETE", body?: unknown): Promise<void> {
     try { await this.request(method, path, body); notifyDataChanged(); }
-    catch (error) { if (error instanceof Error && error.message === `REST ${method} ${path} failed (501)`) throw new NotSupportedError(); throw error; }
+    catch (error) { if (isStatusError(error, method, path, 501)) throw new NotSupportedError(); throw error; }
   }
 
   async listClients(includeArchived = false): Promise<Client[]> { const rows = await this.list<Client>("/clients"); return includeArchived ? rows : rows.filter((x) => !x.archived); }

@@ -59,7 +59,7 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
     if (await findApiToken(provided)) return null;
   }
 
-  if (!process.env.TALLYHAND_API_TOKEN) {
+  if (!provided && !process.env.TALLYHAND_API_TOKEN) {
     return jsonError(
       503,
       "api_disabled",

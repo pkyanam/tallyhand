@@ -64,6 +64,15 @@ describe("requireApiToken", () => {
     expect(res?.status).toBe(503);
   });
 
+  it("rejects a provided invalid bearer with 401 when no shared token is configured", async () => {
+    delete process.env.TALLYHAND_API_TOKEN;
+    const res = await requireApiToken(reqWith("invalid-bearer"));
+    expect(res?.status).toBe(401);
+    expect(await res?.json()).toEqual({
+      error: { code: "unauthorized", message: "Invalid or missing API token" },
+    });
+  });
+
   it("accepts a personal thp_ token exactly like the shared token", async () => {
     process.env.TALLYHAND_API_TOKEN = SHARED;
     const secret = await createApiToken("user_1", "cli");

@@ -17,57 +17,9 @@ import {
   StripeError,
 } from "@/plugins/stripe/stripe-client";
 
-export interface StripeConfig {
-  secretKey: string;
-  /** Public app base URL for checkout success/cancel redirects. */
-  appUrl: string;
-  /** "test" | "live" derived from the secret key prefix. */
-  mode: StripeKeyMode;
-}
-
-/** Stripe secret-key mode, derived from the key prefix (never logged). */
-export type StripeKeyMode = "test" | "live" | "unknown";
-
-/**
- * Derive the key mode from the Stripe secret-key prefix. `sk_test_*` /
- * `rk_test_*` are test keys, `sk_live_*` / `rk_live_*` are live keys.
- * Anything else is reported as "unknown" (e.g. restricted keys).
- */
-export function stripeKeyMode(secretKey: string): StripeKeyMode {
-  if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) {
-    return "test";
-  }
-  if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) {
-    return "live";
-  }
-  return "unknown";
-}
-
-/**
- * Resolve Stripe config from the environment. Returns null when Stripe is
- * not configured (no secret key) — callers treat this as "payments
- * unavailable", never as an error.
- *
- * The public base URL is needed for Stripe's absolute redirect URLs and
- * falls back to Vercel's `VERCEL_URL` so a fresh deployment works without
- * extra config; self-hosters set `TALLYHAND_APP_URL` explicitly.
- */
-export function getStripeConfig(
-  env: Record<string, string | undefined> = process.env,
-): StripeConfig | null {
-  const secretKey = env.STRIPE_SECRET_KEY;
-  if (!secretKey) return null;
-  const vercelUrl = env.VERCEL_URL
-    ? `https://${env.VERCEL_URL.replace(/^https?:\/\//, "")}`
-    : "";
-  const appUrl = (
-    env.TALLYHAND_APP_URL ??
-    env.NEXT_PUBLIC_APP_URL ??
-    vercelUrl ??
-    ""
-  ).replace(/\/+$/, "");
-  return { secretKey, appUrl, mode: stripeKeyMode(secretKey) };
-}
+export { getStripeConfig, stripeKeyMode } from "./stripe-config";
+export type { StripeConfig, StripeKeyMode } from "./stripe-config";
+import { getStripeConfig } from "./stripe-config";
 
 /** Plugin-settings key under Settings.pluginSettings. */
 export const STRIPE_SETTINGS_KEY = "stripe-payments";
@@ -97,6 +49,7 @@ export interface InvoiceCheckoutOptions {
   shareToken?: string;
   /** Override the cancel redirect (defaults to the portal/invoice page). */
   cancelUrl?: string;
+  userId?: string;
 }
 
 export interface InvoiceCheckout {
@@ -118,18 +71,28 @@ export async function createInvoiceCheckoutSession(
   invoiceId: string,
   opts: InvoiceCheckoutOptions = {},
 ): Promise<InvoiceCheckout> {
-  const config = getStripeConfig();
-  if (!config) {
-    throw new Error(
-      "Stripe is not configured — set STRIPE_SECRET_KEY in the environment.",
-    );
-  }
+  const { resolveCheckoutStripeKey } = await import("./stripe-connect");
+  const resolved = await resolveCheckoutStripeKey(opts.userId);
+  // appUrl is derived from the environment independently of which secret
+  // key resolved: a Connect-only deployment (no STRIPE_SECRET_KEY) still
+  // needs redirect URLs.
+  const appConfig = getStripeConfig();
+  const appUrl =
+    appConfig?.appUrl ??
+    (
+      process.env.TALLYHAND_APP_URL ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL.replace(/^https?:\/\//, "")}`
+        : "")
+    ).replace(/\/+$/, "");
+  const config = { secretKey: resolved.secretKey, mode: resolved.mode, appUrl };
   if (config.mode === "live") {
     // Test mode is the documented default. Live keys work, but charging
     // real money is never silent.
     // eslint-disable-next-line no-console
     console.warn(
-      "[stripe] STRIPE_SECRET_KEY is a LIVE key — Checkout sessions will charge real money.",
+      `[stripe] resolved Stripe key (${resolved.source}) is a LIVE key — Checkout sessions will charge real money.`,
     );
   }
   const pluginSettings = await getStripePluginSettings(provider);
@@ -182,6 +145,7 @@ export async function createInvoiceCheckoutSession(
     const session = await createCheckoutSession(config.secretKey, {
       amountCents,
       currency,
+      stripeAccount: resolved.stripeAccount ?? undefined,
       productName: `Invoice ${invoice.invoiceNumber}`,
       description: `Tallyhand invoice ${invoice.invoiceNumber}`,
       customerEmail: client?.email || undefined,
@@ -191,6 +155,12 @@ export async function createInvoiceCheckoutSession(
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         ...(opts.shareToken ? { shareToken: opts.shareToken } : {}),
+        // Attribution for Connect payments: which connected account this
+        // session was created for (the secret key used is already the
+        // connected account's own key).
+        ...(resolved.stripeAccount
+          ? { stripeAccount: resolved.stripeAccount }
+          : {}),
       },
       statementDescriptor: pluginSettings.statementDescriptor,
     });

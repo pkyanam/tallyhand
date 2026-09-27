@@ -19,6 +19,7 @@ export interface CheckoutSessionParams {
   successUrl: string;
   cancelUrl: string;
   metadata: Record<string, string>;
+  stripeAccount?: string;
   statementDescriptor?: string;
 }
 
@@ -78,6 +79,7 @@ export async function createCheckoutSession(
     headers: {
       authorization: `Bearer ${secretKey}`,
       "content-type": "application/x-www-form-urlencoded",
+      ...(params.stripeAccount ? { "stripe-account": params.stripeAccount } : {}),
     },
     body: form.toString(),
   });
