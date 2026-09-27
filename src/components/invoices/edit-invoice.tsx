@@ -194,6 +194,8 @@ export function EditInvoiceContent({
     showNotice(`${invoice.invoiceNumber} marked as paid.`);
   };
 
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   const handleDelete = async () => {
     if (!invoice) return;
     const ok = window.confirm(
@@ -204,7 +206,15 @@ export function EditInvoiceContent({
       }`,
     );
     if (!ok) return;
-    await invoiceRepo.remove(invoice.id);
+    setDeleteError(null);
+    try {
+      await invoiceRepo.remove(invoice.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete this invoice.",
+      );
+      return;
+    }
     router.replace("/invoices");
   };
 
@@ -304,6 +314,11 @@ export function EditInvoiceContent({
               <Trash2 className="mr-1 h-4 w-4" />
               Delete
             </Button>
+            {deleteError && (
+              <div className="w-full rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {deleteError}
+              </div>
+            )}
             <Button
               type="button"
               onClick={handleSave}

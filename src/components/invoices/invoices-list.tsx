@@ -66,17 +66,31 @@ export function InvoicesList() {
     return copy;
   }, [invoices, sort]);
 
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   const handleDelete = async (invoice: Invoice) => {
     if (invoice.status !== "draft") return;
     const ok = window.confirm(
       `Delete draft ${invoice.invoiceNumber}? This cannot be undone.`,
     );
     if (!ok) return;
-    await invoiceRepo.remove(invoice.id);
+    setDeleteError(null);
+    try {
+      await invoiceRepo.remove(invoice.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete this invoice.",
+      );
+    }
   };
 
   return (
     <>
+      {deleteError && (
+        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {deleteError}
+        </div>
+      )}
       <PageHeader
         title="Invoices"
         description="Drafts and sent invoices. PDF export included."

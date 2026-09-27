@@ -779,6 +779,17 @@ function TaskRow({
   const [edit, setEdit] = React.useState<
     null | "name" | "minutes" | "tags"
   >(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this time entry? This cannot be undone.")) return;
+    setDeleteError(null);
+    try {
+      await taskRepo.remove(t.id);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not delete this entry.");
+    }
+  };
 
   const saveName = async (value: string) => {
     const v = value.trim();
@@ -959,18 +970,15 @@ function TaskRow({
               : "Delete this entry"
           }
           aria-label="Delete time entry"
-          onClick={() => {
-            if (
-              !window.confirm(
-                "Delete this time entry? This cannot be undone.",
-              )
-            )
-              return;
-            void taskRepo.remove(t.id);
-          }}
+          onClick={() => void handleDelete()}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
+        {deleteError && (
+          <div className="w-full rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {deleteError}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -993,6 +1001,17 @@ function ExpenseRow({
   const [edit, setEdit] = React.useState<null | "amount" | "category" | "note">(
     null,
   );
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this expense? This cannot be undone.")) return;
+    setDeleteError(null);
+    try {
+      await expenseRepo.remove(e.id);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not delete this expense.");
+    }
+  };
 
   const saveAmount = async (value: string) => {
     const n = Number.parseFloat(value);
@@ -1144,18 +1163,15 @@ function ExpenseRow({
               : "Delete this expense"
           }
           aria-label="Delete expense"
-          onClick={() => {
-            if (
-              !window.confirm(
-                "Delete this expense? This cannot be undone.",
-              )
-            )
-              return;
-            void expenseRepo.remove(e.id);
-          }}
+          onClick={() => void handleDelete()}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
+        {deleteError && (
+          <div className="w-full rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {deleteError}
+          </div>
+        )}
       </div>
     </div>
   );

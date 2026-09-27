@@ -79,16 +79,30 @@ export function RecurringList() {
     );
   };
 
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   const handleDelete = async (id: string, name: string) => {
     const ok = window.confirm(
       `Delete the recurring schedule "${name}"? This cannot be undone.`,
     );
     if (!ok) return;
-    await recurringScheduleRepo.remove(id);
+    setDeleteError(null);
+    try {
+      await recurringScheduleRepo.remove(id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete this schedule.",
+      );
+    }
   };
 
   return (
     <>
+      {deleteError && (
+        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {deleteError}
+        </div>
+      )}
       <PageHeader
         title="Recurring invoices"
         description="Automated billing schedules. Drafts are generated for your review — nothing is ever sent automatically."

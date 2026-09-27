@@ -12,6 +12,7 @@ import type { Client, Expense, Project } from "@/lib/db/types";
 
 function ExpenseRow({ expense, clientName, projectName }: { expense: Expense; clientName: string; projectName: string }) {
   const [deleting, setDeleting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const onDelete = async () => {
     const ok = window.confirm(
@@ -19,8 +20,11 @@ function ExpenseRow({ expense, clientName, projectName }: { expense: Expense; cl
     );
     if (!ok) return;
     setDeleting(true);
+    setError(null);
     try {
       await expenseRepo.remove(expense.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete this expense.");
     } finally {
       setDeleting(false);
     }
@@ -28,6 +32,11 @@ function ExpenseRow({ expense, clientName, projectName }: { expense: Expense; cl
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+      {error && (
+        <div className="w-full rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="font-medium tabular-nums">

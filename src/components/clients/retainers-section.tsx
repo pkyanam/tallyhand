@@ -97,16 +97,30 @@ function RetainerRow({
     showNotice(notice);
   };
 
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   const handleDelete = async () => {
     const ok = window.confirm(
       `Delete the retainer "${retainer.name}"? This cannot be undone.`,
     );
     if (!ok) return;
-    await retainerRepo.remove(retainer.id);
+    setDeleteError(null);
+    try {
+      await retainerRepo.remove(retainer.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete this retainer.",
+      );
+    }
   };
 
   return (
     <li className="px-4 py-3 text-sm">
+      {deleteError && (
+        <div className="mb-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {deleteError}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

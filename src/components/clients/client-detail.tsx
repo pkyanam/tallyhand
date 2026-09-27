@@ -51,6 +51,8 @@ export function ClientDetail({ clientId }: { clientId: string }) {
     [projects],
   );
 
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   if (client === undefined) {
     return (
       <div className="text-sm text-muted-foreground">Loading client…</div>
@@ -85,7 +87,15 @@ export function ClientDetail({ clientId }: { clientId: string }) {
       `Delete ${client.name}? This cannot be undone. Projects and tasks attached to this client will NOT be deleted.`,
     );
     if (!confirmed) return;
-    await clientRepo.remove(client.id);
+    setDeleteError(null);
+    try {
+      await clientRepo.remove(client.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete this client.",
+      );
+      return;
+    }
     router.push("/clients");
   };
 
@@ -128,6 +138,12 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           </>
         }
       />
+
+      {deleteError && (
+        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {deleteError}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">

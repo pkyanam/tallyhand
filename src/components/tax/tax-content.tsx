@@ -129,6 +129,17 @@ export function TaxContent() {
   const settings = useLiveQuery(() => settingsRepo.get(), []);
 
   const [showForm, setShowForm] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  const handleDeletePayment = async (id: string) => {
+    if (!window.confirm("Delete this tax payment? This cannot be undone.")) return;
+    setDeleteError(null);
+    try {
+      await taxPaymentRepo.remove(id);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Could not delete this payment.");
+    }
+  };
   const [formQuarter, setFormQuarter] = React.useState("1");
   const [formJurisdiction, setFormJurisdiction] =
     React.useState<TaxJurisdiction>("federal");
@@ -370,6 +381,7 @@ export function TaxContent() {
               </div>
             )}
             {data && data.yearPayments.length > 0 ? (
+              <>
               <ul className="space-y-2">
                 {[...data.yearPayments]
                   .sort((a, b) => b.date - a.date)
@@ -402,7 +414,7 @@ export function TaxContent() {
                         variant="ghost"
                         size="icon"
                         className="ml-auto h-7 w-7"
-                        onClick={() => void taxPaymentRepo.remove(p.id)}
+                        onClick={() => void handleDeletePayment(p.id)}
                         aria-label="Delete payment"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -410,7 +422,13 @@ export function TaxContent() {
                     </li>
                   ))}
               </ul>
-            ) : (
+              {deleteError && (
+                <div className="mt-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {deleteError}
+                </div>
+              )}
+            </> 
+          ) : (
               <p className="text-sm text-muted-foreground">
                 No payments recorded for {taxYear} yet.
               </p>
