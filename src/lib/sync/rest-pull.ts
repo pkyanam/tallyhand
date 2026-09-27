@@ -82,15 +82,27 @@ export async function fetchRestTables(): Promise<
   const entries = await Promise.all(
     types.map(async (type): Promise<[RestEntityType, RestRow[]]> => {
       const path = REST_PATHS[type];
-      const res = await fetch(path, {
-        credentials: "same-origin",
-        headers: SYNC_CSRF_HEADERS,
-      });
-      if (!res.ok) {
-        throw new Error(`REST pull failed for ${path} (${res.status})`);
-      }
-      const body = (await res.json()) as { data: unknown };
-      const rows = Array.isArray(body.data) ? (body.data as RestRow[]) : [];
+      const rows: RestRow[] = [];
+      let cursor: string | null = null;
+      // Entity endpoints default to 50 rows per response. Follow their
+      // opaque cursor so the reconcile sees the full collection.
+      do {
+        const params = new URLSearchParams({ limit: "200" });
+        if (cursor) params.set("cursor", cursor);
+        const res = await fetch(`${path}?${params.toString()}`, {
+          credentials: "same-origin",
+          headers: SYNC_CSRF_HEADERS,
+        });
+        if (!res.ok) {
+          throw new Error(`REST pull failed for ${path} (${res.status})`);
+        }
+        const body = (await res.json()) as {
+          data: unknown;
+          meta?: { nextCursor?: string | null };
+        };
+        if (Array.isArray(body.data)) rows.push(...(body.data as RestRow[]));
+        cursor = body.meta?.nextCursor ?? null;
+      } while (cursor);
       return [type, rows];
     }),
   );

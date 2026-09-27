@@ -9,14 +9,17 @@
  * - vault-known ids missing from REST are apiDeleted only when the local
  *   copy is unchanged-or-missing; a locally-newer row wins over the deletion
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchRestTables,
   planRestAdoption,
   restKey,
   REST_PATHS,
   type RestEntityType,
   type RestRow,
 } from "@/lib/sync/rest-pull";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const ALL_TYPES: RestEntityType[] = [
   "client",
@@ -62,6 +65,41 @@ describe("REST_PATHS", () => {
   it("restKey namespaces ids by entity type", () => {
     expect(restKey("task", "abc")).not.toBe(restKey("client", "abc"));
     expect(restKey("task", "abc")).toBe("task:abc");
+  });
+});
+
+describe("fetchRestTables pagination", () => {
+  it("follows collection cursors so rows after the first page are included", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      const parsed = new URL(url, "https://tallyhand.test");
+      if (parsed.pathname === REST_PATHS.client && !parsed.searchParams.has("cursor")) {
+        return new Response(JSON.stringify({
+          data: [row("first", 100)],
+          meta: { nextCursor: "MjAw" },
+        }), { status: 200 });
+      }
+      if (parsed.pathname === REST_PATHS.client) {
+        return new Response(JSON.stringify({
+          data: [row("later", 200)],
+          meta: { nextCursor: null },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: [], meta: { nextCursor: null } }), {
+        status: 200,
+      });
+    }));
+
+    const tables = await fetchRestTables();
+
+    expect(tables.client.map((client) => client.id)).toEqual(["first", "later"]);
+    expect(requests).toContain(`${REST_PATHS.client}?limit=200&cursor=MjAw`);
+    expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({
+      credentials: "same-origin",
+      headers: { "x-tallyhand-sync": "1" },
+    });
   });
 });
 
