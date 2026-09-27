@@ -1,12 +1,17 @@
 /**
  * Resolve the current user id for data access (server-side).
  *
- * Contract (`TALLY_AUTH`):
+ * Contract (effective `TALLY_AUTH`, see `effectiveAuth()` in `@/lib/mode` —
+ * explicit TALLY_AUTH wins, otherwise Clerk keys auto-detect `clerk`):
  * - `none`    → single-user local mode; every call resolves to `"local"`.
- * - `clerk`   → Clerk session via @clerk/nextjs (`auth()`); throws 401 when
- *   signed out. Dynamic import keeps the package out of the static graph.
+ * - `clerk`   → Clerk session via @clerk/nextjs (`auth()`); a personal API
+ *   token (`thp_…`, Settings → Connect) in the Authorization header
+ *   resolves to its owner's user id without a session; throws 401 when
+ *   neither is present. Dynamic import keeps the package out of the static
+ *   graph.
  * - `builtin` → HMAC-signed `tally_session` cookie (see `builtin.ts`);
- *   falls back to API-token machine access mapped through
+ *   falls back to API-token machine access: personal `thp_…` tokens map to
+ *   their owner, the shared TALLYHAND_API_TOKEN maps through
  *   `TALLYHAND_HOSTED_CLI_USER_ID` (v1 routes verify the token first).
  *
  * There is intentionally no unauthenticated fallback when auth != none:
@@ -17,11 +22,16 @@
  */
 import { cookies, headers } from "next/headers";
 import { timingSafeEqual } from "node:crypto";
-import { parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { verifyBuiltinSession, getBuiltinUserById } from "./builtin";
 
 /** Single-user id used when TALLY_AUTH=none. */
 export const LOCAL_USER_ID = "local";
+
+function bearerTokenFromHeaders(header: string | null): string {
+  const match = /^Bearer (.+)$/.exec((header ?? "").trim());
+  return match ? match[1] : "";
+}
 
 function bearerMatches(header: string, token: string): boolean {
   const match = /^Bearer (.+)$/.exec(header.trim());
@@ -31,19 +41,50 @@ function bearerMatches(header: string, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-async function clerkUserId(): Promise<string> {
+function unauthorized(message = "Not signed in"): Error & { status?: number } {
+  const err = new Error(message) as Error & { status?: number };
+  err.status = 401;
+  return err;
+}
+
+/**
+ * Resolve a personal API token (`thp_…`) from the Authorization header to
+ * its owner's user id. Returns null when no (valid) personal token is
+ * presented. Lazy import keeps the token store out of the module graph.
+ */
+async function personalTokenUserId(): Promise<string | null> {
+  const headerList = await headers();
+  const presented = bearerTokenFromHeaders(headerList.get("authorization"));
+  if (!presented) return null;
+  const { findApiToken } = await import("./api-tokens");
+  const verified = await findApiToken(presented);
+  return verified ? verified.userId : null;
+}
+
+type ClerkAuthFn = () => { userId?: string | null } | Promise<{ userId?: string | null }>;
+
+function clerkAuthFn(): ClerkAuthFn {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require("@clerk/nextjs/server") as typeof import("@clerk/nextjs/server");
-  const authFn = (mod as { auth: unknown }).auth as
-    | (() => { userId?: string | null } | Promise<{ userId?: string | null }>)
-    | undefined;
+  const authFn = (mod as { auth: unknown }).auth as ClerkAuthFn | undefined;
   if (!authFn) throw new Error("Clerk auth() not available");
-  const session = await authFn();
-  if (!session?.userId) {
-    const err = new Error("Not signed in") as Error & { status?: number };
-    err.status = 401;
-    throw err;
-  }
+  return authFn;
+}
+
+async function clerkUserId(): Promise<string> {
+  // Personal API token first: machine clients have no Clerk session cookie.
+  const tokenUserId = await personalTokenUserId();
+  if (tokenUserId) return tokenUserId;
+
+  const session = await clerkAuthFn()();
+  if (!session?.userId) throw unauthorized();
+  return session.userId;
+}
+
+/** Clerk session only — personal bearer tokens are NOT accepted here. */
+async function clerkSessionUserId(): Promise<string> {
+  const session = await clerkAuthFn()();
+  if (!session?.userId) throw unauthorized();
   return session.userId;
 }
 
@@ -59,7 +100,12 @@ async function builtinUserId(): Promise<string> {
     if (user && !user.disabled) return userId;
   }
 
-  // Machine/CLI access: v1 routes already verified the bearer token.
+  // Machine/CLI access: personal tokens map to their owner…
+  const tokenUserId = await personalTokenUserId();
+  if (tokenUserId) return tokenUserId;
+
+  // …and the shared env token maps through TALLYHAND_HOSTED_CLI_USER_ID
+  // (v1 routes already verified the Bearer <redacted>
   const headerList = await headers();
   const token = process.env.TALLYHAND_API_TOKEN ?? "";
   const cliUserId = process.env.TALLYHAND_HOSTED_CLI_USER_ID;
@@ -69,14 +115,24 @@ async function builtinUserId(): Promise<string> {
   ) {
     return cliUserId;
   }
-  const err = new Error("Not signed in") as Error & { status?: number };
-  err.status = 401;
-  throw err;
+  throw unauthorized();
+}
+
+/** Builtin session cookie only — bearer tokens are NOT accepted here. */
+async function builtinSessionUserId(): Promise<string> {
+  const jar = await cookies();
+  const raw = jar.get("tally_session")?.value;
+  const secret = process.env.BUILTIN_AUTH_SECRET ?? "";
+  const userId = raw ? verifyBuiltinSession(raw, secret) : null;
+  if (!userId) throw unauthorized();
+  const user = await getBuiltinUserById(userId);
+  if (!user || user.disabled) throw unauthorized();
+  return userId;
 }
 
 /** Resolve the owner id every hosted query is scoped by. */
 export async function resolveUserId(): Promise<string> {
-  const auth = parseAuth();
+  const auth = effectiveAuth();
   if (auth === "none") return LOCAL_USER_ID;
   if (auth === "clerk") return clerkUserId();
   return builtinUserId();
@@ -89,4 +145,18 @@ export async function tryResolveUserId(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve the user id from an interactive session ONLY (Clerk session or
+ * builtin session cookie). Bearer tokens — shared or personal — are NOT
+ * accepted: this guards self-service account operations (e.g. API-token
+ * management in Settings → Connect) so a leaked token can't mint fresh
+ * tokens. Throws 401 when there is no session.
+ */
+export async function requireSessionUserId(): Promise<string> {
+  const auth = effectiveAuth();
+  if (auth === "clerk") return clerkSessionUserId();
+  if (auth === "builtin") return builtinSessionUserId();
+  throw unauthorized("No signed-in user in single-user local mode");
 }

@@ -191,4 +191,18 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_link", ["userId", "shareLinkId"]),
+
+  apiTokens: defineTable({
+    id: v.string(),
+    userId: v.string(),
+    name: v.string(),
+    /** SHA-256 hex of the raw token — the raw value is never stored. */
+    tokenHash: v.string(),
+    /** First 8 chars of the raw token, for display only. */
+    prefix: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_hash", ["tokenHash"]),
 });

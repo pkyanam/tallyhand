@@ -2,11 +2,11 @@
  * /admin/users — user management UI (admin-only).
  * Hidden/disabled when TALLY_AUTH=none (single-user local mode).
  */
-import { parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { UsersAdmin } from "./users-admin";
 
 export default function AdminUsersPage() {
-  if (parseAuth() === "none") {
+  if (effectiveAuth() === "none") {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <h1 className="text-2xl font-semibold">Users</h1>

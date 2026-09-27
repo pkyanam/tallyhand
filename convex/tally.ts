@@ -908,3 +908,104 @@ export const approvalsListByLink = queryGeneric({
       .collect();
   },
 });
+
+// ---------------------------------------------------------------------------
+// personal API tokens (Settings → Connect)
+// ---------------------------------------------------------------------------
+
+/** Shape the Next.js side expects back (mirrors ApiTokenRecord). */
+function toApiToken(doc: {
+  id: string;
+  userId: string;
+  name: string;
+  prefix: string;
+  createdAt: number;
+  lastUsedAt?: number;
+}) {
+  return {
+    id: doc.id,
+    userId: doc.userId,
+    name: doc.name,
+    prefix: doc.prefix,
+    createdAt: doc.createdAt,
+    lastUsedAt: doc.lastUsedAt ?? null,
+  };
+}
+
+export const apiTokensList = queryGeneric({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = needUser(args.userId);
+    const docs = await ctx.db
+      .query("apiTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    docs.sort((a, b) => b.createdAt - a.createdAt);
+    return docs.map(toApiToken);
+  },
+});
+
+export const apiTokensCreate = mutationGeneric({
+  args: {
+    userId: v.string(),
+    id: v.string(),
+    name: v.string(),
+    tokenHash: v.string(),
+    prefix: v.string(),
+    createdAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = needUser(args.userId);
+    const doc = {
+      id: args.id,
+      userId,
+      name: args.name,
+      tokenHash: args.tokenHash,
+      prefix: args.prefix,
+      createdAt: args.createdAt,
+    };
+    await ctx.db.insert("apiTokens", doc);
+    return toApiToken(doc);
+  },
+});
+
+export const apiTokensRevoke = mutationGeneric({
+  args: { userId: v.string(), id: v.string() },
+  handler: async (ctx, args) => {
+    const userId = needUser(args.userId);
+    const doc = await ctx.db
+      .query("apiTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("id"), args.id))
+      .unique();
+    if (!doc) return { revoked: false };
+    await ctx.db.delete(doc._id);
+    return { revoked: true };
+  },
+});
+
+export const apiTokensFindByHash = queryGeneric({
+  args: { tokenHash: v.string() },
+  handler: async (ctx, args) => {
+    // No userId here: the hash IS the credential. by_hash is unique.
+    const doc = await ctx.db
+      .query("apiTokens")
+      .withIndex("by_hash", (q) => q.eq("tokenHash", args.tokenHash))
+      .unique();
+    if (!doc) return null;
+    return { ...toApiToken(doc), tokenHash: doc.tokenHash };
+  },
+});
+
+export const apiTokensTouch = mutationGeneric({
+  args: { id: v.string(), lastUsedAt: v.number() },
+  handler: async (ctx, args) => {
+    // Best-effort "last used" stamp. The tokens table is tiny (a handful of
+    // rows per user), so a direct id scan is fine — no extra index needed.
+    const target = (await ctx.db.query("apiTokens").collect()).find(
+      (d) => d.id === args.id,
+    );
+    if (target) await ctx.db.patch(target._id, { lastUsedAt: args.lastUsedAt });
+    return { ok: true };
+  },
+});

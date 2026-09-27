@@ -17,7 +17,7 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const schedule = await asRecurring(getServerProvider()).getRecurringSchedule(params.id);
   if (!schedule) return notFound("recurring schedule");
@@ -28,7 +28,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const provider = asRecurring(getServerProvider());
@@ -49,7 +49,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = asRecurring(getServerProvider());
   const existing = await provider.getRecurringSchedule(params.id);

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { effectiveAuth } from "@/lib/mode";
+import { LandingChoiceScreen } from "./landing-choice";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -16,6 +18,12 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function LandingPage() {
+  // Hosted (Clerk) deployments get the first-run choice: sign in with an
+  // account, or use the app locally with zero cloud. Every other mode keeps
+  // today's landing page byte-for-byte.
+  if (effectiveAuth() === "clerk") {
+    return <LandingChoiceScreen />;
+  }
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">

@@ -1,12 +1,21 @@
 /**
- * Route protection, driven by `TALLY_AUTH`:
+ * Route protection, driven by the effective `TALLY_AUTH` (see
+ * `effectiveAuth()` in `src/lib/mode.ts` — explicit TALLY_AUTH wins,
+ * otherwise Clerk keys auto-detect `clerk`):
  *
  * - `clerk`   → Clerk middleware protects the app + API surface (except the
  *   public exceptions below). @clerk/nextjs is imported dynamically so the
- *   module never loads in local/none mode.
+ *   module never loads in local/none mode. Two pass-throughs:
+ *     · any `Authorization: Bearer …` request — the route's
+ *       requireApiToken() verifies it (shared env token or personal
+ *       `thp_…` token), so machine clients never need a Clerk session;
+ *     · the `tallyhand_local` cookie (set by the landing page's "Use
+ *       locally" choice) — app routes only, never API routes. The browser
+ *       app is local-first (Dexie), so these users get zero-cloud behavior
+ *       without signing in.
  * - `builtin` → session-cookie check on browser routes (redirect to
- *   /login); API routes verify the session/token themselves via
- *   resolveUserId().
+ *   /login); any Bearer <redacted> passes through and API routes verify
+ *   the session/token themselves via resolveUserId().
  * - `none`    → single-user local: everything passes through.
  *
  * Public (never gated): landing page, login page, builtin auth endpoints,
@@ -15,6 +24,8 @@
  */
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
+import { effectiveAuth } from "@/lib/mode";
+import { LOCAL_CHOICE_COOKIE } from "@/lib/landing";
 
 const PUBLIC_PATHS: RegExp[] = [
   /^\/$/,
@@ -35,8 +46,18 @@ function isApiRoute(pathname: string): boolean {
   return pathname.startsWith("/api/");
 }
 
+function hasBearer(req: NextRequest): boolean {
+  const header = req.headers.get("authorization") ?? "";
+  return /^Bearer\s+.+/i.test(header.trim());
+}
+
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
-  const authMode = (process.env.TALLY_AUTH ?? "none").trim().toLowerCase();
+  const authMode = effectiveAuth({
+    TALLY_AUTH: process.env.TALLY_AUTH,
+    CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+  });
   const { pathname } = req.nextUrl;
 
   if (isPublic(pathname)) return NextResponse.next();
@@ -60,16 +81,25 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       "/api/share/links(.*)",
     ]);
     return mod.clerkMiddleware(async (auth, request) => {
-      if (isProtected(request)) await auth.protect();
+      if (!isProtected(request)) return;
+      // Machine/API access: the route verifies the bearer token itself.
+      if (hasBearer(request)) return;
+      // "Use locally" landing choice: app routes only, never API routes.
+      if (
+        !isApiRoute(request.nextUrl.pathname) &&
+        request.cookies.get(LOCAL_CHOICE_COOKIE)?.value === "1"
+      ) {
+        return;
+      }
+      await auth.protect();
     })(req, event);
   }
 
   if (authMode === "builtin") {
     const session = req.cookies.get("tally_session")?.value;
-    const cliToken =
-      process.env.TALLYHAND_API_TOKEN &&
-      req.headers.get("authorization") === `Bearer ${process.env.TALLYHAND_API_TOKEN}`;
-    if (session || cliToken) return NextResponse.next();
+    // Any bearer token passes middleware; the route verifies it
+    // (shared env token or personal thp_… token) via resolveUserId().
+    if (session || hasBearer(req)) return NextResponse.next();
     if (isApiRoute(pathname)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

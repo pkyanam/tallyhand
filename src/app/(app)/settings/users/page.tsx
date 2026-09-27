@@ -3,11 +3,11 @@
  * Reuses the admin user console; hidden/disabled when TALLY_AUTH=none.
  * (The existing /settings page itself is untouched by this track.)
  */
-import { parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { UsersAdmin } from "../../../admin/users/users-admin";
 
 export default function SettingsUsersPage() {
-  if (parseAuth() === "none") {
+  if (effectiveAuth() === "none") {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <h1 className="text-2xl font-semibold">Users</h1>

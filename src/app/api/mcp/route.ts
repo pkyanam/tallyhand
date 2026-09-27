@@ -34,7 +34,7 @@ function bearerToken(req: Request): string {
 }
 
 async function handleMcp(req: Request): Promise<Response> {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
 
   // Loop back to this deployment's own REST API. `req.url`'s origin is the

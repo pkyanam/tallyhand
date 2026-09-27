@@ -16,7 +16,7 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const retainer = await asRetainers(getServerProvider()).getRetainer(params.id);
   if (!retainer) return notFound("retainer");
@@ -27,7 +27,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const provider = asRetainers(getServerProvider());
@@ -48,7 +48,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = asRetainers(getServerProvider());
   const existing = await provider.getRetainer(params.id);

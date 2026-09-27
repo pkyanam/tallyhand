@@ -2,26 +2,32 @@
  * /login — auth entry point (server component).
  *
  * Renders per TALLY_AUTH:
- * - clerk   → Clerk's hosted SignIn component.
+ * - clerk   → Clerk's hosted SignIn component (?mode=sign-up → SignUp).
  * - builtin → email magic-link form (no password to remember).
  * - none    → explains auth is disabled (single-user local mode).
  */
-import { parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { BuiltinLoginForm } from "./builtin-login-form";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; mode?: string }>;
 }) {
-  const auth = parseAuth();
-  const { next } = await searchParams;
+  const auth = effectiveAuth();
+  const { next, mode } = await searchParams;
 
   if (auth === "clerk") {
-    const { SignIn } = await import("@clerk/nextjs");
+    // ?mode=sign-up renders the registration form; default is sign-in.
+    // Clerk's <SignIn> also links to sign-up on its own.
+    const { SignIn, SignUp } = await import("@clerk/nextjs");
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
-        <SignIn forceRedirectUrl={next ?? "/"} />
+        {mode === "sign-up" ? (
+          <SignUp forceRedirectUrl={next ?? "/"} />
+        ) : (
+          <SignIn forceRedirectUrl={next ?? "/"} />
+        )}
       </main>
     );
   }

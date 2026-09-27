@@ -137,7 +137,7 @@ export function defineExtensionCrud<
   }
 
   async function list(req: Request): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const store = resolveStore<() => Promise<TItem[]>>(
@@ -177,7 +177,7 @@ export function defineExtensionCrud<
   }
 
   async function create(req: Request): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const provider = getServerProvider();
@@ -201,7 +201,7 @@ export function defineExtensionCrud<
   }
 
   async function bulkCreate(req: Request): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const body: unknown = await req.json().catch(() => null);
@@ -258,7 +258,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const store = resolveStore<(id: string) => Promise<TItem | undefined>>(
@@ -275,7 +275,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const provider = getServerProvider();
@@ -314,7 +314,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = requireApiToken(req);
+    const authErr = await requireApiToken(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const getStore = resolveStore<(id: string) => Promise<TItem | undefined>>(

@@ -15,7 +15,7 @@
  *
  * SERVER ONLY — dynamic requires keep provider SDKs out of the static graph.
  */
-import { parseAuth, type TallyAuth } from "@/lib/mode";
+import { effectiveAuth, type TallyAuth } from "@/lib/mode";
 import {
   deleteBuiltinUser,
   getBuiltinUserById,
@@ -274,7 +274,7 @@ export async function getUserRole(userId: string): Promise<UserRole> {
  * Throws when TALLY_AUTH=none (no user management in single-user mode).
  */
 export function getUserDirectory(): UserDirectory {
-  const auth = parseAuth();
+  const auth = effectiveAuth();
   if (auth === "clerk") return new ClerkUserDirectory();
   if (auth === "builtin") return new BuiltinUserDirectory();
   throw new Error("User management is disabled when TALLY_AUTH=none");

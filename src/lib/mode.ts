@@ -51,6 +51,56 @@ export function parseAuth(
   return (AUTHS as string[]).includes(raw) ? (raw as TallyAuth) : "none";
 }
 
+/**
+ * The Clerk publishable key, from either the runtime server env var
+ * (preferred: rotatable without a rebuild) or the conventional
+ * NEXT_PUBLIC_* name (accepted as an alias for operators who already
+ * set it in their hosting dashboard).
+ */
+export function clerkPublishableKey(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return (
+    (env.CLERK_PUBLISHABLE_KEY ?? "").trim() ||
+    (env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim()
+  );
+}
+
+/** True when both Clerk keys are present (enough to run Clerk auth). */
+export function hasClerkKeys(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return (
+    clerkPublishableKey(env).length > 0 &&
+    (env.CLERK_SECRET_KEY ?? "").trim().length > 0
+  );
+}
+
+/**
+ * The auth mode actually enforced at runtime.
+ *
+ * Same as parseAuth(), except: when TALLY_AUTH is absent entirely but both
+ * Clerk keys are present, the deployment auto-detects `clerk` — pasting
+ * the two keys into the hosting dashboard is enough, no TALLY_AUTH edit
+ * needed. An explicit TALLY_AUTH (including `none`, even with Clerk keys
+ * present) always wins, so single-user local mode keeps today's behavior
+ * byte-for-byte.
+ *
+ * Use this (not parseAuth) for every auth-mode decision: middleware,
+ * session resolution, user directory, and UI gating.
+ */
+export function effectiveAuth(
+  env: Record<string, string | undefined> = process.env,
+): TallyAuth {
+  const explicit = parseAuth(env);
+  // An explicit knob always wins (explicit "none" keeps single-user local
+  // behavior byte-for-byte, even when Clerk keys happen to be set). Clerk is
+  // auto-detected only when TALLY_AUTH is absent entirely — the default
+  // Vercel deploy path.
+  if (explicit !== "none" || env.TALLY_AUTH !== undefined) return explicit;
+  return hasClerkKeys(env) ? "clerk" : "none";
+}
+
 /** Derived hosted flag: shared storage or any real auth. */
 export function isHosted(
   env: Record<string, string | undefined> = process.env,
@@ -84,7 +134,10 @@ export function validateConfig(
     problems.push("TALLY_STORAGE=convex requires CONVEX_URL");
   }
   if (auth === "clerk") {
-    if (!env.CLERK_PUBLISHABLE_KEY) problems.push("TALLY_AUTH=clerk requires CLERK_PUBLISHABLE_KEY");
+    if (!clerkPublishableKey(env))
+      problems.push(
+        "TALLY_AUTH=clerk requires CLERK_PUBLISHABLE_KEY (or NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)",
+      );
     if (!env.CLERK_SECRET_KEY) problems.push("TALLY_AUTH=clerk requires CLERK_SECRET_KEY");
   }
   if (auth === "builtin") {

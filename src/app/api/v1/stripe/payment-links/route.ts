@@ -26,7 +26,7 @@ const Body = z
  * to `url`. Idempotent via `Idempotency-Key`.
  */
 export async function POST(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   if (!getStripeConfig()) {
     return badRequest(

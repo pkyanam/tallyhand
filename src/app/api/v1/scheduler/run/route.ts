@@ -22,7 +22,7 @@ export const runtime = "nodejs";
  * Dry-run responses are never stored under an Idempotency-Key.
  */
 export async function POST(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = getServerProvider() as unknown as RecurringCapableProvider;
   if (isDryRun(req)) {

@@ -6,7 +6,7 @@
  * - Signed in but not admin → 403.
  */
 import { NextResponse } from "next/server";
-import { parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { getUserDirectory, type UserDirectory } from "@/lib/auth/users";
 import { resolveUserId } from "@/lib/auth/session";
 
@@ -16,7 +16,7 @@ export interface AdminContext {
 }
 
 export async function requireAdmin(): Promise<AdminContext | NextResponse> {
-  if (parseAuth() === "none") {
+  if (effectiveAuth() === "none") {
     return NextResponse.json(
       { error: "User management is disabled when TALLY_AUTH=none" },
       { status: 404 },

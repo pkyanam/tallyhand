@@ -15,7 +15,7 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const invoice = await getServerProvider().getInvoice(params.id);
   if (!invoice) return notFound("invoice");
@@ -26,7 +26,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const provider = getServerProvider();
@@ -80,7 +80,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = getServerProvider();
   const existing = await provider.getInvoice(params.id);

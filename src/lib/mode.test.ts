@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  clerkPublishableKey,
+  effectiveAuth,
   getConfig,
+  hasClerkKeys,
   isHosted,
   parseAuth,
   parseStorage,
@@ -83,5 +86,60 @@ describe("env contract", () => {
     expect(() => requireValidConfig({ TALLY_STORAGE: "postgres" })).toThrow(
       /Invalid Tallyhand configuration/,
     );
+  });
+});
+
+describe("clerk auto-detect", () => {
+  const KEYS = {
+    CLERK_PUBLISHABLE_KEY: "pk_test_abc",
+    CLERK_SECRET_KEY: "sk_test_def",
+  };
+
+  it("resolves the publishable key from either env name", () => {
+    expect(clerkPublishableKey({ CLERK_PUBLISHABLE_KEY: "pk_a" })).toBe("pk_a");
+    expect(
+      clerkPublishableKey({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_b" }),
+    ).toBe("pk_b");
+    // runtime server var wins over the NEXT_PUBLIC alias
+    expect(
+      clerkPublishableKey({
+        CLERK_PUBLISHABLE_KEY: "pk_a",
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_b",
+      }),
+    ).toBe("pk_a");
+    expect(clerkPublishableKey({})).toBe("");
+  });
+
+  it("detects complete vs incomplete key pairs", () => {
+    expect(hasClerkKeys(KEYS)).toBe(true);
+    expect(hasClerkKeys({ CLERK_PUBLISHABLE_KEY: "pk_test_abc" })).toBe(false);
+    expect(hasClerkKeys({ CLERK_SECRET_KEY: "sk_test_def" })).toBe(false);
+    expect(hasClerkKeys({})).toBe(false);
+  });
+
+  it("effectiveAuth: explicit knob wins; keys auto-detect only when unset", () => {
+    // byte-for-byte local behavior without keys
+    expect(effectiveAuth({})).toBe("none");
+    expect(effectiveAuth({ TALLY_AUTH: "none" })).toBe("none");
+    // auto-detect: keys present, TALLY_AUTH absent entirely
+    expect(effectiveAuth(KEYS)).toBe("clerk");
+    // explicit none beats keys (single-user local stays untouched)
+    expect(effectiveAuth({ TALLY_AUTH: "none", ...KEYS })).toBe("none");
+    // explicit modes always win
+    expect(effectiveAuth({ TALLY_AUTH: "builtin", ...KEYS })).toBe("builtin");
+    expect(effectiveAuth({ TALLY_AUTH: "clerk" })).toBe("clerk");
+    // unknown knob value → none, never auto-detect
+    expect(effectiveAuth({ TALLY_AUTH: "banana", ...KEYS })).toBe("none");
+    // parseAuth itself is untouched (explicit knob only)
+    expect(parseAuth(KEYS)).toBe("none");
+  });
+
+  it("validateConfig accepts the NEXT_PUBLIC publishable key alias", () => {
+    const problems = validateConfig({
+      TALLY_AUTH: "clerk",
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
+      CLERK_SECRET_KEY: "sk_test_def",
+    });
+    expect(problems.filter((p) => /PUBLISHABLE/.test(p))).toEqual([]);
   });
 });

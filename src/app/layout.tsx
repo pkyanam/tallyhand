@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import dynamic from "next/dynamic";
+import { effectiveAuth, clerkPublishableKey } from "@/lib/mode";
 
 // Code-split: the @clerk/nextjs client bundle only loads when the app
 // actually runs with TALLY_AUTH=clerk. Local mode never downloads it.
@@ -54,12 +55,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   // Clerk is strictly opt-in: only wrap when the hosted Clerk auth mode is
-  // configured. The publishable key comes from runtime server env so it can
+  // configured (explicit TALLY_AUTH=clerk, or auto-detected from Clerk keys).
+  // The publishable key comes from runtime server env so it can
   // be rotated without rebuilding (unlike NEXT_PUBLIC_* vars).
   const clerkKey =
-    process.env.TALLY_AUTH === "clerk"
-      ? process.env.CLERK_PUBLISHABLE_KEY
-      : undefined;
+    effectiveAuth() === "clerk" ? clerkPublishableKey() : undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <body

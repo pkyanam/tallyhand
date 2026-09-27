@@ -16,7 +16,7 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = getServerProvider();
   const invoice = await provider.getInvoice(params.id);

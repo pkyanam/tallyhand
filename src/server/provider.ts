@@ -20,7 +20,7 @@
  * `require` inside the branch that needs them, so local mode, vitest, and
  * edge bundles never load them.
  */
-import { getConfig, parseAuth } from "@/lib/mode";
+import { getConfig, effectiveAuth } from "@/lib/mode";
 import { SqliteStorageProvider, makeSqliteProvider } from "./sqlite-provider";
 import type { StorageProvider } from "@/core/storage";
 import type { UserIdSource } from "@/lib/db/hosted-types";
@@ -127,7 +127,7 @@ function makeProvider(userIdSource: UserIdSource): StorageProvider {
 export function getServerProvider(): StorageProvider {
   const source = lazyUserId();
   const base = makeProvider(source);
-  return parseAuth() === "none" ? base : readOnlyIfViewer(base, source);
+  return effectiveAuth() === "none" ? base : readOnlyIfViewer(base, source);
 }
 
 /**

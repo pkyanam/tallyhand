@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * Idempotency-Key, so a retried batch never double-creates.
  */
 export async function POST(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);

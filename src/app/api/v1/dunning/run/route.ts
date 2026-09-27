@@ -18,7 +18,7 @@ export const runtime = "nodejs";
  *   bypass idempotency so a retried key can't replay a preview).
  */
 export async function POST(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
 
   // Parse + validate before idempotency: the wrapper only inspects

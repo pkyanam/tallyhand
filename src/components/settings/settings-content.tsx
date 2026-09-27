@@ -30,7 +30,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import type { TallyAuth } from "@/lib/mode";
 import { PageHeader } from "@/components/app/page-header";
+
+// Code-split: the @clerk/nextjs client bundle only loads for this card, and
+// only when the deployment actually runs TALLY_AUTH=clerk.
+const ClerkAccountCard = dynamic(
+  () => import("./clerk-account-card").then((m) => m.ClerkAccountCard),
+  { ssr: false },
+);
 import { useAppChrome } from "@/components/app/app-chrome-provider";
 import {
   exportBundleExpensesCsv,
@@ -70,7 +80,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export function SettingsContent() {
+export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   const settings = useLiveQuery(() => settingsRepo.read(), []);
   const { showNotice } = useAppChrome();
   const { setTheme } = useTheme();
@@ -201,6 +211,23 @@ export function SettingsContent() {
       />
 
       <div className="space-y-6">
+        {authMode === "clerk" && <ClerkAccountCard />}
+        {authMode === "builtin" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Account</CardTitle>
+              <CardDescription>
+                Signed in with email magic link. Manage the tokens your CLI,
+                MCP clients, and scripts use to talk to Tallyhand.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline">
+                <Link href="/settings/connect">API tokens &amp; integrations</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <CardTitle>Business</CardTitle>

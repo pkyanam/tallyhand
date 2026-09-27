@@ -12,7 +12,7 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const task = await getServerProvider().getTask(params.id);
   if (!task) return notFound("task");
@@ -23,7 +23,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const provider = getServerProvider();
@@ -55,7 +55,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const provider = getServerProvider();
   const existing = await provider.getTask(params.id);

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 /** Read the singleton settings (business profile, invoice prefs, …). */
 export async function GET(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const settings = await getServerProvider().getSettings();
   return ok(settings);
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
 /** Partially update settings. Nested objects merge key-wise. */
 export async function PATCH(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);

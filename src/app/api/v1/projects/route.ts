@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 const SORT_FIELDS = ["name", "createdAt"] as const;
 
 export async function GET(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
   const provider = getServerProvider();
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);
