@@ -30,6 +30,7 @@ import {
   type SyncResult,
 } from "@/lib/sync/engine";
 import { installDeleteHooks } from "@/lib/sync/delete-hooks";
+import { markSyncOptOut } from "@/components/sync/sync-bootstrap";
 
 export { reconcileAfterLocalReplace };
 
@@ -92,6 +93,7 @@ export function SyncCard() {
       if (on) {
         await ensureDataKey(userId);
         setSyncEnabled(true, userId);
+        markSyncOptOut(false);
         installDeleteHooks();
         setEnabled(true);
         showNotice("Encrypted sync on — running first sync…");
@@ -107,6 +109,7 @@ export function SyncCard() {
         }
       } else {
         setSyncEnabled(false);
+        markSyncOptOut(true);
         setEnabled(false);
         showNotice("Sync off. Your key stays on this device — re-enable anytime.");
       }
@@ -159,6 +162,7 @@ export function SyncCard() {
         return;
       await forgetDataKey(userId);
       setSyncEnabled(false);
+      markSyncOptOut(true);
       setEnabled(false);
       showNotice("Key forgotten on this device.");
     });
@@ -209,7 +213,8 @@ export function SyncCard() {
         <CardDescription>
           End-to-end encrypted backup across your devices. Your data is
           encrypted on this device (AES-GCM-256) — the server stores only
-          ciphertext and can never read it.
+          ciphertext and can never read it. Sync turns on automatically when
+          you sign in; switch it off here any time.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

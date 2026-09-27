@@ -63,9 +63,14 @@ async function personalTokenUserId(): Promise<string | null> {
 
 type ClerkAuthFn = () => { userId?: string | null } | Promise<{ userId?: string | null }>;
 
-function clerkAuthFn(): ClerkAuthFn {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require("@clerk/nextjs/server") as typeof import("@clerk/nextjs/server");
+async function clerkAuthFn(): Promise<ClerkAuthFn> {
+  // Dynamic import (not require): matches the middleware pattern and keeps
+  // @clerk/nextjs out of the static module graph for non-Clerk deployments.
+  // In the bundled route this resolves to the same server `auth()` the
+  // middleware uses via `await import("@clerk/nextjs/server")`.
+  const mod = (await import("@clerk/nextjs/server")) as typeof import(
+    "@clerk/nextjs/server"
+  );
   const authFn = (mod as { auth: unknown }).auth as ClerkAuthFn | undefined;
   if (!authFn) throw new Error("Clerk auth() not available");
   return authFn;
@@ -76,14 +81,16 @@ async function clerkUserId(): Promise<string> {
   const tokenUserId = await personalTokenUserId();
   if (tokenUserId) return tokenUserId;
 
-  const session = await clerkAuthFn()();
+  const auth = await clerkAuthFn();
+  const session = await auth();
   if (!session?.userId) throw unauthorized();
   return session.userId;
 }
 
 /** Clerk session only — personal bearer tokens are NOT accepted here. */
 async function clerkSessionUserId(): Promise<string> {
-  const session = await clerkAuthFn()();
+  const auth = await clerkAuthFn();
+  const session = await auth();
   if (!session?.userId) throw unauthorized();
   return session.userId;
 }

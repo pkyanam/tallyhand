@@ -43,7 +43,20 @@ const expiresInDays = z
 export const CreateShareSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("invoice"),
-    target: z.object({ invoiceId: z.string().min(1) }),
+    target: z.object({
+      invoiceId: z.string().min(1),
+      // Client-supplied snapshot (invoice + client + display settings).
+      // Used when the owner's data lives client-side (local-first browser)
+      // rather than in the server's tables: the browser holds the data and
+      // sends a point-in-time snapshot for the public page. Sharing is an
+      // explicit user action, so the snapshot is theirs to publish.
+      snapshot: z
+        .object({
+          invoice: z.record(z.string(), z.unknown()),
+          client: z.record(z.string(), z.unknown()).nullable(),
+        })
+        .optional(),
+    }),
     expiresInDays,
   }),
   z.object({
@@ -88,10 +101,20 @@ export async function createShareLink(
 
   // Validate the target exists in the OWNER's data (prevents cross-user
   // sharing and dangling links). The discriminated union already narrows
-  // `type` ↔ `target` here.
+  // `type` ↔ `target` here. Invoice shares may instead carry a
+  // client-supplied snapshot (local-first browser data); the snapshot is
+  // validated for shape and the invoiceId must match it.
   if (input.type === "invoice") {
-    const invoice = await ownerProvider.getInvoice(input.target.invoiceId);
-    if (!invoice) throw new Error("Invoice not found");
+    const snap = input.target.snapshot;
+    if (snap) {
+      const snapInvoice = snap.invoice as { id?: unknown };
+      if (snapInvoice.id !== input.target.invoiceId) {
+        throw new Error("Snapshot invoice id mismatch");
+      }
+    } else {
+      const invoice = await ownerProvider.getInvoice(input.target.invoiceId);
+      if (!invoice) throw new Error("Invoice not found");
+    }
   } else if (input.type === "timesheet") {
     const client = await ownerProvider.getClient(input.target.clientId);
     if (!client) throw new Error("Client not found");
@@ -162,6 +185,20 @@ export async function resolveShareToken(
   const target = link.target as Record<string, unknown>;
 
   if (link.type === "invoice" && typeof target.invoiceId === "string") {
+    // Snapshot shares (local-first browser data): the public page renders
+    // the client-supplied snapshot — no server-side invoice needed.
+    const snap = target.snapshot as
+      | { invoice?: unknown; client?: unknown }
+      | undefined;
+    if (snap?.invoice && typeof snap.invoice === "object") {
+      return {
+        link,
+        invoice: {
+          ...(snap.invoice as Invoice),
+          client: (snap.client as Client | null) ?? null,
+        },
+      };
+    }
     const invoice = await owner.getInvoice(target.invoiceId);
     if (!invoice) throw Object.assign(new Error("Invoice not found"), { status: 404 });
     const client = await owner.getClient(invoice.clientId);

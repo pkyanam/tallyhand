@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileDown,
   TriangleAlert,
+  Cloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import {
   buildShareableInvoiceHtml,
   shareInvoiceFileName,
 } from "@/lib/invoice-share-file";
+import { getSyncStatus } from "@/lib/sync/engine";
 
 function publicInvoiceUrl(token: string): string {
   if (typeof window === "undefined") return "";
@@ -86,6 +88,26 @@ export function InvoiceSharePanel({
   dirty: boolean;
 }) {
   const [copied, setCopied] = React.useState(false);
+  // Cloud share state (signed-in only): a hosted /share/[token] link backed
+  // by a server-stored snapshot, so it opens in any browser.
+  const [signedIn, setSignedIn] = React.useState<boolean | null>(null);
+  const [cloudUrl, setCloudUrl] = React.useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = React.useState(false);
+  const [cloudError, setCloudError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getSyncStatus();
+        if (!cancelled) setSignedIn(!!s.signedIn);
+      } catch {
+        if (!cancelled) setSignedIn(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Set after mount so server and client render identically (no hydration
   // mismatch); the classifier's conservative default is "device".
   const [hostname, setHostname] = React.useState("");
@@ -101,15 +123,46 @@ export function InvoiceSharePanel({
   // last saved version (and say so); a never-saved invoice has no file yet.
   const exportSource = dirty ? (savedInvoice ?? null) : invoice;
 
-  const copyLink = async () => {
-    if (!token) return;
-    const url = publicInvoiceUrl(token);
+  const copyLink = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       /* ignore */
+    }
+  };
+
+  const createCloudLink = async () => {
+    const source = exportSource;
+    if (!source?.id) return;
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const res = await fetch("/api/share/links", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "invoice",
+          target: {
+            invoiceId: source.id,
+            snapshot: {
+              invoice: source,
+              client: client ?? null,
+            },
+          },
+          expiresInDays: 30,
+        }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        throw new Error(data.error ?? "Couldn't create the share link.");
+      }
+      setCloudUrl(data.url);
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : "Couldn't create the share link.");
+    } finally {
+      setCloudBusy(false);
     }
   };
 
@@ -139,6 +192,78 @@ export function InvoiceSharePanel({
           <p className="font-medium">Share</p>
         </div>
 
+        {/* ——— Cloud link (signed in): works in any browser ——— */}
+        {signedIn ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Cloud className="h-3.5 w-3.5 text-muted-foreground" />
+                Cloud link
+              </span>
+              <Badge variant="outline" className="badge-positive">
+                Anyone with the link
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">
+              Hosted by Tallyhand — opens in any browser, on any device.
+              {dirty
+                ? " The link captures the last saved version."
+                : ""}
+            </p>
+            {!cloudUrl ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={cloudBusy || !exportSource?.id}
+                  onClick={() => void createCloudLink()}
+                >
+                  {cloudBusy ? "Creating…" : "Create cloud link"}
+                </Button>
+                {cloudError ? (
+                  <p className="text-xs text-destructive">{cloudError}</p>
+                ) : null}
+                {!exportSource?.id ? (
+                  <p className="text-xs text-muted-foreground">
+                    Save the invoice first.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="max-w-full truncate rounded border bg-muted/50 px-2 py-1 font-mono text-xs tabular-nums">
+                  {cloudUrl}
+                </code>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => void copyLink(cloudUrl)}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1"
+                  asChild
+                >
+                  <a href={cloudUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open
+                  </a>
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {signedIn ? <Separator /> : null}
+
         {/* ——— Link path: works when this Tallyhand is reachable ——— */}
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -167,7 +292,7 @@ export function InvoiceSharePanel({
                 variant="outline"
                 size="sm"
                 className="gap-1"
-                onClick={() => void copyLink()}
+                onClick={() => void copyLink(publicInvoiceUrl(token))}
               >
                 <Copy className="h-3.5 w-3.5" />
                 {copied ? "Copied" : "Copy"}
