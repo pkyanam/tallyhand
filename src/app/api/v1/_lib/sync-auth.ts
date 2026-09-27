@@ -34,7 +34,7 @@ export async function requireSyncAuth(
   const sessionUser = await tryResolveSyncUserId();
   if (sessionUser) return { userId: sessionUser, via: "session" };
 
-  const authErr = requireApiToken(req);
+  const authErr = await requireApiToken(req);
   if (authErr) return authErr;
   try {
     const userId = await resolveUserId();

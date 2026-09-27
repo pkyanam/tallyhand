@@ -22,7 +22,7 @@
  */
 import { cookies, headers } from "next/headers";
 import { timingSafeEqual } from "node:crypto";
-import { effectiveAuth } from "@/lib/mode";
+import { effectiveAuth, parseAuth } from "@/lib/mode";
 import { verifyBuiltinSession, getBuiltinUserById } from "./builtin";
 
 /** Single-user id used when TALLY_AUTH=none. */
