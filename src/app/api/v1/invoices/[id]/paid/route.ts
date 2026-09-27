@@ -1,5 +1,5 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
+import { requireApiOrSession } from "../../../_lib/sync-auth";
 import { notFound, ok } from "@/server/http";
 import { withIdempotency } from "../../../_lib/idempotency";
 import { conflict } from "../../../_lib/errors";
@@ -16,7 +16,7 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const provider = getServerProvider();
   const invoice = await provider.getInvoice(params.id);

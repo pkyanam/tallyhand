@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { ImageUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

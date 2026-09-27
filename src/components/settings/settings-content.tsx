@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { useTheme } from "next-themes";
 import {
   ArrowDown,
@@ -53,12 +53,6 @@ import {
   resetAllLocalData,
 } from "@/lib/app-bundle";
 import { parseAndValidateBundle } from "@/lib/v1-import";
-import { SyncCard } from "@/components/settings/sync-card";
-import {
-  isSyncEnabled,
-  reconcileAfterLocalReplace,
-  syncUserId,
-} from "@/lib/sync/engine";
 import { settingsRepo } from "@/lib/db/repos";
 import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
@@ -176,14 +170,6 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
       // Detection → field migration → zod validation (src/lib/v1-import.ts).
       const { bundle, migratedFields } = parseAndValidateBundle(parsed);
       await importTallyhandBundleV1(bundle);
-      // If encrypted sync is on, the wholesale replace must not resurrect
-      // cloud rows the bundle dropped: reconcile tombstones before reload.
-      try {
-        const uid = syncUserId();
-        if (isSyncEnabled() && uid) await reconcileAfterLocalReplace(uid);
-      } catch {
-        /* sync reconcile is best-effort; the import itself succeeded */
-      }
       showNotice(
         migratedFields > 0
           ? `Import complete (${migratedFields} legacy field(s) defaulted) — reloading.`
@@ -209,12 +195,6 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
     )
       return;
     await resetAllLocalData();
-    try {
-      const uid = syncUserId();
-      if (isSyncEnabled() && uid) await reconcileAfterLocalReplace(uid);
-    } catch {
-      /* best-effort */
-    }
     showNotice("Database cleared — reloading.");
     window.location.reload();
   };
@@ -765,30 +745,37 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
                 Ledger Markdown
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-              <input
-                ref={importRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(e) => void handleImport(e.target.files?.[0] ?? null)}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => importRef.current?.click()}
-              >
-                <Upload className="mr-1 h-4 w-4" />
-                Import bundle (JSON)
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => void handleReset()}>
-                Reset data…
-              </Button>
-            </div>
+            {dataMode === "cloud" ? (
+              <p className="border-t pt-3 text-sm text-muted-foreground">
+                Import and reset aren&apos;t available in cloud mode — your data
+                lives in the cloud database, not in this browser&apos;s local
+                storage.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(e) => void handleImport(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => importRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  Import bundle (JSON)
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => void handleReset()}>
+                  Reset data…
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {dataMode === "cloud" && <SyncCard />}
       </div>
     </>
   );

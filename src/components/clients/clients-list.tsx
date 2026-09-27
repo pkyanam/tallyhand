@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import {
   Archive,
   ArchiveRestore,

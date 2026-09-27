@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { ChevronLeft, ChevronRight, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { ManualEntryDialog } from "@/components/app/manual-entry-dialog";
 import { PageHeader } from "@/components/app/page-header";

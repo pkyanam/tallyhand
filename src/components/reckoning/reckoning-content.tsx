@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { CheckCircle2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

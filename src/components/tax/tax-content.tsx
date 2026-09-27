@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ import {
 } from "@/core/tax";
 import { mileageDeduction } from "@/core/mileage";
 import { formatCurrency } from "@/lib/utils";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
 
 function toDateInput(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -120,6 +121,7 @@ function QuarterTable({ rows }: { rows: QuarterlyPaymentStatus[] }) {
 }
 
 export function TaxContent() {
+  const { dataMode } = useAppChrome();
   const invoices = useLiveQuery(() => invoiceRepo.list(), []);
   const expenses = useLiveQuery(() => expenseRepo.list(), []);
   const mileage = useLiveQuery(() => mileageRepo.list(), []);
@@ -286,7 +288,9 @@ export function TaxContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        {dataMode === "cloud" ? (
+          <p className="text-sm text-muted-foreground">Tax payment tracking isn&apos;t available in cloud mode yet.</p>
+        ) : <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Estimated payments</CardTitle>
@@ -412,7 +416,7 @@ export function TaxContent() {
               </p>
             )}
           </CardContent>
-        </Card>
+        </Card>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

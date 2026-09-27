@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { rateCardRepo } from "@/lib/db/repos";
 import { activeRateCards } from "@/core/rate-cards";
 import { formatCurrency } from "@/lib/utils";
 import type { Project, RateCard } from "@/lib/db/types";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
 
 function toDateInput(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -166,7 +167,7 @@ function RateCardForm({
   );
 }
 
-export function RateCardsSection({
+function RateCardsSectionLocal({
   clientId,
   projects,
 }: {
@@ -300,4 +301,22 @@ export function RateCardsSection({
       )}
     </section>
   );
+}
+
+export function RateCardsSection({
+  clientId,
+  projects,
+}: {
+  clientId: string;
+  projects: Project[];
+}) {
+  const { dataMode } = useAppChrome();
+  if (dataMode === "cloud") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Rate cards aren&apos;t available in cloud mode yet.
+      </p>
+    );
+  }
+  return <RateCardsSectionLocal clientId={clientId} projects={projects} />;
 }

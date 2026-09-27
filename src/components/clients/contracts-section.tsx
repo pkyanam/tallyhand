@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { FileText, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   type ContractType,
 } from "@/core/contracts";
 import type { Project } from "@/lib/db/types";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
 
 function toDateInput(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -256,7 +257,7 @@ function ContractForm({
   );
 }
 
-export function ContractsSection({
+function ContractsSectionLocal({
   clientId,
   projects,
 }: {
@@ -408,4 +409,22 @@ export function ContractsSection({
       )}
     </section>
   );
+}
+
+export function ContractsSection({
+  clientId,
+  projects,
+}: {
+  clientId: string;
+  projects: Project[];
+}) {
+  const { dataMode } = useAppChrome();
+  if (dataMode === "cloud") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Contracts aren&apos;t available in cloud mode yet.
+      </p>
+    );
+  }
+  return <ContractsSectionLocal clientId={clientId} projects={projects} />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useLiveQuery } from "@/lib/data/use-live-query";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import {
 import { clientRepo, mileageRepo } from "@/lib/db/repos";
 import { mileageDeduction, mileageRateForYear } from "@/core/mileage";
 import { formatCurrency } from "@/lib/utils";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
 
 function toDateInput(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -26,7 +27,7 @@ function fromDateInput(s: string): number {
   return new Date(`${s}T12:00:00`).getTime();
 }
 
-export function MileageSection() {
+function MileageSectionLocal() {
   const entries = useLiveQuery(() => mileageRepo.list(), []);
   const clients = useLiveQuery(() => clientRepo.list(true), []);
 
@@ -227,4 +228,16 @@ export function MileageSection() {
       </Card>
     </div>
   );
+}
+
+export function MileageSection() {
+  const { dataMode } = useAppChrome();
+  if (dataMode === "cloud") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Mileage tracking isn&apos;t available in cloud mode yet.
+      </p>
+    );
+  }
+  return <MileageSectionLocal />;
 }
