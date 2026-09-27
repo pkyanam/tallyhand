@@ -18,7 +18,11 @@
  */
 import { requireApiToken } from "@/server/auth";
 import { json } from "@/server/http";
-import { tryResolveSyncUserId, resolveUserId } from "@/lib/auth/session";
+import {
+  tryResolveSessionUserId,
+  tryResolveSyncUserId,
+  resolveUserId,
+} from "@/lib/auth/session";
 
 export interface SyncAuth {
   userId: string;
@@ -64,7 +68,7 @@ export async function requireSyncAuth(
 export async function requireApiOrSession(
   req: Request,
 ): Promise<Response | null> {
-  const sessionUser = await tryResolveSyncUserId();
+  const sessionUser = await tryResolveSessionUserId();
   if (sessionUser) {
     if (req.method !== "GET" && req.method !== "HEAD") return requireSyncHeader(req);
     return null;
@@ -75,7 +79,7 @@ export async function requireApiOrSession(
 /**
  * CSRF guard for cookie-authenticated JSON POSTs: a cross-site form cannot
  * set a custom header, while our own client and machine clients can.
- * Machine (token) clients must send it too — uniform rule, no branches.
+ * Bearer-token callers are not cookie sessions and never need this header.
  */
 export function requireSyncHeader(req: Request): Response | null {
   if (req.headers.get("x-tallyhand-sync") !== "1") {

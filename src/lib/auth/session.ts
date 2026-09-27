@@ -168,6 +168,15 @@ export async function requireSessionUserId(): Promise<string> {
   throw unauthorized("No signed-in user in single-user local mode");
 }
 
+/** Like requireSessionUserId() but returns null when there is no session. */
+export async function tryResolveSessionUserId(): Promise<string | null> {
+  try {
+    return await requireSessionUserId();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Sync-scoped variant: only REAL auth counts. In local mode
  * (`TALLY_AUTH=none`) `resolveUserId()` falls back to the `"local"`
