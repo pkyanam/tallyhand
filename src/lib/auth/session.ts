@@ -160,3 +160,14 @@ export async function requireSessionUserId(): Promise<string> {
   if (auth === "builtin") return builtinSessionUserId();
   throw unauthorized("No signed-in user in single-user local mode");
 }
+
+/**
+ * Sync-scoped variant: only REAL auth counts. In local mode
+ * (`TALLY_AUTH=none`) `resolveUserId()` falls back to the `"local"`
+ * pseudo-user, but there is no account to scope a cloud vault to — sync
+ * must be unavailable there, so the local fallback is excluded here.
+ */
+export async function tryResolveSyncUserId(): Promise<string | null> {
+  if (parseAuth() === "none") return null;
+  return tryResolveUserId();
+}

@@ -5,10 +5,12 @@ import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
 import { StopPrompt } from "@/components/app/stop-prompt";
 import { TimerHotkey } from "@/components/app/timer-hotkey";
+import { SyncBootstrap } from "@/components/sync/sync-bootstrap";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppChrome>
+      <SyncBootstrap />
       <div className="flex min-h-[100dvh]">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">

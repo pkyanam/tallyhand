@@ -103,6 +103,7 @@ describe("readOnlyIfViewer", () => {
       "createShareLink",
       "revokeShareLink",
       "recordTimesheetApproval",
+      "upsertEncryptedEntities",
     ]) {
       expect(WRITE_METHODS.has(name)).toBe(true);
     }

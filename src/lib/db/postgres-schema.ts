@@ -16,6 +16,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -292,4 +293,35 @@ export const builtinLoginTokens = pgTable(
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [index("builtin_login_tokens_user_id_idx").on(t.userId)],
+);
+
+// ---------------------------------------------------------------------------
+// End-to-end encrypted sync vault (hosted only: postgres + neon)
+// ---------------------------------------------------------------------------
+
+/**
+ * One encrypted entity snapshot per (user, entity type, entity id). The
+ * server stores only ciphertext: `iv` and `ciphertext` are base64 AES-GCM
+ * output produced client-side with a per-user data key that never leaves
+ * the device. `updated_at` is client-supplied and drives last-write-wins;
+ * `deleted` marks a tombstone so other devices learn a deletion.
+ */
+export const encryptedEntities = pgTable(
+  "encrypted_entities",
+  {
+    userId: text("user_id").notNull(),
+    /** e.g. "client" | "project" | "task" | "expense" | "invoice" | "setting" | … */
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    /** base64 96-bit AES-GCM IV */
+    iv: text("iv").notNull(),
+    /** base64 AES-GCM ciphertext of the entity JSON */
+    ciphertext: text("ciphertext").notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+    deleted: boolean("deleted").notNull().default(false),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.entityType, t.entityId] }),
+    index("encrypted_entities_user_updated_idx").on(t.userId, t.updatedAt),
+  ],
 );

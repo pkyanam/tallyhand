@@ -40,6 +40,7 @@ vi.mock("@/lib/db/postgres-schema", () => {
     settings: table(),
     shareLinks: table(),
     timesheetApprovals: table(),
+    encryptedEntities: table(),
   };
 });
 
@@ -57,7 +58,9 @@ const USER_B = "user_bbbbbbbbbbbbbbbb";
 const fakeOps: ConditionOps = {
   eq: (column, value) => ({ __eq: [column, value] }),
   and: (...conds) => ({ __and: conds }),
+  or: (...conds) => ({ __or: conds }),
   desc: (column) => ({ __desc: column }),
+  gt: (column, value) => ({ __gt: [column, value] }),
 };
 
 interface CallRecord {
@@ -66,7 +69,7 @@ interface CallRecord {
 }
 
 /** Recording stand-in for the drizzle db: every chainable call is captured. */
-function createRecordingDb() {
+function createRecordingDb(cannedRows: unknown[] = [{}]) {
   const record: CallRecord[] = [];
   function chainable(chain: string[], args: unknown[][]): unknown {
     return new Proxy(function () {}, {
@@ -75,7 +78,7 @@ function createRecordingDb() {
           // Awaiting a chain resolves canned rows and records the call.
           return (resolve: (v: unknown) => void) => {
             record.push({ chain, args });
-            resolve([{}]);
+            resolve(cannedRows);
           };
         }
         if (prop === "transaction") {
@@ -194,6 +197,7 @@ describe("PostgresStorageProvider per-user isolation", () => {
     await provider.getRetainer("r1");
     await provider.listShareLinks();
     await provider.listTimesheetApprovalsByLink("shl_1");
+    await provider.countEncryptedEntities();
     expectAllScoped(record, USER_A, "reads");
   });
 
@@ -244,6 +248,18 @@ describe("PostgresStorageProvider per-user isolation", () => {
       clientId: "c1",
       weekStartMs: 1,
     });
+    await provider.upsertEncryptedEntities([
+      {
+        entityType: "task",
+        entityId: "t1",
+        iv: "aXY=",
+        ciphertext: "c2VjcmV0",
+        updatedAt: 42,
+        deleted: false,
+      },
+      // Malformed payloads are dropped, never written.
+      { entityType: "nope", entityId: "x" } as never,
+    ]);
     expectAllInsertsOwned(record, USER_A, "creates");
   });
 
@@ -297,6 +313,42 @@ describe("PostgresStorageProvider per-user isolation", () => {
       .filter((c) => c.chain.includes("update"))
       .map((c) => c.args[c.chain.indexOf("update")][0]);
     expect(updatedTables.length).toBe(4);
+  });
+
+  it("scopes the encrypted sync vault by userId", async () => {
+    const syncRow = {
+      userId: USER_A,
+      entityType: "task",
+      entityId: "t1",
+      iv: "aXY=",
+      ciphertext: "c2VjcmV0",
+      updatedAt: 7,
+      deleted: false,
+    };
+    const { db, record } = createRecordingDb([syncRow]);
+    const provider = new PostgresStorageProvider(db, USER_A, fakeOps);
+
+    const pulled = await provider.listEncryptedEntitiesSince(0);
+    expect(pulled).toHaveLength(1);
+    expect(pulled[0]?.entityId).toBe("t1");
+    const filtered = await provider.listEncryptedEntitiesSince(0, ["invoice"]);
+    expect(filtered).toHaveLength(0);
+    // Stale push is dropped by last-write-wins before any insert runs.
+    const stale = await provider.upsertEncryptedEntities([
+      {
+        entityType: "task",
+        entityId: "t1",
+        iv: "aXY=",
+        ciphertext: "bmV3",
+        updatedAt: 6,
+        deleted: false,
+      },
+    ]);
+    expect(stale).toBe(0);
+
+    expectAllScoped(record, USER_A, "sync reads");
+    const inserts = record.filter((c) => c.chain[0] === "insert");
+    expect(inserts).toHaveLength(0); // nothing newer to write
   });
 
   it("never leaks one user's id into another user's queries", async () => {

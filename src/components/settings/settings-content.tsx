@@ -49,9 +49,15 @@ import {
   exportBundleTasksCsv,
   exportLedgerJsonString,
   importTallyhandBundleV1,
-  parseTallyhandBundleV1,
   resetAllLocalData,
 } from "@/lib/app-bundle";
+import { parseAndValidateBundle } from "@/lib/v1-import";
+import { SyncCard } from "@/components/settings/sync-card";
+import {
+  isSyncEnabled,
+  reconcileAfterLocalReplace,
+  syncUserId,
+} from "@/lib/sync/engine";
 import { settingsRepo } from "@/lib/db/repos";
 import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
@@ -165,9 +171,22 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
     try {
       const text = await file.text();
       const parsed: unknown = JSON.parse(text);
-      const bundle = parseTallyhandBundleV1(parsed);
+      // Detection → field migration → zod validation (src/lib/v1-import.ts).
+      const { bundle, migratedFields } = parseAndValidateBundle(parsed);
       await importTallyhandBundleV1(bundle);
-      showNotice("Import complete — reloading.");
+      // If encrypted sync is on, the wholesale replace must not resurrect
+      // cloud rows the bundle dropped: reconcile tombstones before reload.
+      try {
+        const uid = syncUserId();
+        if (isSyncEnabled() && uid) await reconcileAfterLocalReplace(uid);
+      } catch {
+        /* sync reconcile is best-effort; the import itself succeeded */
+      }
+      showNotice(
+        migratedFields > 0
+          ? `Import complete (${migratedFields} legacy field(s) defaulted) — reloading.`
+          : "Import complete — reloading.",
+      );
       window.location.reload();
     } catch (e) {
       showNotice(
@@ -188,6 +207,12 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
     )
       return;
     await resetAllLocalData();
+    try {
+      const uid = syncUserId();
+      if (isSyncEnabled() && uid) await reconcileAfterLocalReplace(uid);
+    } catch {
+      /* best-effort */
+    }
     showNotice("Database cleared — reloading.");
     window.location.reload();
   };
@@ -760,6 +785,8 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
             </div>
           </CardContent>
         </Card>
+
+        <SyncCard />
       </div>
     </>
   );

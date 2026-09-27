@@ -51,6 +51,8 @@ export const WRITE_METHODS = new Set([
   "createShareLink",
   "revokeShareLink",
   "recordTimesheetApproval",
+  // encrypted-sync vault write — viewers can pull, never push
+  "upsertEncryptedEntities",
 ]);
 
 export function readOnlyIfViewer(

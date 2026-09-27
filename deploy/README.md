@@ -7,13 +7,14 @@ mode is strictly opt-in via environment.
 
 | | Local | Hosted |
 |---|---|---|
-| Storage | `sqlite` (file) / `dexie` (browser) | `postgres` (Compose) / `convex` (external) |
+| Storage | `sqlite` (file) / `dexie` (browser) | `postgres` (Compose) / `neon` (serverless) / `convex` (external) |
 | Auth | `none` | `clerk` / `builtin` |
 | Users | one, implicit | many, roles `admin`/`member`/`viewer` |
 | Share links | local portable HTML (unchanged) | signed `/share/<token>` portal |
 
-"Hosted" is derived: it turns on when `TALLY_STORAGE` is `postgres`/`convex`
-or `TALLY_AUTH` is anything but `none`. There is no `TALLYHAND_MODE`.
+"Hosted" is derived: it turns on when `TALLY_STORAGE` is
+`postgres`/`neon`/`convex` or `TALLY_AUTH` is anything but `none`. There is
+no `TALLYHAND_MODE`.
 
 ## Local (zero-config)
 
@@ -57,8 +58,8 @@ builtin sessions set `secure` automatically when `NODE_ENV=production`.
 **Builtin** (`TALLY_AUTH=builtin`, self-hosters):
 - Email magic links, single-use, 15-minute expiry; sessions are HMAC-signed
   cookies (30 days) keyed by `BUILTIN_AUTH_SECRET`.
-- Requires `TALLY_STORAGE=postgres` — users/tokens live in `builtin_users` /
-  `builtin_login_tokens`.
+- Requires `TALLY_STORAGE=postgres` or `neon` — users/tokens live in
+  `builtin_users` / `builtin_login_tokens`.
 - No SMTP → the one-time link is printed to the server logs on request
   (documented fallback; the operator forwards it). The API never returns the
   link to the caller.
@@ -77,13 +78,44 @@ Set `TALLYHAND_API_TOKEN` + `TALLYHAND_HOSTED_CLI_USER_ID`. Clients send
 - **sqlite** — server-local file, zero deps. Untouched by this track.
 - **dexie** — browser IndexedDB. Untouched. (Server code with
   `TALLY_STORAGE=dexie` falls back to the sqlite file backend with a warning.)
-- **postgres** — Drizzle. Schema: `src/lib/db/postgres-schema.ts`;
-  migrations: `drizzle/0001_init.sql` (+ `drizzle.config.ts`). After schema
-  changes: `npx drizzle-kit generate` then restart the app container.
+- **postgres** — Drizzle over a node-pg Pool (self-hosted / Compose).
+  Schema: `src/lib/db/postgres-schema.ts`; migrations: `drizzle/*.sql`.
+  After schema changes: `npx drizzle-kit generate` then restart the app
+  container.
+- **neon** — same Postgres schema via Neon's serverless HTTP driver
+  (`@neondatabase/serverless` + `drizzle-orm/neon-http`): no long-lived
+  connections, so it survives scale-to-zero hosts (Vercel) where a pg Pool
+  gets its sockets killed. Set `TALLY_STORAGE=neon` (or the `TALLY_DB=neon`
+  alias) with `DATABASE_URL` = your Neon **direct** (non-`-pooler`)
+  connection string — a `-pooler` hostname is normalized automatically.
+  With `TALLY_STORAGE` unset, a `DATABASE_URL` pointing at `*.neon.tech`
+  selects `neon` automatically. Caveat: neon-http has no interactive
+  transactions, so multi-statement workflows (invoice numbering, mark-sent)
+  run as sequential statements rather than one atomic transaction —
+  acceptable for single-user books, not for high-contention writers.
 - **convex** — `convex/schema.ts` + functions in `convex/tally.ts`
   (called via string paths like `tally:clientsList` — no codegen import on
   the Next side). Deploy with `npx convex dev`, set `CONVEX_URL`. Every
   function takes `userId` and scopes by it.
+
+## Encrypted cloud sync (E2E)
+
+Opt-in per user, only when signed in (`TALLY_AUTH=clerk`/`builtin`) — never
+in local mode. Requires `TALLY_STORAGE=postgres` or `neon` (the vault is the
+`encrypted_entities` table; the Compose entrypoint applies `drizzle/*.sql`
+including `0004_encrypted_entities.sql`).
+
+- The browser generates a per-user AES-GCM-256 data key on first sign-in and
+  keeps it in IndexedDB (`tallyhand-sync`); the key **never leaves the
+  device** — there is no server-side encryption secret to configure.
+- The server stores only opaque `{ iv, ciphertext }` snapshots and enforces
+  last-write-wins on `updatedAt`; it cannot read user data.
+- Enable it in Settings → Cloud Sync. Copy the sync key to a second device
+  (or a safe place) BEFORE you need it: losing the key makes the cloud
+  ciphertext permanently unreadable — there is no recovery.
+- Machine clients: the same vault works over `/api/v1/sync/*` with
+  `Authorization: Bearer <TALLYHAND_API_TOKEN>` + the `x-tallyhand-sync: 1`
+  header.
 
 ## Attachment storage
 

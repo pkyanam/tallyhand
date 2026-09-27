@@ -2,11 +2,13 @@
  * Tallyhand deployment configuration — env-driven, no TALLYHAND_MODE.
  *
  * Two orthogonal knobs:
- * - `TALLY_STORAGE=dexie|sqlite|postgres|convex` (default `dexie`):
+ * - `TALLY_STORAGE=dexie|sqlite|postgres|neon|convex` (default `dexie`):
  *   which StorageProvider the server uses. `dexie` is the browser default;
  *   server-side code (API routes, CLI) falls back to the local `sqlite`
  *   file backend when `dexie` is selected, since IndexedDB doesn't exist
- *   server-side.
+ *   server-side. `neon` is Postgres over Neon's serverless HTTP driver
+ *   (no long-lived connections — safe for scale-to-zero serverless
+ *   deployments); `postgres` keeps the node-pg Pool for self-hosted Docker.
  * - `TALLY_AUTH=clerk|builtin|none` (default `none`):
  *   `clerk` (hosted pick), `builtin` (email magic-link for self-hosters),
  *   `none` (single-user local, no auth).
@@ -19,12 +21,16 @@
  * Per-user data isolation is enforced whenever `auth != "none"` — every
  * provider query is scoped by the authenticated userId.
  *
+ * "Hosted" is derived, not configured: hosted mode is on when the storage
+ * backend is shared (`postgres`/`neon`/`convex`) or any real auth is
+ * configured.
+ *
  * Pure and dependency-free: reads from an injectable env record so it is
  * trivially testable and safe to import anywhere (it never leaks secret
  * values, only the parsed config).
  */
 
-export type TallyStorage = "dexie" | "sqlite" | "postgres" | "convex";
+export type TallyStorage = "dexie" | "sqlite" | "postgres" | "neon" | "convex";
 export type TallyAuth = "clerk" | "builtin" | "none";
 
 export interface TallyConfig {
@@ -34,14 +40,47 @@ export interface TallyConfig {
   hosted: boolean;
 }
 
-const STORAGES: TallyStorage[] = ["dexie", "sqlite", "postgres", "convex"];
+const STORAGES: TallyStorage[] = ["dexie", "sqlite", "postgres", "neon", "convex"];
 const AUTHS: TallyAuth[] = ["clerk", "builtin", "none"];
+
+/**
+ * True when the URL points at a Neon database. Used to auto-select the
+ * serverless HTTP driver when no explicit storage is configured but a Neon
+ * DATABASE_URL is present — a plain pg Pool is unreliable on scale-to-zero
+ * serverless hosts (Vercel), where the HTTP driver is the correct pick.
+ * An explicit TALLY_STORAGE/TALLY_DB always wins over auto-detection.
+ */
+export function isNeonDatabaseUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.endsWith(".neon.tech");
+  } catch {
+    return false;
+  }
+}
 
 export function parseStorage(
   env: Record<string, string | undefined> = process.env,
 ): TallyStorage {
-  const raw = (env.TALLY_STORAGE ?? "").trim().toLowerCase();
-  return (STORAGES as string[]).includes(raw) ? (raw as TallyStorage) : "dexie";
+  const explicit = (env.TALLY_STORAGE ?? "").trim().toLowerCase();
+  if (explicit) {
+    // An explicit (even invalid) TALLY_STORAGE wins: invalid falls back to
+    // the local default rather than silently routing at a cloud database.
+    return (STORAGES as string[]).includes(explicit)
+      ? (explicit as TallyStorage)
+      : "dexie";
+  }
+  const alias = (env.TALLY_DB ?? "").trim().toLowerCase();
+  if (alias) {
+    return (STORAGES as string[]).includes(alias)
+      ? (alias as TallyStorage)
+      : "dexie";
+  }
+  // Auto-detect: no explicit selection, but a Neon DATABASE_URL is present —
+  // pick the serverless HTTP driver (Vercel-safe), not the node-pg Pool.
+  if (isNeonDatabaseUrl(env.DATABASE_URL)) return "neon";
+  return "dexie";
 }
 
 export function parseAuth(
@@ -107,7 +146,12 @@ export function isHosted(
 ): boolean {
   const storage = parseStorage(env);
   const auth = parseAuth(env);
-  return storage === "postgres" || storage === "convex" || auth !== "none";
+  return (
+    storage === "postgres" ||
+    storage === "neon" ||
+    storage === "convex" ||
+    auth !== "none"
+  );
 }
 
 export function getConfig(
@@ -130,6 +174,9 @@ export function validateConfig(
   if (storage === "postgres" && !env.DATABASE_URL) {
     problems.push("TALLY_STORAGE=postgres requires DATABASE_URL");
   }
+  if (storage === "neon" && !env.DATABASE_URL) {
+    problems.push("TALLY_STORAGE=neon requires DATABASE_URL (a Neon connection string)");
+  }
   if (storage === "convex" && !env.CONVEX_URL) {
     problems.push("TALLY_STORAGE=convex requires CONVEX_URL");
   }
@@ -141,8 +188,8 @@ export function validateConfig(
     if (!env.CLERK_SECRET_KEY) problems.push("TALLY_AUTH=clerk requires CLERK_SECRET_KEY");
   }
   if (auth === "builtin") {
-    if (storage !== "postgres") {
-      problems.push("TALLY_AUTH=builtin requires TALLY_STORAGE=postgres (magic-link users/tokens live in Postgres)");
+    if (storage !== "postgres" && storage !== "neon") {
+      problems.push("TALLY_AUTH=builtin requires TALLY_STORAGE=postgres or neon (magic-link users/tokens live in Postgres)");
     }
     if ((env.BUILTIN_AUTH_SECRET ?? "").length < 32) {
       problems.push("TALLY_AUTH=builtin requires BUILTIN_AUTH_SECRET (min 32 chars)");

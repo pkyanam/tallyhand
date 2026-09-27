@@ -33,6 +33,7 @@ import { DEFAULT_SETTINGS } from "@/core/entities";
 import { formatInvoiceNumber } from "@/core/invoice";
 import { newShareLinkId } from "@/core/share";
 import type { ShareLinkType } from "@/core/share";
+import { sql } from "drizzle-orm";
 import {
   dbJsonArr,
   dbNum,
@@ -66,6 +67,13 @@ import type {
   RetainerCreateInput,
   RetainerStatus,
 } from "@/core/recurring";
+import {
+  isSyncEntityType,
+  type EncryptedEntityPush,
+  type EncryptedEntityRow,
+  type EncryptedSyncStore,
+  type SyncEntityType,
+} from "./sync-store";
 import type {
   ClientCreateInput,
   ExpenseCreateInput,
@@ -76,11 +84,13 @@ import type {
   TaskCreateInput,
 } from "@/core/storage";
 
-/** Condition builders — drizzle-orm's eq/and/desc in production, fakes in tests. */
+/** Condition builders — drizzle-orm's eq/and/desc/gt in production, fakes in tests. */
 export interface ConditionOps {
   eq: (column: unknown, value: unknown) => unknown;
   and: (...conds: unknown[]) => unknown;
+  or: (...conds: unknown[]) => unknown;
   desc: (column: unknown) => unknown;
+  gt: (column: unknown, value: unknown) => unknown;
 }
 
 /** Minimal structural surface of the drizzle db this provider uses. */
@@ -295,10 +305,44 @@ function toTimesheetApproval(r: DbRow): TimesheetApprovalRow {
   };
 }
 
+function toEncryptedEntity(r: DbRow): EncryptedEntityRow {
+  const entityType = dbStr(r, "entityType");
+  if (!isSyncEntityType(entityType)) {
+    throw new Error(`Unknown encrypted entity type in database: ${entityType}`);
+  }
+  return {
+    userId: dbStr(r, "userId"),
+    entityType,
+    entityId: dbStr(r, "entityId"),
+    iv: dbStr(r, "iv"),
+    ciphertext: dbStr(r, "ciphertext"),
+    updatedAt: dbNum(r, "updatedAt"),
+    deleted: Boolean(r.deleted),
+  };
+}
+
+/** A pushed snapshot is structurally valid (the payload is opaque ciphertext). */
+function isValidPush(item: unknown): item is EncryptedEntityPush {
+  if (typeof item !== "object" || item === null) return false;
+  const r = item as Record<string, unknown>;
+  return (
+    isSyncEntityType(r.entityType) &&
+    typeof r.entityId === "string" &&
+    r.entityId.length > 0 &&
+    typeof r.iv === "string" &&
+    r.iv.length > 0 &&
+    typeof r.ciphertext === "string" &&
+    r.ciphertext.length > 0 &&
+    typeof r.updatedAt === "number" &&
+    Number.isFinite(r.updatedAt) &&
+    typeof r.deleted === "boolean"
+  );
+}
+
 // -- provider --------------------------------------------------------------
 
-export class PostgresStorageProvider implements StorageProvider {
-  readonly providerName = "postgres";
+export class PostgresStorageProvider implements StorageProvider, EncryptedSyncStore {
+  readonly providerName: string = "postgres";
 
   /**
    * Production factory: loads drizzle-orm's condition builders once via
@@ -309,12 +353,14 @@ export class PostgresStorageProvider implements StorageProvider {
     db: DbLike,
     userId: UserIdSource,
   ): Promise<PostgresStorageProvider> {
-    const { eq, and, desc } = (await import("drizzle-orm")) as unknown as {
+    const { eq, and, or, desc, gt } = (await import("drizzle-orm")) as unknown as {
       eq: ConditionOps["eq"];
       and: ConditionOps["and"];
+      or: ConditionOps["or"];
       desc: ConditionOps["desc"];
+      gt: ConditionOps["gt"];
     };
-    return new PostgresStorageProvider(db, userId, { eq, and, desc });
+    return new PostgresStorageProvider(db, userId, { eq, and, or, desc, gt });
   }
 
   constructor(
@@ -1114,6 +1160,112 @@ export class PostgresStorageProvider implements StorageProvider {
         ),
       );
     return rows.map(toTimesheetApproval);
+  }
+
+  // -- encrypted sync vault (E2E: server stores ciphertext only) -----------
+  //
+  // `iv`/`ciphertext` are opaque to the server — validation here is purely
+  // structural (known entity type, non-empty strings, finite updatedAt).
+  // Last-write-wins compares the client-supplied `updatedAt`: a snapshot is
+  // written only when strictly newer than the stored one.
+
+  async upsertEncryptedEntities(items: EncryptedEntityPush[]): Promise<number> {
+    const uid = await this.uid();
+    const valid = items.filter(isValidPush);
+    if (valid.length === 0) return 0;
+    // Fast path: skip items that are already stale vs. what's stored. The
+    // INSERT below re-checks atomically, so this map is only an optimization.
+    const existing = await (this.db.select() as unknown as DbQueryBuilder)
+      .from(schema.encryptedEntities)
+      .where(this.scope(schema.encryptedEntities, uid));
+    const prevByKey = new Map(
+      existing.map((r) => [
+        `${dbStr(r, "entityType")}/${dbStr(r, "entityId")}`,
+        dbNum(r, "updatedAt"),
+      ]),
+    );
+    let written = 0;
+    for (const item of valid) {
+      const prev = prevByKey.get(`${item.entityType}/${item.entityId}`);
+      if (prev !== undefined && prev >= item.updatedAt) continue; // LWW: stored wins
+      // Atomic LWW upsert: a concurrent stale writer can never overwrite
+      // newer ciphertext — the DO UPDATE only fires when the incoming
+      // updatedAt is strictly newer than the stored one. Works on both the
+      // node-pg and the Neon HTTP drivers (builder-level SQL, no
+      // interactive transaction needed).
+      await (
+        this.db.insert(schema.encryptedEntities) as unknown as {
+          values(v: unknown): {
+            onConflictDoUpdate(c: unknown): Promise<unknown>;
+          };
+        }
+      )
+        .values({ userId: uid, ...item })
+        .onConflictDoUpdate({
+          target: [
+            schema.encryptedEntities.userId,
+            schema.encryptedEntities.entityType,
+            schema.encryptedEntities.entityId,
+          ],
+          set: {
+            iv: item.iv,
+            ciphertext: item.ciphertext,
+            updatedAt: item.updatedAt,
+            deleted: item.deleted,
+          },
+          setWhere: sql`${schema.encryptedEntities.updatedAt} < ${item.updatedAt}`,
+        });
+      written++;
+    }
+    return written;
+  }
+
+  async listEncryptedEntitiesSince(
+    since: number,
+    entityTypes?: SyncEntityType[],
+    limit?: number,
+    after?: { updatedAt: number; entityId: string },
+  ): Promise<EncryptedEntityRow[]> {
+    const uid = await this.uid();
+    // Keyset pagination on (updated_at, entity_id): `after` is the last row
+    // of the previous page. This makes paging exact even when thousands of
+    // rows share one timestamp — plain `updated_at > since` + LIMIT would
+    // loop forever or skip rows at a timestamp collision on the page
+    // boundary. entity_id is globally unique, so the pair is a total order.
+    const cursor = after
+      ? this.ops.or(
+          this.ops.gt(schema.encryptedEntities.updatedAt, after.updatedAt),
+          this.ops.and(
+            this.ops.eq(schema.encryptedEntities.updatedAt, after.updatedAt),
+            this.ops.gt(schema.encryptedEntities.entityId, after.entityId),
+          ),
+        )
+      : this.ops.gt(schema.encryptedEntities.updatedAt, since);
+    let q = (this.db.select() as unknown as DbQueryBuilder)
+      .from(schema.encryptedEntities)
+      .where(
+        this.ops.and(this.ops.eq(schema.encryptedEntities.userId, uid), cursor),
+      )
+      .orderBy(
+        schema.encryptedEntities.updatedAt,
+        schema.encryptedEntities.entityId,
+      );
+    if (limit !== undefined) q = q.limit(limit);
+    const rows = await q;
+    const all = rows.map(toEncryptedEntity);
+    const wanted =
+      entityTypes && entityTypes.length > 0
+        ? new Set<SyncEntityType>(entityTypes.filter(isSyncEntityType))
+        : null;
+    return wanted ? all.filter((r) => wanted.has(r.entityType)) : all;
+  }
+
+  async countEncryptedEntities(): Promise<number> {
+    const uid = await this.uid();
+    const rows = await (this.db.select() as unknown as DbQueryBuilder)
+      .from(schema.encryptedEntities)
+      .where(this.scope(schema.encryptedEntities, uid));
+    return rows.length;
   }
 }
 

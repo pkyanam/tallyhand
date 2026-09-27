@@ -4,7 +4,12 @@
  * Server-side provider for the REST API v1 routes, CLI, and MCP server.
  *
  * Selection is env-driven:
- * - `TALLY_STORAGE=postgres` → Drizzle/Postgres, per-request user scoping.
+ * - `TALLY_STORAGE=postgres` → Drizzle/Postgres via node-pg Pool,
+ *   per-request user scoping (self-hosted Docker pick).
+ * - `TALLY_STORAGE=neon`     → Drizzle/Postgres via Neon's serverless HTTP
+ *   driver (no long-lived connections — the scale-to-zero/Vercel pick).
+ *   Also auto-selected when DATABASE_URL points at *.neon.tech, and honored
+ *   via the `TALLY_DB=neon` alias (see src/lib/mode.ts).
  * - `TALLY_STORAGE=convex`   → Convex, per-request user scoping.
  * - `TALLY_STORAGE=sqlite`  → local node:sqlite file (zero deps).
  * - `TALLY_STORAGE=dexie`    → browser-only; server-side code falls back to
@@ -16,9 +21,9 @@
  * modes there is deliberately no cached/global user: every call builds a
  * provider bound to the current request's user.
  *
- * Heavy deps (pg, drizzle-orm, convex, @clerk/nextjs) are loaded with
- * `require` inside the branch that needs them, so local mode, vitest, and
- * edge bundles never load them.
+ * Heavy deps (pg, drizzle-orm, @neondatabase/serverless, convex,
+ * @clerk/nextjs) are loaded with `require` inside the branch that needs
+ * them, so local mode, vitest, and edge bundles never load them.
  */
 import { getConfig, effectiveAuth } from "@/lib/mode";
 import { SqliteStorageProvider, makeSqliteProvider } from "./sqlite-provider";
@@ -31,6 +36,7 @@ import { readOnlyIfViewer } from "@/lib/auth/read-only";
 
 let sqliteSingleton: StorageProvider | null = null;
 let pgDb: unknown | null = null;
+let neonDb: unknown | null = null;
 let convexClient: unknown | null = null;
 let warnedDexieFallback = false;
 
@@ -77,6 +83,27 @@ function getConvexClient(): unknown {
   return convexClient;
 }
 
+/**
+ * Drizzle db over Neon's serverless HTTP driver (cached module-level: the
+ * driver holds no connections, so a singleton is safe on serverless).
+ * `-pooler` hostnames are normalized to the direct endpoint — the HTTP
+ * driver speaks to the compute endpoint, not the pooler proxy.
+ */
+function getNeonDb(): unknown {
+  if (!neonDb) {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error("TALLY_STORAGE=neon requires DATABASE_URL");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createNeonDb } = require("@/lib/db/neon-provider") as typeof import(
+      "@/lib/db/neon-provider"
+    );
+    neonDb = createNeonDb(databaseUrl);
+  }
+  return neonDb;
+}
+
 function lazyUserId(): () => Promise<string> {
   // Dynamic import (not require): keeps the next/headers-dependent session
   // module out of the static graph AND resolves under vitest's ESM loader,
@@ -87,18 +114,40 @@ function lazyUserId(): () => Promise<string> {
 function makeProvider(userIdSource: UserIdSource): StorageProvider {
   const { storage } = getConfig();
 
+  if (storage === "neon") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { NeonStorageProvider } = require("@/lib/db/neon-provider") as typeof import(
+      "@/lib/db/neon-provider"
+    );
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { eq, and, or, desc, gt } = require("drizzle-orm") as {
+      eq: (c: unknown, v: unknown) => unknown;
+      and: (...cs: unknown[]) => unknown;
+      or: (...cs: unknown[]) => unknown;
+      desc: (c: unknown) => unknown;
+      gt: (c: unknown, v: unknown) => unknown;
+    };
+    return new NeonStorageProvider(
+      getNeonDb() as DbLike,
+      userIdSource,
+      { eq, and, or, desc, gt },
+    );
+  }
+
   if (storage === "postgres") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PostgresStorageProvider } = require("@/lib/db/postgres-provider") as typeof import(
       "@/lib/db/postgres-provider"
     );
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { eq, and, desc } = require("drizzle-orm") as {
+    const { eq, and, or, desc, gt } = require("drizzle-orm") as {
       eq: (c: unknown, v: unknown) => unknown;
       and: (...cs: unknown[]) => unknown;
+      or: (...cs: unknown[]) => unknown;
       desc: (c: unknown) => unknown;
+      gt: (c: unknown, v: unknown) => unknown;
     };
-    return new PostgresStorageProvider(getPgDb() as DbLike, userIdSource, { eq, and, desc });
+    return new PostgresStorageProvider(getPgDb() as DbLike, userIdSource, { eq, and, or, desc, gt });
   }
 
   if (storage === "convex") {
@@ -155,6 +204,8 @@ export function resetServerProviderForTests(): void {
     /* ignore */
   }
   pgDb = null;
+  // The neon-http driver holds no connections — nothing to close.
+  neonDb = null;
   convexClient = null;
   warnedDexieFallback = false;
 }
