@@ -138,8 +138,8 @@ export function LandingChoiceScreen() {
                   Sign in / Create account
                 </span>
                 <span className="mt-1 block text-sm text-muted-foreground">
-                  API tokens, CLI &amp; MCP access, and multi-device down the
-                  road.
+                  Encrypted cloud sync across devices, hosted share links, API
+                  tokens, and CLI &amp; MCP access.
                 </span>
                 <span className="mt-4 inline-flex items-center text-sm font-medium">
                   Continue
@@ -185,7 +185,7 @@ export function LandingChoiceScreen() {
       <footer className="border-t">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5 text-xs text-muted-foreground">
           <span>MIT-licensed.</span>
-          <span>Local-first · Offline-ready.</span>
+          <span>Open source · Works online and offline.</span>
         </div>
       </footer>
     </div>

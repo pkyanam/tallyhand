@@ -23,7 +23,6 @@ import {
   buildShareableInvoiceHtml,
   shareInvoiceFileName,
 } from "@/lib/invoice-share-file";
-import { getSyncStatus } from "@/lib/sync/engine";
 
 function publicInvoiceUrl(token: string): string {
   if (typeof window === "undefined") return "";
@@ -77,6 +76,7 @@ export function InvoiceSharePanel({
   settings,
   readOnly,
   dirty,
+  cloudSharingEnabled,
 }: {
   /** The on-screen invoice (may hold unsaved edits). */
   invoice: Invoice;
@@ -86,28 +86,15 @@ export function InvoiceSharePanel({
   settings?: Settings | null;
   readOnly: boolean;
   dirty: boolean;
+  /** True when this page request belongs to a signed-in account. */
+  cloudSharingEnabled: boolean;
 }) {
   const [copied, setCopied] = React.useState(false);
   // Cloud share state (signed-in only): a hosted /share/[token] link backed
   // by a server-stored snapshot, so it opens in any browser.
-  const [signedIn, setSignedIn] = React.useState<boolean | null>(null);
   const [cloudUrl, setCloudUrl] = React.useState<string | null>(null);
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudError, setCloudError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await getSyncStatus();
-        if (!cancelled) setSignedIn(!!s.signedIn);
-      } catch {
-        if (!cancelled) setSignedIn(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   // Set after mount so server and client render identically (no hydration
   // mismatch); the classifier's conservative default is "device".
   const [hostname, setHostname] = React.useState("");
@@ -141,6 +128,7 @@ export function InvoiceSharePanel({
     try {
       const res = await fetch("/api/share/links", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type: "invoice",
@@ -158,7 +146,9 @@ export function InvoiceSharePanel({
       if (!res.ok || !data.url) {
         throw new Error(data.error ?? "Couldn't create the share link.");
       }
-      setCloudUrl(data.url);
+      // The API deliberately supports relative URLs when APP_BASE_URL is not
+      // configured. Always present/copy an absolute hosted URL in the UI.
+      setCloudUrl(new URL(data.url, window.location.origin).toString());
     } catch (e) {
       setCloudError(e instanceof Error ? e.message : "Couldn't create the share link.");
     } finally {
@@ -193,7 +183,7 @@ export function InvoiceSharePanel({
         </div>
 
         {/* ——— Cloud link (signed in): works in any browser ——— */}
-        {signedIn ? (
+        {cloudSharingEnabled ? (
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="flex items-center gap-1.5 font-medium">
@@ -262,67 +252,69 @@ export function InvoiceSharePanel({
           </div>
         ) : null}
 
-        {signedIn ? <Separator /> : null}
+        {cloudSharingEnabled ? <Separator /> : null}
 
-        {/* ——— Link path: works when this Tallyhand is reachable ——— */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1.5 font-medium">
-              <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
-              Link
-            </span>
-            <Badge variant="outline" className={copy_.badgeClass}>
-              {copy_.badge}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground">{copy_.message}</p>
-          {!token ? (
-            <p className="text-muted-foreground">
-              {dirty
-                ? "Save your changes to generate a link."
-                : "Save once to generate a shareable link."}
-            </p>
-          ) : (
+        {/* Local-mode link: backed only by this browser's IndexedDB. */}
+        {!cloudSharingEnabled ? (
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <code className="max-w-full truncate rounded border bg-muted/50 px-2 py-1 font-mono text-xs tabular-nums">
-                {publicInvoiceUrl(token)}
-              </code>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1"
-                onClick={() => void copyLink(publicInvoiceUrl(token))}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? "Copied" : "Copy"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1"
-                asChild
-              >
-                <a
-                  href={publicInvoiceUrl(token)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open
-                </a>
-              </Button>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                Link
+              </span>
+              <Badge variant="outline" className={copy_.badgeClass}>
+                {copy_.badge}
+              </Badge>
             </div>
-          )}
-          {readOnly && token ? (
-            <p className="text-xs text-muted-foreground">
-              This invoice is paid — the link still works for viewing.
-            </p>
-          ) : null}
-        </div>
+            <p className="text-muted-foreground">{copy_.message}</p>
+            {!token ? (
+              <p className="text-muted-foreground">
+                {dirty
+                  ? "Save your changes to generate a link."
+                  : "Save once to generate a shareable link."}
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="max-w-full truncate rounded border bg-muted/50 px-2 py-1 font-mono text-xs tabular-nums">
+                  {publicInvoiceUrl(token)}
+                </code>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => void copyLink(publicInvoiceUrl(token))}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1"
+                  asChild
+                >
+                  <a
+                    href={publicInvoiceUrl(token)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open
+                  </a>
+                </Button>
+              </div>
+            )}
+            {readOnly && token ? (
+              <p className="text-xs text-muted-foreground">
+                This invoice is paid — the link still works for viewing.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
-        <Separator />
+        {!cloudSharingEnabled ? <Separator /> : null}
 
         {/* ——— File path: works anywhere, always ——— */}
         <div className="space-y-2">

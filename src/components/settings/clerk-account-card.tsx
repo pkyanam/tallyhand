@@ -83,14 +83,16 @@ export function ClerkAccountCard() {
         <CardTitle>Account</CardTitle>
         <CardDescription>
           {isSignedIn
-            ? `Signed in${email ? ` as ${email}` : ""}.`
+            ? `Signed in${email ? ` as ${email}` : ""}. Your encrypted data syncs across devices.`
             : "You chose to use Tallyhand locally, without an account."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline">
-          <Link href="/settings/connect">API tokens &amp; integrations</Link>
-        </Button>
+        {isSignedIn ? (
+          <Button asChild variant="outline">
+            <Link href="/settings/connect">API tokens &amp; integrations</Link>
+          </Button>
+        ) : null}
         {choice === "local" || !isSignedIn ? (
           <Button type="button" variant="outline" onClick={switchToAccount}>
             Sign in with an account

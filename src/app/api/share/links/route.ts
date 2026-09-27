@@ -10,6 +10,16 @@ import { createShareLink, CreateShareSchema } from "@/lib/share/service";
 
 export const runtime = "nodejs";
 
+function errorStatus(err: unknown, fallback = 500): number {
+  if (err && typeof err === "object" && "status" in err) {
+    const status = (err as { status?: unknown }).status;
+    if (typeof status === "number" && status >= 400 && status <= 599) {
+      return status;
+    }
+  }
+  return fallback;
+}
+
 export async function GET() {
   try {
     await resolveUserId();
@@ -22,7 +32,7 @@ export async function GET() {
     return NextResponse.json({ links });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list share links";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: errorStatus(err) });
   }
 }
 
@@ -54,7 +64,7 @@ export async function POST(req: Request) {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create share link";
-    const status = /not found/i.test(message) ? 404 : 500;
+    const status = errorStatus(err, /not found/i.test(message) ? 404 : 500);
     return NextResponse.json({ error: message }, { status });
   }
 }

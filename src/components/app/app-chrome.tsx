@@ -7,10 +7,17 @@ import { CommandPalette } from "@/components/app/command-palette";
 import { ReckoningAutoOpen } from "@/components/app/reckoning-auto-open";
 import { RecurringSchedulerCheck } from "@/components/app/recurring-scheduler-check";
 import { SettingsThemeSync } from "@/components/app/settings-theme-sync";
+import type { AppDataMode } from "@/components/app/data-mode-copy";
 
-export function AppChrome({ children }: { children: ReactNode }) {
+export function AppChrome({
+  children,
+  dataMode,
+}: {
+  children: ReactNode;
+  dataMode: AppDataMode;
+}) {
   return (
-    <AppChromeProvider>
+    <AppChromeProvider dataMode={dataMode}>
       <SettingsThemeSync />
       <ReckoningAutoOpen />
       <RecurringSchedulerCheck />

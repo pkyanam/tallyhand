@@ -42,6 +42,7 @@ const ClerkAccountCard = dynamic(
   { ssr: false },
 );
 import { useAppChrome } from "@/components/app/app-chrome-provider";
+import { dataModeCopy } from "@/components/app/data-mode-copy";
 import {
   exportBundleExpensesCsv,
   exportBundleJsonString,
@@ -88,7 +89,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   const settings = useLiveQuery(() => settingsRepo.read(), []);
-  const { showNotice } = useAppChrome();
+  const { dataMode, showNotice } = useAppChrome();
+  const modeCopy = dataModeCopy(dataMode);
   const { setTheme } = useTheme();
   const [newCategory, setNewCategory] = React.useState("");
   const importRef = React.useRef<HTMLInputElement>(null);
@@ -198,7 +200,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   };
 
   const handleReset = async () => {
-    if (!window.confirm("Delete ALL local Tallyhand data on this device?"))
+    if (!window.confirm(modeCopy.resetConfirmation))
       return;
     if (
       !window.confirm(
@@ -221,7 +223,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
     if (!file) return;
     if (file.size > MAX_LOGO_BYTES) {
       showNotice(
-        `Logo is ${(file.size / 1024).toFixed(0)} KB — larger than 500 KB will bloat IndexedDB.`,
+        modeCopy.logoSizeWarning((file.size / 1024).toFixed(0)),
       );
     }
     const dataUrl = await readFileAsDataUrl(file);
@@ -424,7 +426,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Stored inline in your browser as base64. Keep it under 500 KB.
+                {modeCopy.logoStorage}
               </p>
             </div>
 
@@ -662,7 +664,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
             <CardDescription>
-              Synced with the top bar theme control and command palette.
+              Matches the top bar theme control and command palette.
             </CardDescription>
           </CardHeader>
           <CardContent className="max-w-xs space-y-2">
@@ -780,13 +782,13 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
                 Import bundle (JSON)
               </Button>
               <Button type="button" variant="destructive" onClick={() => void handleReset()}>
-                Reset local data…
+                Reset data…
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <SyncCard />
+        {dataMode === "cloud" && <SyncCard />}
       </div>
     </>
   );

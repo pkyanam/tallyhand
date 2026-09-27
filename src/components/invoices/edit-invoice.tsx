@@ -98,7 +98,13 @@ function invoicesEqual(a: Invoice, b: Invoice): boolean {
   );
 }
 
-export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
+export function EditInvoiceContent({
+  invoiceId,
+  cloudSharingEnabled,
+}: {
+  invoiceId: string;
+  cloudSharingEnabled: boolean;
+}) {
   const router = useRouter();
   const { showNotice } = useAppChrome();
 
@@ -326,6 +332,7 @@ export function EditInvoiceContent({ invoiceId }: { invoiceId: string }) {
         settings={settings}
         readOnly={readOnly}
         dirty={dirty}
+        cloudSharingEnabled={cloudSharingEnabled}
       />
 
       <InvoiceEditor

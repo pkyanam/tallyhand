@@ -33,6 +33,26 @@ export const SYNC_ENTITY_TYPES = [
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
 
+/**
+ * Entity type -> local Dexie table. Keeping the mapping beside the canonical
+ * type list lets the engine and delete hooks share one exhaustive definition;
+ * TypeScript fails the build if a future entity type is added without a table.
+ * Settings is the sole document-style entity and is handled separately.
+ */
+export const SYNC_ENTITY_TABLES = {
+  client: "clients",
+  project: "projects",
+  task: "tasks",
+  expense: "expenses",
+  invoice: "invoices",
+  recurringSchedule: "recurringSchedules",
+  retainer: "retainers",
+  mileageEntry: "mileageEntries",
+  contract: "contracts",
+  taxPayment: "taxPayments",
+  rateCard: "rateCards",
+} as const satisfies Record<Exclude<SyncEntityType, "setting">, string>;
+
 export function isSyncEntityType(v: unknown): v is SyncEntityType {
   return (
     typeof v === "string" &&
@@ -92,6 +112,8 @@ export function isEncryptedSyncStore(v: unknown): v is EncryptedSyncStore {
     typeof (v as { upsertEncryptedEntities?: unknown })
       .upsertEncryptedEntities === "function" &&
     typeof (v as { listEncryptedEntitiesSince?: unknown })
-      .listEncryptedEntitiesSince === "function"
+      .listEncryptedEntitiesSince === "function" &&
+    typeof (v as { countEncryptedEntities?: unknown })
+      .countEncryptedEntities === "function"
   );
 }

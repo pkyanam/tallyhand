@@ -3,8 +3,17 @@
  * configured. In local mode (TALLY_AUTH=none) resolveUserId() falls back to
  * the "local" pseudo-user — that fallback must not open the sync vault.
  */
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { tryResolveSyncUserId, tryResolveUserId } from "./session";
+
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({ get: vi.fn(() => undefined) })),
+  headers: vi.fn(async () => ({ get: vi.fn(() => null) })),
+}));
+
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => ({ userId: "clerk_user_1" })),
+}));
 
 describe("tryResolveSyncUserId", () => {
   const saved = { ...process.env };
@@ -26,5 +35,12 @@ describe("tryResolveSyncUserId", () => {
   it("returns null in builtin mode with no session cookie", async () => {
     process.env.TALLY_AUTH = "builtin";
     await expect(tryResolveSyncUserId()).resolves.toBeNull();
+  });
+
+  it("uses an auto-detected Clerk session when TALLY_AUTH is unset", async () => {
+    delete process.env.TALLY_AUTH;
+    process.env.CLERK_PUBLISHABLE_KEY = "pk_test_sync";
+    process.env.CLERK_SECRET_KEY = "sk_test_sync";
+    await expect(tryResolveSyncUserId()).resolves.toBe("clerk_user_1");
   });
 });

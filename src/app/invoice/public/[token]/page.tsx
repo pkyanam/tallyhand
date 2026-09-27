@@ -1,9 +1,12 @@
 import { PublicInvoiceClient } from "@/components/invoices/public-invoice-client";
+import { LOCAL_USER_ID, tryResolveUserId } from "@/lib/auth/session";
 
-export default function PublicInvoicePage({
+export default async function PublicInvoicePage({
   params,
 }: {
   params: { token: string };
 }) {
-  return <PublicInvoiceClient token={params.token} />;
+  const userId = await tryResolveUserId();
+  const cloudMode = userId !== null && userId !== LOCAL_USER_ID;
+  return <PublicInvoiceClient token={params.token} cloudMode={cloudMode} />;
 }

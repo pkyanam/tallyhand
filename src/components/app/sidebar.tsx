@@ -4,9 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { APP_NAV_ITEMS } from "@/components/app/app-nav-items";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
+import { dataModeCopy } from "@/components/app/data-mode-copy";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { dataMode } = useAppChrome();
 
   return (
     <aside className="hidden w-56 shrink-0 border-r bg-background md:flex md:flex-col">
@@ -41,7 +44,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="border-t p-3 text-xs text-muted-foreground">
-        <div>Local-first · Offline-ready</div>
+        <div>{dataModeCopy(dataMode).navigationStatus}</div>
         <Link
           href="/shortcuts"
           className="mt-2 block text-foreground/80 underline-offset-4 hover:underline"

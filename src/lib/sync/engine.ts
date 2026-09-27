@@ -29,6 +29,7 @@ import {
 } from "@/lib/db/repos";
 import {
   SYNC_ENTITY_TYPES,
+  SYNC_ENTITY_TABLES,
   type EncryptedEntityPush,
   type SyncEntityType,
 } from "@/lib/db/sync-store";
@@ -62,19 +63,7 @@ export const SYNC_USER_KEY = "tallyhand.sync.user";
 export const SETTINGS_ENTITY_ID = "settings";
 
 /** Entity type → Dexie table name (settings handled separately). */
-const ENTITY_TABLES: Record<Exclude<SyncEntityType, "setting">, string> = {
-  client: "clients",
-  project: "projects",
-  task: "tasks",
-  expense: "expenses",
-  invoice: "invoices",
-  recurringSchedule: "recurringSchedules",
-  retainer: "retainers",
-  mileageEntry: "mileageEntries",
-  contract: "contracts",
-  taxPayment: "taxPayments",
-  rateCard: "rateCards",
-};
+const ENTITY_TABLES = SYNC_ENTITY_TABLES;
 
 const REPOS: Record<Exclude<SyncEntityType, "setting">, { list: () => Promise<{ id: string; updatedAt: number }[]> }> = {
   client: clientRepo,

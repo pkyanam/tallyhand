@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { ProjectPicker } from "@/components/app/project-picker";
 import { useAppChrome } from "@/components/app/app-chrome-provider";
+import { dataModeCopy } from "@/components/app/data-mode-copy";
 import { clientRepo, projectRepo, settingsRepo } from "@/lib/db/repos";
 import { DEFAULT_SETTINGS } from "@/lib/db/types";
 import { fromDateInputValue, toDateInputValue } from "@/lib/datetime";
@@ -72,7 +73,8 @@ export function ExpenseForm({
   onSubmit,
   onCancel,
 }: ExpenseFormProps) {
-  const { showNotice } = useAppChrome();
+  const { dataMode, showNotice } = useAppChrome();
+  const modeCopy = dataModeCopy(dataMode);
   const settings = useLiveQuery(() => settingsRepo.read(), []);
   const clients = useLiveQuery(() => clientRepo.list(false), []);
   const projects = useLiveQuery(() => projectRepo.list(), []);
@@ -152,7 +154,9 @@ export function ExpenseForm({
       const { dataUrl, warnLarge } = await resizeImageToJpegDataUrl(file);
       if (warnLarge) {
         showNotice(
-          `Receipt is about ${(dataUrl.length * 0.75 / 1024).toFixed(0)} KB after compressing — large images bloat your local database.`,
+          modeCopy.receiptSizeWarning(
+            (dataUrl.length * 0.75 / 1024).toFixed(0),
+          ),
         );
       }
       setReceiptB64(dataUrl);
@@ -430,7 +434,7 @@ export function ExpenseForm({
         )}
         <p className="text-xs text-muted-foreground">
           <ImageUp className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
-          Images are resized (max 1600px) and stored only in this browser.
+          {modeCopy.receiptStorage}
         </p>
       </div>
 

@@ -15,9 +15,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // syncs to the cloud vault, so the notice would be wrong for them.
   const userId = await tryResolveUserId();
   const showLocalNotice = userId === null || userId === LOCAL_USER_ID;
+  const dataMode = showLocalNotice ? "local" : "cloud";
 
   return (
-    <AppChrome>
+    <AppChrome dataMode={dataMode}>
       <SyncBootstrap />
       <div className="flex min-h-[100dvh]">
         <Sidebar />

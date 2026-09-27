@@ -14,22 +14,13 @@
  * `Table.clear()` hook semantics aren't something to bet the vault on).
  */
 import { getDB } from "@/lib/db/schema";
+import { SYNC_ENTITY_TABLES } from "@/lib/db/sync-store";
 import { recordTombstone } from "./sync-db";
 import { isSyncEnabled, isTombstoneSuppressed, syncUserId } from "./engine";
 
-const ENTITY_TABLES: { table: string; entityType: string }[] = [
-  { table: "clients", entityType: "client" },
-  { table: "projects", entityType: "project" },
-  { table: "tasks", entityType: "task" },
-  { table: "expenses", entityType: "expense" },
-  { table: "invoices", entityType: "invoice" },
-  { table: "recurringSchedules", entityType: "recurringSchedule" },
-  { table: "retainers", entityType: "retainer" },
-  { table: "mileageEntries", entityType: "mileageEntry" },
-  { table: "contracts", entityType: "contract" },
-  { table: "taxPayments", entityType: "taxPayment" },
-  { table: "rateCards", entityType: "rateCard" },
-];
+const ENTITY_TABLES = Object.entries(SYNC_ENTITY_TABLES).map(
+  ([entityType, table]) => ({ entityType, table }),
+);
 
 let installed = false;
 

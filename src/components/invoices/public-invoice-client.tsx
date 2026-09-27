@@ -14,7 +14,13 @@ type LoadState =
   | { status: "not_found" }
   | { status: "ready"; invoice: Invoice; settings: Settings; clients: Client[] };
 
-export function PublicInvoiceClient({ token }: { token: string }) {
+export function PublicInvoiceClient({
+  token,
+  cloudMode = false,
+}: {
+  token: string;
+  cloudMode?: boolean;
+}) {
   const decoded = React.useMemo(() => {
     try {
       return decodeURIComponent(token);
@@ -78,9 +84,9 @@ export function PublicInvoiceClient({ token }: { token: string }) {
             <div>
               <h1 className="text-lg font-semibold">Invoice not found</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                This link only works in the browser profile that created the
-                invoice. If you opened this on another device or after clearing
-                site data, import a backup from Settings → Data first.
+                {cloudMode
+                  ? "This older browser-bound link cannot find the invoice here. Open the invoice in your account and create a cloud link from its Share panel."
+                  : "This link only works in the browser that created it. If you opened it elsewhere or cleared site data, use that browser or restore a backup."}
               </p>
             </div>
             <Button asChild variant="outline">
@@ -111,9 +117,9 @@ export function PublicInvoiceClient({ token }: { token: string }) {
       <main className="mx-auto max-w-5xl p-4 sm:p-6">
         <Card className="mb-4 border-border bg-secondary">
           <CardContent className="p-3 text-xs text-muted-foreground">
-            Local-only: this page reads from IndexedDB in your browser. It is not
-            a hosted document and cannot be verified by a third party without
-            your data file.
+            {cloudMode
+              ? "This older link opens invoice data saved in this browser. For a link that works on any device, create a cloud link from the invoice’s Share panel."
+              : "This link reads invoice data saved in this browser. It is not a hosted document; use a backup to move the invoice to another browser."}
           </CardContent>
         </Card>
         <InvoicePreview

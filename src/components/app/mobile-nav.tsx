@@ -12,9 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { APP_NAV_ITEMS } from "@/components/app/app-nav-items";
+import { useAppChrome } from "@/components/app/app-chrome-provider";
+import { dataModeCopy } from "@/components/app/data-mode-copy";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { dataMode } = useAppChrome();
   const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -72,7 +75,7 @@ export function MobileNav() {
             })}
           </nav>
           <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] text-xs text-muted-foreground">
-            <div>Local-first · Offline-ready</div>
+            <div>{dataModeCopy(dataMode).navigationStatus}</div>
             <Link
               href="/shortcuts"
               className="mt-2 block text-foreground/80 underline-offset-4 hover:underline"

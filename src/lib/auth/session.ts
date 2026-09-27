@@ -22,7 +22,7 @@
  */
 import { cookies, headers } from "next/headers";
 import { timingSafeEqual } from "node:crypto";
-import { effectiveAuth, parseAuth } from "@/lib/mode";
+import { effectiveAuth } from "@/lib/mode";
 import { verifyBuiltinSession, getBuiltinUserById } from "./builtin";
 
 /** Single-user id used when TALLY_AUTH=none. */
@@ -175,6 +175,10 @@ export async function requireSessionUserId(): Promise<string> {
  * must be unavailable there, so the local fallback is excluded here.
  */
 export async function tryResolveSyncUserId(): Promise<string | null> {
-  if (parseAuth() === "none") return null;
+  // Use the same effective mode as resolveUserId()/middleware. Production
+  // deployments commonly omit TALLY_AUTH and let the presence of Clerk keys
+  // select Clerk automatically; parseAuth() alone reports "none" there and
+  // used to make /api/v1/sync/status claim the signed-in user was signed out.
+  if (effectiveAuth() === "none") return null;
   return tryResolveUserId();
 }

@@ -61,10 +61,15 @@ export function SyncBootstrap() {
           // Auto-enable on sign-in (first time only — respects opt-out).
           if (!isSyncEnabled() && !hasOptedOut() && s.syncSupported) {
             setSyncEnabled(true, s.userId);
-            if (!cancelled) {
-              // Best-effort initial push; the settings card surfaces errors.
-              void runSync().catch(() => {});
-            }
+          }
+          if (!cancelled && isSyncEnabled() && s.syncSupported) {
+            // Re-bind the local sync metadata to the current account (needed
+            // after an account switch on a shared browser), install deletion
+            // tracking before user actions can race this bootstrap, and sync
+            // on every signed-in app load—not only the first enable.
+            setSyncEnabled(true, s.userId);
+            installDeleteHooks();
+            void runSync().catch(() => {});
           }
         }
       } catch {

@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import type { AppDataMode } from "@/components/app/data-mode-copy";
 
 type ChromeContextValue = {
+  dataMode: AppDataMode;
   commandOpen: boolean;
   setCommandOpen: (open: boolean) => void;
   showNotice: (message: string) => void;
@@ -11,7 +13,13 @@ type ChromeContextValue = {
 
 const ChromeContext = React.createContext<ChromeContextValue | null>(null);
 
-export function AppChromeProvider({ children }: { children: React.ReactNode }) {
+export function AppChromeProvider({
+  children,
+  dataMode,
+}: {
+  children: React.ReactNode;
+  dataMode: AppDataMode;
+}) {
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const noticeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -36,11 +44,12 @@ export function AppChromeProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo(
     () => ({
+      dataMode,
       commandOpen,
       setCommandOpen,
       showNotice,
     }),
-    [commandOpen, showNotice],
+    [commandOpen, dataMode, showNotice],
   );
 
   return (
