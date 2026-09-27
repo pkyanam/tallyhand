@@ -91,9 +91,11 @@ export function InvoiceShareView({
 }
 
 /**
- * Pay button — payment plugin SLOT (stub). Fires POST /api/share/pay, which
- * delegates to a handler registered via onSharePaymentRequested. No handler
- * (the default) → the "not configured" state. Stripe is NOT implemented.
+ * Pay button — payment plugin SLOT. Fires POST /api/share/pay, which
+ * delegates to a handler registered via onSharePaymentRequested. The
+ * first-party `stripe-payments` plugin registers the Stripe Checkout
+ * handler when STRIPE_SECRET_KEY is set; without it the portal shows the
+ * "not configured" state below.
  */
 function PayButton({ token, paymentsConfigured }: { token: string; paymentsConfigured: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "unconfigured" | "error">("idle");

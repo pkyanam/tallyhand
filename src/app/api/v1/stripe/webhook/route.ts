@@ -61,16 +61,20 @@ export async function POST(req: Request) {
       if (invoice && invoice.status !== "paid") {
         // Verify the session actually represents a completed payment for
         // this invoice before marking it paid: payment_status must be
-        // "paid", currency must be USD, and the charged amount must cover
-        // the invoice total. Mismatches are logged and skipped.
+        // "paid", the currency must match the invoice currency, and the
+        // charged amount must cover the invoice total. Mismatches are
+        // logged and skipped.
         const expectedCents = Math.round(invoice.total * 100);
+        const expectedCurrency = (
+          invoice.currency ?? "usd"
+        ).toLowerCase();
         const amountOk =
           typeof session.amount_total === "number" &&
           session.amount_total >= expectedCents;
         const statusOk = session.payment_status === "paid";
         const currencyOk =
           typeof session.currency === "string" &&
-          session.currency.toLowerCase() === "usd";
+          session.currency.toLowerCase() === expectedCurrency;
         if (statusOk && currencyOk && amountOk) {
           await provider.markInvoicePaid(invoiceId);
           const updated = await provider.getInvoice(invoiceId);

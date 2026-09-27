@@ -18,17 +18,11 @@ import {
   sanitizeAttachmentKey,
   type AttachmentPutResult,
   type AttachmentStore,
+  type ObjectStoreOptions,
 } from "./attachments";
 
-export interface S3AttachmentOptions {
-  endpoint: string;
-  bucket: string;
-  accessKey: string;
-  secretKey: string;
-  region: string;
-  /** Path-style addressing (required by MinIO and most non-AWS endpoints). */
-  forcePathStyle?: boolean;
-}
+/** Alias kept for the S3 store; resolved via resolveObjectStoreOptions(). */
+export type S3AttachmentOptions = ObjectStoreOptions;
 
 export class S3AttachmentStore implements AttachmentStore {
   readonly kind = "s3" as const;

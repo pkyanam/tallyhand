@@ -2,8 +2,16 @@
  * Attachment storage abstraction (receipts, logos, future file uploads).
  *
  * Hosted deployments can point Tallyhand at any S3-compatible object store;
- * without S3 env vars it falls back to a local-disk store rooted at
+ * without S3/R2 env vars it falls back to a local-disk store rooted at
  * `TALLYHAND_ATTACHMENTS_DIR` (default `<cwd>/.tallyhand-attachments`).
+ *
+ * Configure ONE of:
+ * - S3_* — S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY / S3_SECRET_KEY
+ *   (+ optional S3_REGION, S3_FORCE_PATH_STYLE=1): AWS S3, MinIO, B2, …
+ * - R2_* — R2_ACCOUNT_ID / R2_BUCKET / R2_ACCESS_KEY_ID /
+ *   R2_SECRET_ACCESS_KEY (+ optional R2_REGION): Cloudflare R2. The endpoint
+ *   is derived as `https://<account>.r2.cloudflarestorage.com`. S3_* wins
+ *   when both are set.
  *
  * Keys are caller-chosen, URL-safe relative paths such as
  * `receipts/<expenseId>.jpg`. Implementations must never let a key escape
@@ -95,37 +103,85 @@ export class LocalDiskAttachmentStore implements AttachmentStore {
   }
 }
 
+/** S3-compatible connection options, resolved from S3_* or R2_* env vars. */
+export interface ObjectStoreOptions {
+  endpoint: string;
+  bucket: string;
+  accessKey: string;
+  secretKey: string;
+  region: string;
+  forcePathStyle?: boolean;
+}
+
 function s3EnvPresent(env: Record<string, string | undefined>): boolean {
   return Boolean(
     env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY,
   );
 }
 
+function r2EnvPresent(env: Record<string, string | undefined>): boolean {
+  return Boolean(
+    env.R2_ACCOUNT_ID &&
+      env.R2_BUCKET &&
+      env.R2_ACCESS_KEY_ID &&
+      env.R2_SECRET_ACCESS_KEY,
+  );
+}
+
 /**
- * Server-side factory. Returns an S3 store when S3_* env vars are configured,
- * otherwise the local-disk default. The S3 module is dynamically imported so
- * the AWS SDK is never loaded (or bundled) for local-disk deployments.
+ * Resolve object-storage options from the environment. Two interchangeable
+ * spellings, S3_* wins when both are set:
  *
- * SERVER ONLY — never call from client components.
+ * - `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY`
+ *   (+ optional `S3_REGION`, `S3_FORCE_PATH_STYLE=1`) — any S3-compatible
+ *   store (AWS S3, MinIO, Backblaze B2, …).
+ * - `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
+ *   `R2_SECRET_ACCESS_KEY` (+ optional `R2_REGION`) — Cloudflare R2. The
+ *   endpoint is derived as `https://<account>.r2.cloudflarestorage.com`.
+ *
+ * Returns null when neither is configured (local-disk default applies).
  */
-export async function getAttachmentStore(
-  env: Record<string, string | undefined> = process.env,
-): Promise<AttachmentStore> {
+export function resolveObjectStoreOptions(
+  env: Record<string, string | undefined>,
+): ObjectStoreOptions | null {
   if (s3EnvPresent(env)) {
-    const { S3AttachmentStore } = await import("./s3-attachments");
-    const missing: string[] = [];
-    for (const k of ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY"] as const) {
-      if (!env[k]) missing.push(k);
-    }
-    if (missing.length > 0) throw new Error(`S3 misconfigured, missing: ${missing.join(", ")}`);
-    return new S3AttachmentStore({
+    return {
       endpoint: env.S3_ENDPOINT as string,
       bucket: env.S3_BUCKET as string,
       accessKey: env.S3_ACCESS_KEY as string,
       secretKey: env.S3_SECRET_KEY as string,
       region: env.S3_REGION ?? "us-east-1",
       forcePathStyle: env.S3_FORCE_PATH_STYLE === "1",
-    });
+    };
+  }
+  if (r2EnvPresent(env)) {
+    return {
+      endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      bucket: env.R2_BUCKET as string,
+      accessKey: env.R2_ACCESS_KEY_ID as string,
+      secretKey: env.R2_SECRET_ACCESS_KEY as string,
+      region: env.R2_REGION ?? "auto",
+      forcePathStyle: true,
+    };
+  }
+  return null;
+}
+
+/**
+ * Server-side factory. Returns an S3 store when S3_* or R2_* env vars are
+ * configured, otherwise the local-disk default. The S3 module is
+ * dynamically imported so the AWS SDK is never loaded (or bundled) for
+ * local-disk deployments.
+ *
+ * SERVER ONLY — never call from client components.
+ */
+export async function getAttachmentStore(
+  env: Record<string, string | undefined> = process.env,
+): Promise<AttachmentStore> {
+  const options = resolveObjectStoreOptions(env);
+  if (options) {
+    const { S3AttachmentStore } = await import("./s3-attachments");
+    return new S3AttachmentStore(options);
   }
   const dir =
     env.TALLYHAND_ATTACHMENTS_DIR ?? join(process.cwd(), ".tallyhand-attachments");

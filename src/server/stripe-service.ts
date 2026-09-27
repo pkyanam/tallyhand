@@ -21,22 +21,52 @@ export interface StripeConfig {
   secretKey: string;
   /** Public app base URL for checkout success/cancel redirects. */
   appUrl: string;
+  /** "test" | "live" derived from the secret key prefix. */
+  mode: StripeKeyMode;
+}
+
+/** Stripe secret-key mode, derived from the key prefix (never logged). */
+export type StripeKeyMode = "test" | "live" | "unknown";
+
+/**
+ * Derive the key mode from the Stripe secret-key prefix. `sk_test_*` /
+ * `rk_test_*` are test keys, `sk_live_*` / `rk_live_*` are live keys.
+ * Anything else is reported as "unknown" (e.g. restricted keys).
+ */
+export function stripeKeyMode(secretKey: string): StripeKeyMode {
+  if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) {
+    return "test";
+  }
+  if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) {
+    return "live";
+  }
+  return "unknown";
 }
 
 /**
  * Resolve Stripe config from the environment. Returns null when Stripe is
  * not configured (no secret key) — callers treat this as "payments
  * unavailable", never as an error.
+ *
+ * The public base URL is needed for Stripe's absolute redirect URLs and
+ * falls back to Vercel's `VERCEL_URL` so a fresh deployment works without
+ * extra config; self-hosters set `TALLYHAND_APP_URL` explicitly.
  */
-export function getStripeConfig(): StripeConfig | null {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
+export function getStripeConfig(
+  env: Record<string, string | undefined> = process.env,
+): StripeConfig | null {
+  const secretKey = env.STRIPE_SECRET_KEY;
   if (!secretKey) return null;
+  const vercelUrl = env.VERCEL_URL
+    ? `https://${env.VERCEL_URL.replace(/^https?:\/\//, "")}`
+    : "";
   const appUrl = (
-    process.env.TALLYHAND_APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
+    env.TALLYHAND_APP_URL ??
+    env.NEXT_PUBLIC_APP_URL ??
+    vercelUrl ??
     ""
   ).replace(/\/+$/, "");
-  return { secretKey, appUrl };
+  return { secretKey, appUrl, mode: stripeKeyMode(secretKey) };
 }
 
 /** Plugin-settings key under Settings.pluginSettings. */
@@ -94,6 +124,14 @@ export async function createInvoiceCheckoutSession(
       "Stripe is not configured — set STRIPE_SECRET_KEY in the environment.",
     );
   }
+  if (config.mode === "live") {
+    // Test mode is the documented default. Live keys work, but charging
+    // real money is never silent.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[stripe] STRIPE_SECRET_KEY is a LIVE key — Checkout sessions will charge real money.",
+    );
+  }
   const pluginSettings = await getStripePluginSettings(provider);
   if (pluginSettings.enabled === false) {
     throw new Error("Stripe payments are disabled in plugin settings.");
@@ -120,6 +158,7 @@ export async function createInvoiceCheckoutSession(
     );
   }
 
+  const currency = (invoice.currency ?? "usd").toLowerCase();
   const client = invoice.clientId
     ? await provider.getClient(invoice.clientId)
     : undefined;
@@ -142,7 +181,7 @@ export async function createInvoiceCheckoutSession(
   try {
     const session = await createCheckoutSession(config.secretKey, {
       amountCents,
-      currency: "usd",
+      currency,
       productName: `Invoice ${invoice.invoiceNumber}`,
       description: `Tallyhand invoice ${invoice.invoiceNumber}`,
       customerEmail: client?.email || undefined,
@@ -161,7 +200,7 @@ export async function createInvoiceCheckoutSession(
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       amountCents,
-      currency: "usd",
+      currency,
     };
   } catch (err) {
     if (err instanceof StripeError) throw err;

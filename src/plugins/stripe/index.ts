@@ -11,11 +11,14 @@
  * `onInvoicePaid` + `onPaymentReceived`.
  *
  * Configuration is environment-only for secrets:
- * - `STRIPE_SECRET_KEY` (required) — secret key; without it the plugin
- *   stays inert and the portal shows "payments not configured".
+ * - `STRIPE_SECRET_KEY` (required) — test-mode secret key (sk_test_…);
+ *   without it the plugin stays inert and the portal shows
+ *   "payments not configured". Live keys (sk_live_…) work but are loudly
+ *   warned about — test mode is the documented default.
  * - `STRIPE_WEBHOOK_SECRET` (required for the webhook route).
  * - `TALLYHAND_APP_URL` (or `NEXT_PUBLIC_APP_URL`) — absolute base URL for
- *   checkout success/cancel redirects.
+ *   checkout success/cancel redirects. On Vercel this falls back to
+ *   `VERCEL_URL` automatically.
  *
  * The plugin talks to Stripe over plain HTTPS (`./stripe-client`) — no
  * `stripe` npm package needed at runtime. `peerDependencies` pins the SDK
