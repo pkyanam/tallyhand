@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
-import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { taskCreateSchema } from "@/server/validation";
 import {
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     const provider = getServerProvider();
     const project = await provider.getProject(parsed.data.projectId);
     if (!project) {
-      return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
+      return notFound(`project "${parsed.data.projectId}"`);
     }
     if (parsed.data.endAt !== 0 && parsed.data.endAt < parsed.data.startAt) {
       return badRequest("endAt must be >= startAt (or 0 for an open timer)");

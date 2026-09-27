@@ -267,6 +267,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -390,6 +391,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -542,6 +544,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -709,6 +712,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Draft created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -845,6 +849,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -965,6 +970,7 @@ export const OPENAPI_V1 = {
         responses: {
           "201": { description: "Created" },
           "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },

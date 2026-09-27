@@ -37,7 +37,7 @@ export async function PATCH(
     if (parsed.data.projectId) {
       const project = await provider.getProject(parsed.data.projectId);
       if (!project) {
-        return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
+        return notFound(`project "${parsed.data.projectId}"`);
       }
     }
     const startAt = parsed.data.startAt ?? existing.startAt;

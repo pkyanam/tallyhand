@@ -38,6 +38,16 @@ export async function PATCH(
     if (!parsed.success) {
       return badRequest("Invalid retainer patch", parsed.error.issues);
     }
+    if (parsed.data.clientId) {
+      const client = await provider.getClient(parsed.data.clientId);
+      if (!client) return notFound(`client "${parsed.data.clientId}"`);
+    }
+    if (parsed.data.recurringScheduleId) {
+      const schedule = await provider.getRecurringSchedule(parsed.data.recurringScheduleId);
+      if (!schedule) {
+        return notFound(`recurring schedule "${parsed.data.recurringScheduleId}"`);
+      }
+    }
     await provider.updateRetainer(params.id, parsed.data);
     const updated = await provider.getRetainer(params.id);
     return ok(updated);

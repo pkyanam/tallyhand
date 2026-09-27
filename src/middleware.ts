@@ -5,7 +5,8 @@
  *
  * - `clerk`   → Clerk middleware protects the app + API surface (except the
  *   public exceptions below). @clerk/nextjs is imported dynamically so the
- *   module never loads in local/none mode. Two pass-throughs:
+ *   module never loads in local/none mode. Unauthenticated API requests get
+ *   a 401 JSON error envelope; `/api/v1/openapi.json` is public. Two pass-throughs:
  *     · any `Authorization: Bearer …` request — the route's
  *       requireApiToken() verifies it (shared env token or personal
  *       `thp_…` token), so machine clients never need a Clerk session;
@@ -35,6 +36,8 @@ const PUBLIC_PATHS: RegExp[] = [
   /^\/share(\/.*)?$/,
   /^\/api\/share\/(resolve|approve|pay)(\/.*)?$/,
   /^\/api\/auth(\/.*)?$/,
+  // The spec documents itself as requiring no authentication.
+  /^\/api\/v1\/openapi\.json$/,
   /^\/invoice\/public(\/.*)?$/,
 ];
 
@@ -90,6 +93,17 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
         request.cookies.get(LOCAL_CHOICE_COOKIE)?.value === "1"
       ) {
         return;
+      }
+      const { userId } = await auth();
+      if (userId) return;
+      // Unauthenticated API call: answer with the app's JSON error envelope
+      // (401), not Clerk's 404 HTML page. Page routes keep Clerk's
+      // redirect-to-sign-in behavior below.
+      if (isApiRoute(request.nextUrl.pathname)) {
+        return NextResponse.json(
+          { error: { code: "unauthorized", message: "Not signed in" } },
+          { status: 401 },
+        );
       }
       await auth.protect();
     })(req, event);

@@ -37,8 +37,12 @@ export async function PATCH(
     if (parsed.data.projectId) {
       const project = await provider.getProject(parsed.data.projectId);
       if (!project) {
-        return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
+        return notFound(`project "${parsed.data.projectId}"`);
       }
+    }
+    if (parsed.data.clientId) {
+      const client = await provider.getClient(parsed.data.clientId);
+      if (!client) return notFound(`client "${parsed.data.clientId}"`);
     }
     await provider.updateExpense(params.id, parsed.data);
     const updated = await provider.getExpense(params.id);

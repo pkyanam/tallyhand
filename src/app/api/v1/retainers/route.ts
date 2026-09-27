@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
-import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { retainerCreateSchema } from "@/server/validation";
 import type { RecurringCapableProvider } from "@/server/scheduler";
@@ -62,7 +62,13 @@ export async function POST(req: Request) {
     const provider = asRetainers(getServerProvider());
     const client = await provider.getClient(parsed.data.clientId);
     if (!client) {
-      return badRequest(`clientId "${parsed.data.clientId}" does not exist`);
+      return notFound(`client "${parsed.data.clientId}"`);
+    }
+    if (parsed.data.recurringScheduleId) {
+      const schedule = await provider.getRecurringSchedule(parsed.data.recurringScheduleId);
+      if (!schedule) {
+        return notFound(`recurring schedule "${parsed.data.recurringScheduleId}"`);
+      }
     }
     if (parsed.data.endDate != null && parsed.data.endDate < parsed.data.startDate) {
       return badRequest("endDate must be >= startDate");

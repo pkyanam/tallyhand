@@ -38,7 +38,7 @@ export async function PATCH(
     if (parsed.data.clientId) {
       const client = await provider.getClient(parsed.data.clientId);
       if (!client) {
-        return badRequest(`clientId "${parsed.data.clientId}" does not exist`);
+        return notFound(`client "${parsed.data.clientId}"`);
       }
     }
     await provider.updateProject(params.id, parsed.data);

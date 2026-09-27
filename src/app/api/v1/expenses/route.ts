@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
-import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { expenseCreateSchema } from "@/server/validation";
 import {
@@ -61,13 +61,13 @@ export async function POST(req: Request) {
     if (parsed.data.projectId) {
       const project = await provider.getProject(parsed.data.projectId);
       if (!project) {
-        return badRequest(`projectId "${parsed.data.projectId}" does not exist`);
+        return notFound(`project "${parsed.data.projectId}"`);
       }
     }
     if (parsed.data.clientId) {
       const client = await provider.getClient(parsed.data.clientId);
       if (!client) {
-        return badRequest(`clientId "${parsed.data.clientId}" does not exist`);
+        return notFound(`client "${parsed.data.clientId}"`);
       }
     }
     const expense = await provider.createExpense(parsed.data);

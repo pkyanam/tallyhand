@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiToken } from "@/server/auth";
-import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { invoiceCreateSchema, type InvoiceCreate } from "@/server/validation";
 import { newId, newInvoicePublicToken } from "@/core/id";
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
     const provider = getServerProvider();
     const client = await provider.getClient(parsed.data.clientId);
     if (!client) {
-      return badRequest(`clientId "${parsed.data.clientId}" does not exist`);
+      return notFound(`client "${parsed.data.clientId}"`);
     }
     if (parsed.data.dueDate < parsed.data.issueDate) {
       return badRequest("dueDate must be >= issueDate");

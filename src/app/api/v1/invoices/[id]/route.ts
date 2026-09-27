@@ -37,6 +37,10 @@ export async function PATCH(
     if (!parsed.success) {
       return badRequest("Invalid invoice patch", parsed.error.issues);
     }
+    if (parsed.data.clientId) {
+      const client = await provider.getClient(parsed.data.clientId);
+      if (!client) return notFound(`client "${parsed.data.clientId}"`);
+    }
     if (parsed.data.status !== undefined) {
       // Status is a lifecycle transition, not a field edit: flipping to
       // "sent" via PATCH would skip marking source tasks/expenses billed.

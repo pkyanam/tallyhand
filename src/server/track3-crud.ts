@@ -37,14 +37,14 @@ import { mileageDeduction } from "@/core/mileage";
 async function validateClientProjectRefs(
   data: { clientId?: string | null; projectId?: string | null },
   provider: StorageProvider,
-): Promise<string | null> {
+): Promise<{ resource: "client" | "project"; id: string } | null> {
   if (data.clientId) {
     const client = await provider.getClient(data.clientId);
-    if (!client) return `clientId "${data.clientId}" does not exist`;
+    if (!client) return { resource: "client", id: data.clientId };
   }
   if (data.projectId) {
     const project = await provider.getProject(data.projectId);
-    if (!project) return `projectId "${data.projectId}" does not exist`;
+    if (!project) return { resource: "project", id: data.projectId };
   }
   return null;
 }

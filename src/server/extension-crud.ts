@@ -82,16 +82,16 @@ export interface ExtensionCrudConfig<
   searchAccessors?: Array<(item: TItem) => string | undefined>;
   /** Extra query-param filters; runs before search + date range. */
   filter?: (items: TItem[], params: URLSearchParams) => TItem[];
-  /** Cross-entity reference checks on create; returns a message or null. */
+  /** Cross-entity reference checks on create; returns the missing reference or null. */
   validateCreateRefs?: (
     data: TCreate,
     provider: StorageProvider,
-  ) => Promise<string | null>;
-  /** Cross-entity reference checks on patch; returns a message or null. */
+  ) => Promise<{ resource: "client" | "project"; id: string } | null>;
+  /** Cross-entity reference checks on patch; returns the missing reference or null. */
   validatePatchRefs?: (
     data: TPatch,
     provider: StorageProvider,
-  ) => Promise<string | null>;
+  ) => Promise<{ resource: "client" | "project"; id: string } | null>;
   /** Refuse DELETE with 409; returns { message, details? } or null to allow. */
   deleteGuard?: (item: TItem) => { message: string; details?: unknown } | null;
   /** Extra context merged into the dry-run delete payload. */
@@ -188,7 +188,7 @@ export function defineExtensionCrud<
       }
       if (config.validateCreateRefs) {
         const refErr = await config.validateCreateRefs(parsed.data, provider);
-        if (refErr) return badRequest(refErr);
+        if (refErr) return notFound(`${refErr.resource} "${refErr.id}"`);
       }
       const store = resolveStore<(input: TCreate) => Promise<TItem>>(
         provider,
@@ -234,7 +234,7 @@ export function defineExtensionCrud<
             validated.items[i],
             provider,
           );
-          if (refErr) errors.push({ index: i, issues: [{ message: refErr }] });
+          if (refErr) errors.push({ index: i, issues: [{ message: `${refErr.resource} "${refErr.id}" not found` }] });
         }
         if (errors.length > 0) {
           return badRequest(`Invalid ${config.entityName} items`, errors);
@@ -297,7 +297,7 @@ export function defineExtensionCrud<
       }
       if (config.validatePatchRefs) {
         const refErr = await config.validatePatchRefs(parsed.data, provider);
-        if (refErr) return badRequest(refErr);
+        if (refErr) return notFound(`${refErr.resource} "${refErr.id}"`);
       }
       const updateStore = resolveStore<(id: string, patch: TPatch) => Promise<void>>(
         provider,
