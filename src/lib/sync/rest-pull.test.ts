@@ -92,14 +92,50 @@ describe("fetchRestTables pagination", () => {
       });
     }));
 
-    const tables = await fetchRestTables();
+    const { tables, errors } = await fetchRestTables();
 
+    expect(errors).toEqual({});
     expect(tables.client.map((client) => client.id)).toEqual(["first", "later"]);
     expect(requests).toContain(`${REST_PATHS.client}?limit=200&cursor=MjAw`);
     expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({
       credentials: "same-origin",
       headers: { "x-tallyhand-sync": "1" },
     });
+  });
+
+  it("isolates a failing collection: the rest still pull, errors are reported", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const parsed = new URL(url, "https://tallyhand.test");
+        if (parsed.pathname === REST_PATHS.task) {
+          return new Response(
+            JSON.stringify({ error: { message: "boom" } }),
+            { status: 500 },
+          );
+        }
+        if (parsed.pathname === REST_PATHS.client) {
+          return new Response(
+            JSON.stringify({ data: [row("c1", 100)], meta: { nextCursor: null } }),
+            { status: 200 },
+          );
+        }
+        return new Response(
+          JSON.stringify({ data: [], meta: { nextCursor: null } }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const { tables, errors } = await fetchRestTables();
+
+    // The healthy collection still pulled through.
+    expect(tables.client.map((c) => c.id)).toEqual(["c1"]);
+    expect(tables.task).toEqual([]);
+    // The failure is reported per-type instead of throwing everything away.
+    expect(Object.keys(errors)).toEqual(["task"]);
+    expect(errors.task).toContain("500");
   });
 });
 
@@ -248,6 +284,30 @@ describe("planRestAdoption — apiDeleted", () => {
     expect(plan.adopt).toEqual([]);
     expect(plan.updateLocal).toEqual([]);
     expect(plan.apiDeleted).toEqual([]);
+  });
+
+  it("never infers deletions for a type whose REST listing failed (excludeTypes)", () => {
+    // A failed pull yields an empty listing for that type; without the
+    // exclusion the planner would read "absent from REST" as "deleted via
+    // the API" and wipe the user's local rows on a transient server 500.
+    const local = emptyMaps();
+    local.task.set("t1", 100);
+    const plan = planRestAdoption({
+      localByType: local,
+      restByType: emptyRows(), // task listing failed → empty
+      vaultRows: new Map([[restKey("task", "t1"), 150]]),
+      vaultTombstoned: new Set(),
+      excludeTypes: new Set(["task"]),
+    });
+    expect(plan.apiDeleted).toEqual([]);
+    // …while a healthy type still infers deletions normally.
+    const plan2 = planRestAdoption({
+      localByType: local,
+      restByType: emptyRows(),
+      vaultRows: new Map([[restKey("task", "t1"), 150]]),
+      vaultTombstoned: new Set(),
+    });
+    expect(plan2.apiDeleted).toEqual([{ type: "task", id: "t1" }]);
   });
 
   it("handles a mixed batch: adopt + update + delete in one plan", () => {

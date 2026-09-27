@@ -69,7 +69,17 @@ export function SyncBootstrap() {
             // on every signed-in app load—not only the first enable.
             setSyncEnabled(true, s.userId);
             installDeleteHooks();
-            void runSync().catch(() => {});
+            // The background round's outcome is otherwise invisible: log any
+            // problem (including REST-reconcile issues) so a silently
+            // failing pull can be diagnosed from the browser console.
+            // Settings → Cloud sync → "Sync now" shows the same details.
+            void runSync()
+              .then((r) => {
+                if (r.status !== "ok" || r.restError) {
+                  console.error("[tallyhand sync] background sync issue:", r);
+                }
+              })
+              .catch(() => {});
           }
         }
       } catch {

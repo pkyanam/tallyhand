@@ -83,12 +83,14 @@ type PgPool = {
 let pgPool: PgPool | null = null;
 let pgEnsured = false;
 
-function getPgPool(): PgPool {
+async function getPgPool(): Promise<PgPool> {
   if (pgPool) return pgPool;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("TALLY_STORAGE=postgres requires DATABASE_URL");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Pool } = require("pg") as typeof import("pg");
+  // Dynamic import (not require): keeps pg out of the static module graph
+  // AND resolves under vitest's ESM loader, where vi.mock("pg") applies
+  // (a bare require() bypasses the mock registry).
+  const { Pool } = (await import("pg")) as typeof import("pg");
   pgPool = new Pool({ connectionString: url }) as unknown as PgPool;
   return pgPool;
 }
@@ -107,7 +109,7 @@ CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens (user_id);`;
 
 async function pgEnsure(): Promise<void> {
   if (pgEnsured) return;
-  await getPgPool().query(PG_SCHEMA);
+  await (await getPgPool()).query(PG_SCHEMA);
   pgEnsured = true;
 }
 
@@ -116,7 +118,7 @@ const pgBackend = {
     rec: ApiTokenRecord & { tokenHash: string },
   ): Promise<ApiTokenRecord> {
     await pgEnsure();
-    const { rows } = await getPgPool().query(
+    const { rows } = await (await getPgPool()).query(
       `INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, created_at, last_used_at)
        VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING *`,
       [rec.id, rec.userId, rec.name, rec.tokenHash, rec.prefix, rec.createdAt],
@@ -125,7 +127,7 @@ const pgBackend = {
   },
   async list(userId: string): Promise<ApiTokenRecord[]> {
     await pgEnsure();
-    const { rows } = await getPgPool().query(
+    const { rows } = await (await getPgPool()).query(
       `SELECT id, user_id, name, prefix, created_at, last_used_at
        FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC`,
       [userId],
@@ -134,7 +136,7 @@ const pgBackend = {
   },
   async revoke(userId: string, id: string): Promise<boolean> {
     await pgEnsure();
-    const { rowCount } = await getPgPool().query(
+    const { rowCount } = await (await getPgPool()).query(
       `DELETE FROM api_tokens WHERE id = $1 AND user_id = $2`,
       [id, userId],
     );
@@ -144,7 +146,7 @@ const pgBackend = {
     tokenHash: string,
   ): Promise<(ApiTokenRecord & { tokenHash: string }) | null> {
     await pgEnsure();
-    const { rows } = await getPgPool().query(
+    const { rows } = await (await getPgPool()).query(
       `SELECT * FROM api_tokens WHERE token_hash = $1`,
       [tokenHash],
     );
@@ -153,7 +155,7 @@ const pgBackend = {
     return { ...toRecord(row), tokenHash: String(row.token_hash) };
   },
   async touch(id: string, at: number): Promise<void> {
-    await getPgPool().query(
+    await (await getPgPool()).query(
       `UPDATE api_tokens SET last_used_at = $1 WHERE id = $2`,
       [at, id],
     );

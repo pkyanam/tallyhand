@@ -72,41 +72,74 @@ function splitRestKey(key: string): { type: string; id: string } {
     : { type: key.slice(0, idx), id: key.slice(idx + 1) };
 }
 
+/** One REST collection fetched with cursor pagination. Separated so a
+ * single collection's failure can be isolated by the caller. */
+async function fetchRestCollection(type: RestEntityType): Promise<RestRow[]> {
+  const path = REST_PATHS[type];
+  const rows: RestRow[] = [];
+  let cursor: string | null = null;
+  // Entity endpoints default to 50 rows per response. Follow their
+  // opaque cursor so the reconcile sees the full collection.
+  do {
+    const params = new URLSearchParams({ limit: "200" });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`${path}?${params.toString()}`, {
+      credentials: "same-origin",
+      headers: SYNC_CSRF_HEADERS,
+    });
+    if (!res.ok) {
+      throw new Error(`REST pull failed for ${path} (${res.status})`);
+    }
+    const body = (await res.json()) as {
+      data: unknown;
+      meta?: { nextCursor?: string | null };
+    };
+    if (Array.isArray(body.data)) rows.push(...(body.data as RestRow[]));
+    cursor = body.meta?.nextCursor ?? null;
+  } while (cursor);
+  return rows;
+}
+
+/**
+ * Result of pulling every REST collection. Collections are fetched
+ * independently: one failing endpoint must not hide the other ten, and —
+ * critically — must not be misread as "that collection is empty" (an empty
+ * listing would make the planner infer API-side deletions and wipe local
+ * data). The caller must pass failed types as `excludeTypes` to
+ * `planRestAdoption` so deletion inference is skipped for them.
+ */
+export interface RestPullResult {
+  tables: Record<RestEntityType, RestRow[]>;
+  /** type -> error message for collections that failed to pull. */
+  errors: Partial<Record<RestEntityType, string>>;
+}
+
 /** Fetch every REST collection in parallel (Clerk session cookie auth).
- * Throws on the first non-ok response with the HTTP status in the message;
- * the caller decides retry policy. */
-export async function fetchRestTables(): Promise<
-  Record<RestEntityType, RestRow[]>
-> {
+ * Never throws for a single collection's failure: the error is recorded in
+ * `errors` and the remaining collections still pull. Only throws when the
+ * fan-out itself breaks (which the per-type guards already prevent). */
+export async function fetchRestTables(): Promise<RestPullResult> {
   const types = Object.keys(REST_PATHS) as RestEntityType[];
   const entries = await Promise.all(
-    types.map(async (type): Promise<[RestEntityType, RestRow[]]> => {
-      const path = REST_PATHS[type];
-      const rows: RestRow[] = [];
-      let cursor: string | null = null;
-      // Entity endpoints default to 50 rows per response. Follow their
-      // opaque cursor so the reconcile sees the full collection.
-      do {
-        const params = new URLSearchParams({ limit: "200" });
-        if (cursor) params.set("cursor", cursor);
-        const res = await fetch(`${path}?${params.toString()}`, {
-          credentials: "same-origin",
-          headers: SYNC_CSRF_HEADERS,
-        });
-        if (!res.ok) {
-          throw new Error(`REST pull failed for ${path} (${res.status})`);
+    types.map(
+      async (
+        type,
+      ): Promise<[RestEntityType, RestRow[], string | null]> => {
+        try {
+          return [type, await fetchRestCollection(type), null];
+        } catch (e) {
+          return [type, [], e instanceof Error ? e.message : String(e)];
         }
-        const body = (await res.json()) as {
-          data: unknown;
-          meta?: { nextCursor?: string | null };
-        };
-        if (Array.isArray(body.data)) rows.push(...(body.data as RestRow[]));
-        cursor = body.meta?.nextCursor ?? null;
-      } while (cursor);
-      return [type, rows];
-    }),
+      },
+    ),
   );
-  return Object.fromEntries(entries) as Record<RestEntityType, RestRow[]>;
+  const tables = {} as Record<RestEntityType, RestRow[]>;
+  const errors: Partial<Record<RestEntityType, string>> = {};
+  for (const [type, rows, err] of entries) {
+    tables[type] = rows;
+    if (err) errors[type] = err;
+  }
+  return { tables, errors };
 }
 
 /** What the caller must do to Dexie after a REST pull. */
@@ -148,8 +181,17 @@ export function planRestAdoption(args: {
   vaultRows: Map<string, number>;
   /** restKey(type,id) tombstoned in the vault (deletion won). */
   vaultTombstoned: Set<string>;
+  /**
+   * Entity types whose REST listing failed this round. Rule 4 (API-side
+   * deletion inference) is skipped for them: a failed listing looks
+   * exactly like "everything was deleted", and inferring deletions from
+   * it would wipe local data on a transient server 500. Rules 1-3 are
+   * unaffected (a failed type contributes no rows to adopt/update).
+   */
+  excludeTypes?: ReadonlySet<RestEntityType>;
 }): RestAdoptionPlan {
   const { localByType, restByType, vaultRows, vaultTombstoned } = args;
+  const excludeTypes = args.excludeTypes ?? new Set<RestEntityType>();
   const plan: RestAdoptionPlan = { adopt: [], updateLocal: [], apiDeleted: [] };
 
   const types = Object.keys(REST_PATHS) as RestEntityType[];
@@ -181,6 +223,9 @@ export function planRestAdoption(args: {
 
     // Rule 4: API-side deletions. Iterate the vault snapshot for this type;
     // the vault is the witness that the id *existed* and was not deleted.
+    // Skipped entirely for types whose REST listing failed: an unreachable
+    // collection is not evidence of deletion.
+    if (excludeTypes.has(type)) continue;
     for (const [key, vaultTs] of vaultRows) {
       const { type: keyType, id } = splitRestKey(key);
       if (keyType !== type) continue;

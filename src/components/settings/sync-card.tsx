@@ -273,9 +273,19 @@ export function SyncCard() {
                       role="status"
                     >
                       {lastResult.status === "ok"
-                        ? `Synced — ${lastResult.pushed ?? 0} pushed, ${lastResult.applied ?? 0} applied.`
+                        ? `Synced — ${lastResult.pushed ?? 0} pushed, ${lastResult.applied ?? 0} applied.${
+                            lastResult.restAdopted
+                              ? ` ${lastResult.restAdopted} row(s) adopted from the API.`
+                              : ""
+                          }`
                         : (lastResult.reason ?? "Sync failed.")}
                     </span>
+                  )}
+                  {lastResult?.restError && (
+                    <p className="text-xs text-destructive" role="alert">
+                      API sync issue: {lastResult.restError} Open the browser
+                      console for details.
+                    </p>
                   )}
                 </div>
 

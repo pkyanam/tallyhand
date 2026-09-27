@@ -423,7 +423,21 @@ async function doSync(): Promise<SyncResult> {
     // server-side deletions into local tombstones. Best-effort — a REST
     // failure must not fail the vault sync that already succeeded.
     try {
-      const restByType = await fetchRestTables();
+      const { tables: restByType, errors: restErrors } = await fetchRestTables();
+      const failedTypes = Object.keys(restErrors) as RestEntityType[];
+      if (failedTypes.length > 0) {
+        // A failed collection is reported loudly and excluded from deletion
+        // inference below: it must never be misread as "everything deleted".
+        // The remaining collections still reconcile normally.
+        console.error(
+          `[tallyhand sync] REST pull failed for ${failedTypes.join(", ")}; ` +
+            `skipping deletion inference for those collections this round.`,
+          restErrors,
+        );
+        result.restError =
+          `REST pull failed for: ` +
+          failedTypes.map((t) => `${t} (${restErrors[t]})`).join("; ");
+      }
       const vs = await getVaultState(userId);
       const localByType = {} as Record<RestEntityType, Map<string, number>>;
       for (const type of SYNC_ENTITY_TYPES) {
@@ -437,6 +451,7 @@ async function doSync(): Promise<SyncResult> {
         restByType,
         vaultRows: new Map(Object.entries(vs.ids)),
         vaultTombstoned: new Set(Object.keys(vs.tombstoned)),
+        excludeTypes: new Set(failedTypes),
       });
       suppressTombstones = true;
       try {
@@ -457,7 +472,12 @@ async function doSync(): Promise<SyncResult> {
       }
       result.restAdopted = plan.adopt.length + plan.updateLocal.length;
     } catch (e) {
-      result.restError = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      // The REST reconcile is best-effort, but its failures must be
+      // observable: log the full detail here (Settings → Cloud sync also
+      // surfaces result.restError after a manual "Sync now").
+      console.error("[tallyhand sync] REST reconcile failed:", e);
+      result.restError = msg;
     }
 
     await setLastSyncAt(userId, newCursor);
