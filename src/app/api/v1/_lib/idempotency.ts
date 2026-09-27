@@ -116,7 +116,14 @@ async function withCloudSql(key: string, mode: "neon" | "postgres", handler: () 
       const { neon } = await import("@neondatabase/serverless");
       const sql = neon(normalizeNeonConnectionString(connectionString));
       neonSql = sql as unknown as NeonSql;
-      await sql([POSTGRES_TABLE] as unknown as TemplateStringsArray);
+      await sql`
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+          key TEXT PRIMARY KEY,
+          status INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        )
+      `;
       const rows = await sql`SELECT status, body FROM idempotency_keys WHERE key = ${key}` as StoredResponse[];
       if (rows[0]) return new Response(rows[0].body, { status: rows[0].status, headers: { "content-type": "application/json" } });
     } else {
