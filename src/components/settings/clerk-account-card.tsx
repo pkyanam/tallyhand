@@ -54,6 +54,17 @@ export function ClerkAccountCard() {
     await signOut({ redirectUrl: "/" });
   };
 
+  const signOutOnly = async () => {
+    // Sign out but stay in cloud mode (landing will offer sign-in again).
+    try {
+      window.localStorage.removeItem(LANDING_CHOICE_KEY);
+    } catch {
+      /* ignore */
+    }
+    document.cookie = `${LOCAL_CHOICE_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+    await signOut({ redirectUrl: "/" });
+  };
+
   const switchToAccount = () => {
     try {
       window.localStorage.removeItem(LANDING_CHOICE_KEY);
@@ -85,9 +96,14 @@ export function ClerkAccountCard() {
             Sign in with an account
           </Button>
         ) : (
-          <Button type="button" variant="outline" onClick={() => void switchToLocal()}>
-            Use locally instead
-          </Button>
+          <>
+            <Button type="button" variant="outline" onClick={() => void signOutOnly()}>
+              Sign out
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void switchToLocal()}>
+              Use locally instead
+            </Button>
+          </>
         )}
       </CardContent>
     </Card>

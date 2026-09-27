@@ -323,7 +323,7 @@ type Backend = typeof pgBackend;
 
 function getBackend(): Backend {
   const storage = parseStorage();
-  if (storage === "postgres") return pgBackend;
+  if (storage === "postgres" || storage === "neon") return pgBackend;
   if (storage === "convex") return convexBackend;
   // sqlite, and dexie (no IndexedDB server-side) → server SQLite file.
   return sqliteBackend;
