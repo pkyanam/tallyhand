@@ -1,13 +1,18 @@
 /**
  * /login — auth entry point (server component).
  *
+ * This is an optional catch-all ([[...rest]]) so Clerk's <SignIn>/<SignUp>
+ * handle their own sub-paths here: /login/sso-callback (OAuth return),
+ * /login/factor-one (MFA), etc. Without the catch-all, Google sign-in
+ * bounces to /login/sso-callback and Next.js returns a 404.
+ *
  * Renders per TALLY_AUTH:
  * - clerk   → Clerk's hosted SignIn component (?mode=sign-up → SignUp).
  * - builtin → email magic-link form (no password to remember).
  * - none    → explains auth is disabled (single-user local mode).
  */
 import { effectiveAuth } from "@/lib/mode";
-import { BuiltinLoginForm } from "./builtin-login-form";
+import { BuiltinLoginForm } from "../builtin-login-form";
 
 export default async function LoginPage({
   searchParams,
