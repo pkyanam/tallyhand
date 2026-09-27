@@ -8,6 +8,8 @@ import { z } from "zod";
 import { getShareDeps } from "@/lib/share/server-deps";
 import { approveTimesheet } from "@/lib/share/service";
 
+export const runtime = "nodejs";
+
 const Body = z.object({
   token: z.string().min(1),
   approverName: z.string().max(120).optional(),

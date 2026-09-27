@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
 import { getShareDeps } from "@/lib/share/server-deps";
 import { resolveShareToken } from "@/lib/share/service";
 
+export const runtime = "nodejs";
+
 export async function GET(
   _req: Request,
   { params }: { params: { token: string } },

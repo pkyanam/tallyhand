@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
 import { resolveUserId } from "@/lib/auth/session";
 import { getShareDeps } from "@/lib/share/server-deps";
 
+export const runtime = "nodejs";
+
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } },

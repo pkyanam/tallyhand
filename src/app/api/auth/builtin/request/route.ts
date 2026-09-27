@@ -14,6 +14,8 @@ import { z } from "zod";
 import { parseAuth } from "@/lib/mode";
 import { requestMagicLink } from "@/lib/auth/builtin";
 
+export const runtime = "nodejs";
+
 const Body = z.object({ email: z.string().min(1) });
 
 export async function POST(req: Request) {

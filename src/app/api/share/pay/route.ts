@@ -14,6 +14,8 @@ import { getShareDeps } from "@/lib/share/server-deps";
 import { resolveShareToken } from "@/lib/share/service";
 import { hasSharePaymentHandler, requestSharePayment } from "@/lib/share/payment-slot";
 
+export const runtime = "nodejs";
+
 const Body = z.object({ token: z.string().min(1) });
 
 export async function POST(req: Request) {

@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "../../require-admin";
 
+export const runtime = "nodejs";
+
 const Role = z.enum(["admin", "member", "viewer"]);
 const PatchBody = z.object({
   role: Role.optional(),

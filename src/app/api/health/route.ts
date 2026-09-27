@@ -6,6 +6,8 @@
 import { NextResponse } from "next/server";
 import { getConfig, validateConfig } from "@/lib/mode";
 
+export const runtime = "nodejs";
+
 export async function GET() {
   const config = getConfig();
   const problems = config.hosted ? validateConfig() : [];

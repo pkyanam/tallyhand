@@ -8,6 +8,8 @@ import { resolveUserId } from "@/lib/auth/session";
 import { getShareDeps } from "@/lib/share/server-deps";
 import { createShareLink, CreateShareSchema } from "@/lib/share/service";
 
+export const runtime = "nodejs";
+
 export async function GET() {
   try {
     await resolveUserId();

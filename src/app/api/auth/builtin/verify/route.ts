@@ -12,6 +12,8 @@ import {
   signBuiltinSession,
 } from "@/lib/auth/builtin";
 
+export const runtime = "nodejs";
+
 export async function GET(req: Request) {
   if (parseAuth() !== "builtin") {
     return NextResponse.json({ error: "Builtin auth is not enabled" }, { status: 404 });
