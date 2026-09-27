@@ -422,8 +422,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         defaultRate: input.defaultRate,
         notes: input.notes,
         archived: input.archived ?? false,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toClient(rows[0]);
@@ -433,8 +433,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.clients) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.clients, uid, id));
   }
 
@@ -484,8 +485,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         name: input.name,
         rateOverride: input.rateOverride,
         archived: input.archived ?? false,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toProject(rows[0]);
@@ -495,8 +496,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.projects) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.projects, uid, id));
   }
 
@@ -565,8 +567,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         tags: input.tags ?? [],
         isBilled: input.isBilled ?? false,
         invoiceId: input.invoiceId,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toTask(rows[0]);
@@ -574,8 +576,12 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
 
   async updateTask(id: ID, patch: Partial<Task>): Promise<void> {
     const uid = await this.uid();
-    const next: Record<string, unknown> = { ...patch, updatedAt: now() };
+    const next: Record<string, unknown> = {
+      ...patch,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     delete next.id;
+    delete next.createdAt; // created_at is immutable — never rewrite it
     if (patch.startAt != null || patch.endAt != null) {
       const existing = await this.getTask(id);
       if (existing) {
@@ -631,8 +637,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         receiptB64: input.receiptB64,
         isBilled: input.isBilled ?? false,
         invoiceId: input.invoiceId,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toExpense(rows[0]);
@@ -642,8 +648,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.expenses) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.expenses, uid, id));
   }
 
@@ -721,8 +728,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         qrDescription: input.qrDescription,
         amountInWords: input.amountInWords,
         template: input.template,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toInvoice(rows[0]);
@@ -732,8 +739,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.invoices) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.invoices, uid, id));
   }
 
@@ -863,7 +871,7 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const ts = now();
     const rows = await (this.db.insert(schema.recurringSchedules) as unknown as DbQueryBuilder)
       .values({
-        id: newId("rsd"),
+        id: input.id ?? newId("rsd"),
         userId: uid,
         clientId: input.clientId,
         projectId: input.projectId,
@@ -875,12 +883,14 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         startDate: input.startDate,
         endDate: input.endDate,
         maxOccurrences: input.maxOccurrences,
-        nextRunAt: input.startDate,
-        occurrences: 0,
+        // Mirror writes adopt the browser's run cursor wholesale.
+        nextRunAt: input.nextRunAt ?? input.startDate,
+        ...(input.lastRunAt != null ? { lastRunAt: input.lastRunAt } : {}),
+        occurrences: input.occurrences ?? 0,
         status: input.status ?? "active",
         notes: input.notes,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toRecurringSchedule(rows[0]);
@@ -893,8 +903,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.recurringSchedules) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.recurringSchedules, uid, id));
   }
 
@@ -942,7 +953,7 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const ts = now();
     const rows = await (this.db.insert(schema.retainers) as unknown as DbQueryBuilder)
       .values({
-        id: newId("rtn"),
+        id: input.id ?? newId("rtn"),
         userId: uid,
         clientId: input.clientId,
         name: input.name,
@@ -955,8 +966,8 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
         status: input.status ?? "active",
         recurringScheduleId: input.recurringScheduleId,
         notes: input.notes,
-        createdAt: ts,
-        updatedAt: ts,
+        createdAt: input.createdAt ?? ts,
+        updatedAt: input.updatedAt ?? ts,
       })
       .returning();
     return toRetainer(rows[0]);
@@ -966,8 +977,9 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.retainers) as unknown as DbQueryBuilder)
-      .set({ ...rest, updatedAt: now() })
+      .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
       .where(this.scopedById(schema.retainers, uid, id));
   }
 

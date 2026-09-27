@@ -36,3 +36,57 @@ export function validateBulk<S extends z.ZodTypeAny>(
 }
 
 export const MAX_BULK_ITEMS = 200;
+
+/**
+ * Duplicate-id pre-check for bulk create (mirror retry-safety). Runs after
+ * schema validation and before any write, honoring the validate-first
+ * contract:
+ * - an id appearing at two indexes in the same batch → `inBatch` (the
+ *   request contradicts itself);
+ * - an id that already exists in storage → `existing` (a retried batch).
+ * Both lists carry per-index details naming the offending indexes.
+ */
+export async function findDuplicateIds(
+  items: Array<{ id?: string }>,
+  exists: (id: string) => Promise<boolean>,
+): Promise<{ inBatch: BulkItemError[]; existing: BulkItemError[] }> {
+  const inBatch: BulkItemError[] = [];
+  const existing: BulkItemError[] = [];
+  const firstIndex = new Map<string, number>();
+  const dupIndexes = new Map<string, number[]>();
+  items.forEach((item, index) => {
+    const id = item.id;
+    if (!id) return;
+    const first = firstIndex.get(id);
+    if (first === undefined) {
+      firstIndex.set(id, index);
+    } else {
+      const list = dupIndexes.get(id) ?? [first];
+      list.push(index);
+      dupIndexes.set(id, list);
+    }
+  });
+  for (const [id, indexes] of dupIndexes) {
+    for (const index of indexes) {
+      const others = indexes.filter((i) => i !== index);
+      inBatch.push({
+        index,
+        issues: [
+          {
+            message: `duplicate id "${id}" in batch (also at index ${others.join(", ")})`,
+          },
+        ],
+      });
+    }
+  }
+  for (const [id, index] of firstIndex) {
+    if (dupIndexes.has(id)) continue; // already reported as an in-batch duplicate
+    if (await exists(id)) {
+      existing.push({
+        index,
+        issues: [{ message: `id "${id}" already exists` }],
+      });
+    }
+  }
+  return { inBatch, existing };
+}

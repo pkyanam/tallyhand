@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
-import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
+import { requireApiOrSession } from "../_lib/sync-auth";
+import { badRequest, conflict, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { projectCreateSchema } from "@/server/validation";
 import {
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 const SORT_FIELDS = ["name", "createdAt"] as const;
 
 export async function GET(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
   const provider = getServerProvider();
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);
@@ -44,6 +44,10 @@ export async function POST(req: Request) {
       return badRequest("Invalid project", parsed.error.issues);
     }
     const provider = getServerProvider();
+    // Mirror retry-safety: a retried create must not collide on the id.
+    if (parsed.data.id && (await provider.getProject(parsed.data.id))) {
+      return conflict("project");
+    }
     const client = await provider.getClient(parsed.data.clientId);
     if (!client) {
       return notFound(`client "${parsed.data.clientId}"`);

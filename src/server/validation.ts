@@ -25,6 +25,18 @@ const dateMs = z
 
 const optionalId = z.string().min(1).optional();
 
+/**
+ * Mirror-write timestamps every create schema accepts: the browser sync
+ * engine adopts REST rows back with last-write-wins by `updatedAt`, so
+ * create payloads may carry the client's `createdAt`/`updatedAt` and the
+ * providers honor them instead of stamping server time. These are known
+ * keys now — unknown keys still 400 under `.strict()`.
+ */
+const syncTimestamps = {
+  createdAt: dateMs.optional(),
+  updatedAt: dateMs.optional(),
+};
+
 // -- clients -------------------------------------------------------------
 export const clientCreateSchema = z
   .object({
@@ -35,6 +47,7 @@ export const clientCreateSchema = z
     defaultRate: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     archived: z.boolean().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const clientPatchSchema = clientCreateSchema.partial();
@@ -47,6 +60,7 @@ export const projectCreateSchema = z
     name: z.string().min(1, "name is required"),
     rateOverride: z.number().nonnegative().optional(),
     archived: z.boolean().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const projectPatchSchema = projectCreateSchema.partial();
@@ -63,6 +77,8 @@ export const taskCreateSchema = z
     notes: z.string().optional(),
     tags: z.array(z.string()).optional(),
     isBilled: z.boolean().optional(),
+    invoiceId: optionalId,
+    ...syncTimestamps,
   })
   .strict();
 export const taskPatchSchema = taskCreateSchema.partial();
@@ -79,6 +95,8 @@ export const expenseCreateSchema = z
     note: z.string().optional(),
     receiptB64: z.string().optional(),
     isBilled: z.boolean().optional(),
+    invoiceId: optionalId,
+    ...syncTimestamps,
   })
   .strict();
 export const expensePatchSchema = expenseCreateSchema.partial();
@@ -143,6 +161,23 @@ export const invoiceCreateSchema = z
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
     ...invoiceLocalizationFields,
+    // -- dunning records (mirror writes adopt the browser's history) --
+    reminderLog: z
+      .array(
+        z
+          .object({ reminderDay: z.number().int(), sentAt: dateMs })
+          .strict(),
+      )
+      .optional(),
+    lateFeeApplications: z
+      .array(
+        z
+          .object({ appliedAt: dateMs, amount: z.number().nonnegative() })
+          .strict(),
+      )
+      .optional(),
+    overdueNotifiedAt: dateMs.optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const invoicePatchSchema = z
@@ -158,6 +193,10 @@ export const invoicePatchSchema = z
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
     ...invoiceLocalizationFields,
+    // Mirror PATCH writes carry client timestamps; providers honor
+    // `updatedAt` and never rewrite `createdAt`.
+    createdAt: dateMs.optional(),
+    updatedAt: dateMs.optional(),
   })
   .strict();
 
@@ -172,6 +211,7 @@ export const recurringLineInputSchema = z
 
 export const recurringScheduleCreateSchema = z
   .object({
+    id: optionalId,
     clientId: z.string().min(1, "clientId is required"),
     projectId: z.string().min(1).optional(),
     name: z.string().min(1, "name is required"),
@@ -182,8 +222,13 @@ export const recurringScheduleCreateSchema = z
     startDate: dateMs,
     endDate: dateMs.optional(),
     maxOccurrences: z.number().int().min(1).optional(),
+    // Mirror writes adopt the browser's run cursor wholesale.
+    nextRunAt: dateMs.optional(),
+    lastRunAt: dateMs.optional(),
+    occurrences: z.number().int().nonnegative().optional(),
     status: z.enum(["active", "paused", "ended"]).optional(),
     notes: z.string().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const recurringSchedulePatchSchema =
@@ -192,6 +237,7 @@ export const recurringSchedulePatchSchema =
 // -- retainers -----------------------------------------------------------
 export const retainerCreateSchema = z
   .object({
+    id: optionalId,
     clientId: z.string().min(1, "clientId is required"),
     name: z.string().min(1, "name is required"),
     type: z.enum(["prepaid-hours", "monthly-fee"]),
@@ -203,6 +249,7 @@ export const retainerCreateSchema = z
     status: z.enum(["active", "paused", "depleted", "ended"]).optional(),
     recurringScheduleId: z.string().min(1).optional(),
     notes: z.string().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const retainerPatchSchema = retainerCreateSchema.partial();
@@ -221,6 +268,8 @@ export const mileageCreateSchema = z
     destination: z.string().optional(),
     vehicleNote: z.string().optional(),
     isBilled: z.boolean().optional(),
+    invoiceId: optionalId,
+    ...syncTimestamps,
   })
   .strict();
 export const mileagePatchSchema = mileageCreateSchema.partial();
@@ -241,6 +290,7 @@ export const contractCreateSchema = z
     fileName: z.string().optional(),
     notes: z.string().optional(),
     archived: z.boolean().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const contractPatchSchema = contractCreateSchema.partial();
@@ -261,6 +311,7 @@ export const taxPaymentCreateSchema = z
     jurisdiction: z.enum(["federal", "state"]),
     method: z.string().optional(),
     note: z.string().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const taxPaymentPatchSchema = taxPaymentCreateSchema.partial();
@@ -285,6 +336,7 @@ export const rateCardCreateSchema = z
     effectiveFrom: dateMs,
     effectiveTo: dateMs.optional(),
     archived: z.boolean().optional(),
+    ...syncTimestamps,
   })
   .strict();
 export const rateCardPatchSchema = rateCardCreateSchema.partial();

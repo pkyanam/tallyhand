@@ -300,9 +300,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const client = {
       id: input.id ?? newId("cli"),
       archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Client;
     this.insert(
       "clients",
@@ -315,7 +316,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateClient(id: ID, patch: Partial<Client>): Promise<void> {
     const existing = await this.getClient(id);
     if (!existing) return; // mirror Dexie: no-op on missing id
-    const next: Client = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Client = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE clients SET name = ?, archived = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.name, next.archived ? 1 : 0, next.updatedAt, JSON.stringify(next), id);
@@ -347,9 +354,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const project = {
       id: input.id ?? newId("prj"),
       archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Project;
     this.insert(
       "projects",
@@ -362,7 +370,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateProject(id: ID, patch: Partial<Project>): Promise<void> {
     const existing = await this.getProject(id);
     if (!existing) return;
-    const next: Project = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Project = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE projects SET client_id = ?, name = ?, archived = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.name, next.archived ? 1 : 0, next.updatedAt, JSON.stringify(next), id);
@@ -405,9 +419,10 @@ export class SqliteStorageProvider implements StorageProvider {
       isBilled: input.isBilled ?? false,
       tags: input.tags ?? [],
       durationMinutes,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Task;
     this.insert(
       "tasks",
@@ -420,7 +435,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateTask(id: ID, patch: Partial<Task>): Promise<void> {
     const existing = await this.getTask(id);
     if (!existing) return;
-    const next: Partial<Task> = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Partial<Task> = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     if (patch.startAt != null || patch.endAt != null) {
       const startAt = patch.startAt ?? existing.startAt;
       const endAt = patch.endAt ?? existing.endAt;
@@ -452,9 +473,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const expense = {
       id: input.id ?? newId("exp"),
       isBilled: input.isBilled ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Expense;
     this.insert(
       "expenses",
@@ -467,7 +489,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateExpense(id: ID, patch: Partial<Expense>): Promise<void> {
     const existing = await this.getExpense(id);
     if (!existing) return;
-    const next: Expense = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Expense = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE expenses SET client_id = ?, project_id = ?, date = ?, category = ?, is_billed = ?, invoice_id = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId ?? null, next.projectId ?? null, next.date, next.category, next.isBilled ? 1 : 0, next.invoiceId ?? null, next.updatedAt, JSON.stringify(next), id);
@@ -498,9 +526,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const ts = now();
     const invoice = {
       id: input.id ?? newId("inv"),
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Invoice;
     this.insert(
       "invoices",
@@ -513,7 +542,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateInvoice(id: ID, patch: Partial<Invoice>): Promise<void> {
     const existing = await this.getInvoice(id);
     if (!existing) return;
-    const next: Invoice = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Invoice = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE invoices SET client_id = ?, invoice_number = ?, status = ?, issue_date = ?, due_date = ?, public_token = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.invoiceNumber, next.status, next.issueDate, next.dueDate, next.publicToken ?? null, next.updatedAt, JSON.stringify(next), id);
@@ -546,12 +581,14 @@ export class SqliteStorageProvider implements StorageProvider {
     const ts = now();
     const schedule: RecurringSchedule = {
       ...input,
-      id: newId("rsd"),
+      id: input.id ?? newId("rsd"),
       status: input.status ?? "active",
-      nextRunAt: input.startDate,
-      occurrences: 0,
-      createdAt: ts,
-      updatedAt: ts,
+      // Mirror writes adopt the browser's run cursor wholesale.
+      nextRunAt: input.nextRunAt ?? input.startDate,
+      ...(input.lastRunAt != null ? { lastRunAt: input.lastRunAt } : {}),
+      occurrences: input.occurrences ?? 0,
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     };
     this.insert(
       "recurring_schedules",
@@ -564,7 +601,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateRecurringSchedule(id: string, patch: Partial<RecurringSchedule>): Promise<void> {
     const existing = await this.getRecurringSchedule(id);
     if (!existing) return;
-    const next: RecurringSchedule = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: RecurringSchedule = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE recurring_schedules SET client_id = ?, project_id = ?, status = ?, next_run_at = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.projectId ?? null, next.status, next.nextRunAt, next.updatedAt, JSON.stringify(next), id);
@@ -597,10 +640,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const ts = now();
     const retainer: Retainer = {
       ...input,
-      id: newId("rtn"),
+      id: input.id ?? newId("rtn"),
       status: input.status ?? "active",
-      createdAt: ts,
-      updatedAt: ts,
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     };
     this.insert(
       "retainers",
@@ -613,7 +656,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateRetainer(id: string, patch: Partial<Retainer>): Promise<void> {
     const existing = await this.getRetainer(id);
     if (!existing) return;
-    const next: Retainer = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Retainer = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE retainers SET client_id = ?, status = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.status, next.updatedAt, JSON.stringify(next), id);
@@ -641,9 +690,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const entry = {
       id: input.id ?? newId("mil"),
       isBilled: input.isBilled ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
       // Computed after the spread: an explicit `rate: undefined` in
       // unchecked runtime input must not clobber the default.
       rate:
@@ -660,7 +710,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateMileageEntry(id: ID, patch: Partial<MileageEntry>): Promise<void> {
     const existing = await this.getMileageEntry(id);
     if (!existing) return;
-    const next: MileageEntry = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: MileageEntry = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE mileage_entries SET client_id = ?, project_id = ?, date = ?, is_billed = ?, invoice_id = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId ?? null, next.projectId ?? null, next.date, next.isBilled ? 1 : 0, next.invoiceId ?? null, next.updatedAt, JSON.stringify(next), id);
@@ -687,9 +743,10 @@ export class SqliteStorageProvider implements StorageProvider {
       id: input.id ?? newId("ctr"),
       renewalNoticeDays: 30,
       archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as Contract;
     this.insert(
       "contracts",
@@ -702,7 +759,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateContract(id: ID, patch: Partial<Contract>): Promise<void> {
     const existing = await this.getContract(id);
     if (!existing) return;
-    const next: Contract = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: Contract = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE contracts SET client_id = ?, project_id = ?, type = ?, end_date = ?, archived = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.projectId ?? null, next.type, next.endDate ?? null, next.archived ? 1 : 0, next.updatedAt, JSON.stringify(next), id);
@@ -727,9 +790,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const ts = now();
     const payment = {
       id: input.id ?? newId("txp"),
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as TaxPayment;
     this.insert(
       "tax_payments",
@@ -742,7 +806,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateTaxPayment(id: ID, patch: Partial<TaxPayment>): Promise<void> {
     const existing = await this.getTaxPayment(id);
     if (!existing) return;
-    const next: TaxPayment = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: TaxPayment = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE tax_payments SET tax_year = ?, quarter = ?, jurisdiction = ?, date = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.taxYear, next.quarter, next.jurisdiction, next.date, next.updatedAt, JSON.stringify(next), id);
@@ -768,9 +838,10 @@ export class SqliteStorageProvider implements StorageProvider {
     const card = {
       id: input.id ?? newId("rc"),
       archived: input.archived ?? false,
-      createdAt: ts,
-      updatedAt: ts,
       ...input,
+      // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
+      createdAt: input.createdAt ?? ts,
+      updatedAt: input.updatedAt ?? ts,
     } as RateCard;
     this.insert(
       "rate_cards",
@@ -783,7 +854,13 @@ export class SqliteStorageProvider implements StorageProvider {
   async updateRateCard(id: ID, patch: Partial<RateCard>): Promise<void> {
     const existing = await this.getRateCard(id);
     if (!existing) return;
-    const next: RateCard = { ...existing, ...patch, updatedAt: now() };
+    // createdAt is immutable; mirror PATCHes may still send it — never rewrite.
+    const next: RateCard = {
+      ...existing,
+      ...patch,
+      createdAt: existing.createdAt,
+      updatedAt: patch.updatedAt ?? now(),
+    };
     this.db
       .prepare("UPDATE rate_cards SET client_id = ?, project_id = ?, archived = ?, effective_from = ?, updated_at = ?, data = ? WHERE id = ?")
       .run(next.clientId, next.projectId ?? null, next.archived ? 1 : 0, next.effectiveFrom, next.updatedAt, JSON.stringify(next), id);

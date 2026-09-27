@@ -54,9 +54,24 @@ import {
   setLastPushedSettings,
   getSettingsPushedAt,
   setSettingsPushedAt,
+  getVaultState,
+  setVaultState,
   getSyncDb,
 } from "./sync-db";
 import { planPullMerge, type RemoteSnapshot } from "./merge";
+import {
+  fetchRestTables,
+  planRestAdoption,
+  restKey,
+  type RestEntityType,
+} from "./rest-pull";
+import {
+  planRestMirror,
+  applyRestMirror,
+  loadMirroredState,
+  saveMirroredState,
+  type MirrorEntity,
+} from "./rest-mirror";
 
 export const SYNC_ENABLED_KEY = "tallyhand.sync.enabled";
 export const SYNC_USER_KEY = "tallyhand.sync.user";
@@ -250,6 +265,12 @@ export interface SyncResult {
   applied?: number;
   pushed?: number;
   decryptErrors?: number;
+  /** Rows adopted/updated from the plaintext REST tables this round. */
+  restAdopted?: number;
+  /** Non-fatal REST reconcile failure (vault sync still succeeded). */
+  restError?: string;
+  /** REST mirror outcomes (browser -> plaintext tables). */
+  mirrored?: { created: number; updated: number; removed: number };
 }
 
 let running: Promise<SyncResult> | null = null;
@@ -307,6 +328,9 @@ async function doSync(): Promise<SyncResult> {
 
   // -- pull -----------------------------------------------------------------
   let newCursor = since;
+  // Ids adopted from the plaintext REST tables this round — the push-phase
+  // REST mirror skips them so adoption never writes straight back.
+  const adoptedIds: Set<string> = new Set();
   try {
     const { rows, truncated } = await fetchAllPullRows(since);
     result.pulled = rows.length;
@@ -370,6 +394,72 @@ async function doSync(): Promise<SyncResult> {
     } finally {
       suppressTombstones = false;
     }
+
+    // -- vault-state bookkeeping --------------------------------------------
+    // The pull endpoint only returns rows changed since the cursor, so the
+    // full set of vault-known ids is maintained incrementally here (and in
+    // the push phase). The REST reconcile below needs it to tell
+    // "deleted via the REST API" apart from "new local row not yet pushed".
+    {
+      const vs = await getVaultState(userId);
+      for (const row of rows) {
+        if (!SYNC_ENTITY_TYPES.includes(row.entityType)) continue;
+        const k = restKey(row.entityType, row.entityId);
+        if (row.deleted) {
+          vs.tombstoned[k] = row.updatedAt;
+          delete vs.ids[k];
+        } else {
+          vs.ids[k] = Math.max(vs.ids[k] ?? 0, row.updatedAt);
+          delete vs.tombstoned[k];
+        }
+      }
+      await setVaultState(userId, vs);
+    }
+
+    // -- REST plaintext reconcile -------------------------------------------
+    // The REST API/CLI reads and writes plaintext tables that the encrypted
+    // vault never sees. Fold them in: adopt new/changed server rows into
+    // Dexie (the push phase encrypts them into the vault), and turn
+    // server-side deletions into local tombstones. Best-effort — a REST
+    // failure must not fail the vault sync that already succeeded.
+    try {
+      const restByType = await fetchRestTables();
+      const vs = await getVaultState(userId);
+      const localByType = {} as Record<RestEntityType, Map<string, number>>;
+      for (const type of SYNC_ENTITY_TYPES) {
+        if (type === "setting") continue;
+        const t = type as RestEntityType;
+        const local = await REPOS[t].list();
+        localByType[t] = new Map(local.map((e) => [e.id, e.updatedAt]));
+      }
+      const plan = planRestAdoption({
+        localByType,
+        restByType,
+        vaultRows: new Map(Object.entries(vs.ids)),
+        vaultTombstoned: new Set(Object.keys(vs.tombstoned)),
+      });
+      suppressTombstones = true;
+      try {
+        for (const { type, row } of [...plan.adopt, ...plan.updateLocal]) {
+          await db.table(ENTITY_TABLES[type]).put(row);
+          adoptedIds.add(restKey(type, row.id));
+          result.applied = (result.applied ?? 0) + 1;
+        }
+      } finally {
+        suppressTombstones = false;
+      }
+      // Server-side deletions: delete locally WITHOUT suppression so the
+      // delete hook records a tombstone — the push phase uploads it to the
+      // vault and the mirror removes it from REST on other devices.
+      for (const { type, id } of plan.apiDeleted) {
+        await db.table(ENTITY_TABLES[type]).delete(id);
+        result.applied = (result.applied ?? 0) + 1;
+      }
+      result.restAdopted = plan.adopt.length + plan.updateLocal.length;
+    } catch (e) {
+      result.restError = e instanceof Error ? e.message : String(e);
+    }
+
     await setLastSyncAt(userId, newCursor);
   } catch (e) {
     return {
@@ -381,12 +471,16 @@ async function doSync(): Promise<SyncResult> {
   // -- push -----------------------------------------------------------------
   try {
     const items: EncryptedEntityPush[] = [];
+    // Full local entities per type, reused by the REST mirror below.
+    const mirrorLocalByType = {} as Record<RestEntityType, MirrorEntity[]>;
     for (const type of SYNC_ENTITY_TYPES) {
       if (type === "setting") continue;
       const local = (await REPOS[type].list()) as {
         id: string;
         updatedAt: number;
       }[];
+      mirrorLocalByType[type as RestEntityType] =
+        local as unknown as MirrorEntity[];
       // Re-read full rows for encryption (list() already returns full entities).
       for (const e of local) {
         const { iv, ciphertext } = await encryptJson(key, e);
@@ -442,8 +536,71 @@ async function doSync(): Promise<SyncResult> {
       await setLastPushedSettings(userId, settingsJson);
       await setSettingsPushedAt(userId, settingsUpdatedAt);
     }
-    // Tombstones are uploaded now — drop them (a re-pull would re-apply
-    // the same tombstones idempotently anyway).
+
+    // -- vault-state bookkeeping (push side) --------------------------------
+    {
+      const vs = await getVaultState(userId);
+      for (const it of items) {
+        const k = restKey(it.entityType, it.entityId);
+        if (it.deleted) {
+          vs.tombstoned[k] = it.updatedAt;
+          delete vs.ids[k];
+        } else {
+          vs.ids[k] = Math.max(vs.ids[k] ?? 0, it.updatedAt);
+          delete vs.tombstoned[k];
+        }
+      }
+      await setVaultState(userId, vs);
+    }
+
+    // -- REST mirror (push direction) -----------------------------------------
+    // Mirror Dexie state into the plaintext REST tables so the API/CLI sees
+    // browser-created/edited/deleted data. Runs only after the vault push
+    // succeeded. Tombstones are cleared only after the mirror succeeds too,
+    // so a mirror failure retries cleanly next round (vault push is
+    // idempotent under the server's last-write-wins).
+    try {
+      const mirrored = await loadMirroredState(userId);
+      const mirrorPlan = planRestMirror({
+        localByType: mirrorLocalByType,
+        mirroredByType: mirrored,
+        tombstones: tombstones
+          .filter(
+            (t) =>
+              t.entityType !== "setting" &&
+              (SYNC_ENTITY_TYPES as readonly string[]).includes(t.entityType),
+          )
+          .map((t) => ({
+            entityType: t.entityType as RestEntityType,
+            entityId: t.entityId,
+            deletedAt: t.deletedAt,
+          })),
+        adoptedIds,
+      });
+      const m = await applyRestMirror(mirrorPlan);
+      result.mirrored = m;
+      for (const { type, entity } of [
+        ...mirrorPlan.create,
+        ...mirrorPlan.update,
+      ]) {
+        // The server honors client-supplied updatedAt (see validation.ts),
+        // so the mirrored row carries the entity's own timestamp.
+        mirrored[type].set(entity.id, entity.updatedAt);
+      }
+      for (const { type, id } of mirrorPlan.remove) mirrored[type].delete(id);
+      await saveMirroredState(userId, mirrored);
+    } catch (e) {
+      return {
+        status: "error",
+        reason: `REST mirror failed: ${e instanceof Error ? e.message : String(e)}`,
+        pulled: result.pulled,
+        applied: result.applied,
+        pushed: result.pushed,
+      };
+    }
+
+    // Vault + REST are uploaded now — drop the tombstones (a re-pull would
+    // re-apply the same tombstones idempotently anyway).
     for (const t of tombstones)
       await clearTombstone(userId, t.entityType, t.entityId);
   } catch (e) {

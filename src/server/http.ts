@@ -45,6 +45,25 @@ export function badRequest(message: string, details?: unknown): Response {
   return json({ error }, 400);
 }
 
+/**
+ * 409 `{ error: { code: "conflict", ... } }` — a create with this id already
+ * exists. The browser mirror retries creates after partial failures, so a
+ * duplicate id is a retry signal (PUT-style upsert intent), not a
+ * validation failure. For custom messages + details, see
+ * `src/app/api/v1/_lib/errors.ts`.
+ */
+export function conflict(resource: string): Response {
+  return json(
+    {
+      error: {
+        code: "conflict",
+        message: `${resource} with this id already exists`,
+      },
+    },
+    409,
+  );
+}
+
 export interface Pagination {
   limit: number;
   /** Offset into the full result set. */

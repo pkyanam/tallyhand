@@ -33,6 +33,8 @@ export type MileageEntryCreateInput = Omit<
   invoiceId?: ID;
   /** Omitted → provider defaults to `mileageRateForDate(date)`. */
   rate?: number;
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 /**

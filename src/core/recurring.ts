@@ -40,10 +40,23 @@ export type RecurringScheduleCreateInput = Omit<
   | "createdAt"
   | "updatedAt"
   | "nextRunAt"
+  | "lastRunAt"
   | "occurrences"
   | "status"
-  | "lastRunAt"
-> & { status?: RecurringStatus };
+> & {
+  id?: ID;
+  status?: RecurringStatus;
+  /**
+   * Mirror writes adopt the browser's run cursor wholesale instead of
+   * recomputing it; `nextRunAt` still defaults to `startDate` when omitted.
+   */
+  nextRunAt?: number;
+  lastRunAt?: number;
+  /** Omitted → 0. */
+  occurrences?: number;
+  createdAt?: number;
+  updatedAt?: number;
+};
 
 export type RetainerType = "prepaid-hours" | "monthly-fee";
 export type RetainerStatus = "active" | "paused" | "depleted" | "ended";
@@ -66,7 +79,12 @@ export interface Retainer extends Timestamped {
 export type RetainerCreateInput = Omit<
   Retainer,
   "id" | "createdAt" | "updatedAt" | "status"
-> & { status?: RetainerStatus };
+> & {
+  id?: ID;
+  status?: RetainerStatus;
+  createdAt?: number;
+  updatedAt?: number;
+};
 
 const MS_PER_DAY = 86_400_000;
 

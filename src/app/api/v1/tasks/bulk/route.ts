@@ -1,9 +1,10 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
+import { requireApiOrSession } from "../../_lib/sync-auth";
 import { badRequest, created } from "@/server/http";
+import { conflict } from "../../_lib/errors";
 import { withIdempotency } from "../../_lib/idempotency";
 import { taskCreateSchema } from "@/server/validation";
-import { MAX_BULK_ITEMS, validateBulk } from "../../_lib/bulk";
+import { MAX_BULK_ITEMS, findDuplicateIds, validateBulk } from "../../_lib/bulk";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
  * shares one Idempotency-Key, so a retried batch never double-creates.
  */
 export async function POST(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);
@@ -39,6 +40,20 @@ export async function POST(req: Request) {
     if (!validated.ok) {
       return badRequest("Invalid task items", validated.errors);
     }
+
+    // Mirror retry-safety: detect duplicate ids up front, before any
+    // write, honoring the validate-first contract.
+    const dupes = await findDuplicateIds(
+      validated.items,
+      async (id) => (await provider.getTask(id)) !== undefined,
+    );
+    if (dupes.existing.length > 0) {
+      return conflict("task id already exists", dupes.existing);
+    }
+    if (dupes.inBatch.length > 0) {
+      return badRequest("Duplicate task ids in batch", dupes.inBatch);
+    }
+
     const fkErrors = validated.items
       .map((item, index) => ({ item, index }))
       .filter(({ item }) => !projectIds.has(item.projectId))

@@ -190,7 +190,7 @@ export interface TaxPayment extends Timestamped {
 export type TaxPaymentCreateInput = Omit<
   TaxPayment,
   "id" | "createdAt" | "updatedAt"
-> & { id?: ID };
+> & { id?: ID; createdAt?: number; updatedAt?: number };
 
 export interface QuarterlyPaymentStatus {
   quarter: TaxQuarter;

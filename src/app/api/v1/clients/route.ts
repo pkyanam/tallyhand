@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
-import { badRequest, created, paginated, parsePagination } from "@/server/http";
+import { requireApiOrSession } from "../_lib/sync-auth";
+import { badRequest, conflict, created, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { clientCreateSchema } from "@/server/validation";
 import {
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 const SORT_FIELDS = ["name", "createdAt"] as const;
 
 export async function GET(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
   const search = new URL(req.url).searchParams;
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);
@@ -44,7 +44,12 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return badRequest("Invalid client", parsed.error.issues);
     }
-    const client = await getServerProvider().createClient(parsed.data);
+    const provider = getServerProvider();
+    // Mirror retry-safety: a retried create must not collide on the id.
+    if (parsed.data.id && (await provider.getClient(parsed.data.id))) {
+      return conflict("client");
+    }
+    const client = await provider.createClient(parsed.data);
     return created(client);
   });
 }

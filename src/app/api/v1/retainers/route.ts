@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
-import { badRequest, created, notFound, paginated, parsePagination } from "@/server/http";
+import { requireApiOrSession } from "../_lib/sync-auth";
+import { badRequest, conflict, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { retainerCreateSchema } from "@/server/validation";
 import type { RecurringCapableProvider } from "@/server/scheduler";
@@ -23,7 +23,7 @@ const TYPES: RetainerType[] = ["prepaid-hours", "monthly-fee"];
 const SORT_FIELDS = ["startDate", "name", "createdAt"] as const;
 
 export async function GET(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
   const provider = asRetainers(getServerProvider());
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const body: unknown = await req.json().catch(() => null);
@@ -60,6 +60,10 @@ export async function POST(req: Request) {
       return badRequest("Invalid retainer", parsed.error.issues);
     }
     const provider = asRetainers(getServerProvider());
+    // Mirror retry-safety: a retried create must not collide on the id.
+    if (parsed.data.id && (await provider.getRetainer(parsed.data.id))) {
+      return conflict("retainer");
+    }
     const client = await provider.getClient(parsed.data.clientId);
     if (!client) {
       return notFound(`client "${parsed.data.clientId}"`);

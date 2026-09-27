@@ -32,7 +32,7 @@ export interface Contract extends Timestamped {
 export type ContractCreateInput = Omit<
   Contract,
   "id" | "createdAt" | "updatedAt" | "archived" | "renewalNoticeDays"
-> & { id?: ID; archived?: boolean; renewalNoticeDays?: number };
+> & { id?: ID; archived?: boolean; renewalNoticeDays?: number; createdAt?: number; updatedAt?: number };
 
 export type ContractStatus = "upcoming" | "active" | "expiring" | "expired";
 

@@ -146,3 +146,46 @@ export const getSettingsPushedAt = async (userId: string): Promise<number> =>
 
 export const setSettingsPushedAt = (userId: string, at: number): Promise<void> =>
   setMeta(`settingsPushedAt:${userId}`, String(at));
+
+// -- vault-state -------------------------------------------------------------
+// Incremental view of which entity ids the encrypted vault knows about,
+// maintained across sync rounds (the pull endpoint only returns rows
+// changed since the cursor, so a single round never sees the full set).
+// Used by the REST reconcile (src/lib/sync/rest-pull.ts):
+//   ids:        `${type}:${id}` -> updatedAt of the latest non-deleted
+//              vault row seen (pulled or pushed).
+//   tombstoned: `${type}:${id}` -> deletedAt of vault tombstones seen.
+// Lets the engine tell "deleted via the REST API" (vault-known, REST-missing)
+// apart from "new local row not pushed yet", and never resurrect rows the
+// vault already tombstoned.
+/** Key format shared with rest-pull/rest-mirror (`${type}:${id}`). */
+export const vaultStateKey = (t: string, id: string): string => `${t}:${id}`;
+
+export interface VaultState {
+  ids: Record<string, number>;
+  tombstoned: Record<string, number>;
+}
+
+export async function getVaultState(userId: string): Promise<VaultState> {
+  try {
+    const raw = await getMeta(`vaultState:${userId}`);
+    if (!raw) return { ids: {}, tombstoned: {} };
+    const parsed = JSON.parse(raw) as Partial<VaultState>;
+    return {
+      ids: parsed.ids && typeof parsed.ids === "object" ? parsed.ids : {},
+      tombstoned:
+        parsed.tombstoned && typeof parsed.tombstoned === "object"
+          ? parsed.tombstoned
+          : {},
+    };
+  } catch {
+    return { ids: {}, tombstoned: {} };
+  }
+}
+
+export async function setVaultState(
+  userId: string,
+  state: VaultState,
+): Promise<void> {
+  await setMeta(`vaultState:${userId}`, JSON.stringify(state));
+}

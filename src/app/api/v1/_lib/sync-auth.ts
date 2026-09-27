@@ -48,6 +48,31 @@ export async function requireSyncAuth(
 }
 
 /**
+ * Entity-CRUD gate (session-first, token fallback — same shape as the sync
+ * routes in requireSyncAuth, but returning the gate's error-Response-or-null
+ * convention so existing route handlers slot it in).
+ *
+ * - Session (browser cookie): sync-vault parity — the vault already serves
+ *   this data to sessions, so the plaintext REST tables may too.
+ * - Writes under a cookie session additionally require the
+ *   `x-tallyhand-sync: 1` header (cheap CSRF mitigation; see
+ *   requireSyncHeader). Bearer <redacted> are not cookies, so token callers
+ *   (the CLI) never need the header.
+ * - No session and no token: falls through to requireApiToken, whose
+ *   503 `api_disabled` / 401 `unauthorized` behavior is unchanged.
+ */
+export async function requireApiOrSession(
+  req: Request,
+): Promise<Response | null> {
+  const sessionUser = await tryResolveSyncUserId();
+  if (sessionUser) {
+    if (req.method !== "GET" && req.method !== "HEAD") return requireSyncHeader(req);
+    return null;
+  }
+  return requireApiToken(req);
+}
+
+/**
  * CSRF guard for cookie-authenticated JSON POSTs: a cross-site form cannot
  * set a custom header, while our own client and machine clients can.
  * Machine (token) clients must send it too — uniform rule, no branches.

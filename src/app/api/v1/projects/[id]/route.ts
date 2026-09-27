@@ -1,5 +1,5 @@
 import { getServerProvider } from "@/server/provider";
-import { requireApiToken } from "@/server/auth";
+import { requireApiOrSession } from "../../_lib/sync-auth";
 import { badRequest, noContent, notFound, ok } from "@/server/http";
 import { withIdempotency } from "../../_lib/idempotency";
 import { projectPatchSchema } from "@/server/validation";
@@ -13,7 +13,7 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const project = await getServerProvider().getProject(params.id);
   if (!project) return notFound("project");
@@ -24,7 +24,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
     const provider = getServerProvider();
@@ -51,7 +51,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const authErr = await requireApiToken(req);
+  const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const provider = getServerProvider();
   const existing = await provider.getProject(params.id);

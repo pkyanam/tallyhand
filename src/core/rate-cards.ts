@@ -44,7 +44,7 @@ export interface RateCard extends Timestamped {
 export type RateCardCreateInput = Omit<
   RateCard,
   "id" | "createdAt" | "updatedAt" | "archived"
-> & { id?: ID; archived?: boolean };
+> & { id?: ID; archived?: boolean; createdAt?: number; updatedAt?: number };
 
 export interface RateResolutionContext {
   clientId: ID;

@@ -23,9 +23,10 @@
 import type { z } from "zod";
 import type { StorageProvider } from "@/core/storage";
 import { getServerProvider } from "./provider";
-import { requireApiToken } from "./auth";
+import { requireApiOrSession } from "@/app/api/v1/_lib/sync-auth";
 import {
   badRequest,
+  conflict as duplicateIdConflict,
   created,
   noContent,
   notFound,
@@ -34,7 +35,7 @@ import {
   parsePagination,
 } from "./http";
 import { withIdempotency } from "@/app/api/v1/_lib/idempotency";
-import { MAX_BULK_ITEMS, validateBulk } from "@/app/api/v1/_lib/bulk";
+import { MAX_BULK_ITEMS, findDuplicateIds, validateBulk } from "@/app/api/v1/_lib/bulk";
 import {
   applySort,
   filterDateRange,
@@ -137,7 +138,7 @@ export function defineExtensionCrud<
   }
 
   async function list(req: Request): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const store = resolveStore<() => Promise<TItem[]>>(
@@ -177,7 +178,7 @@ export function defineExtensionCrud<
   }
 
   async function create(req: Request): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const provider = getServerProvider();
@@ -185,6 +186,17 @@ export function defineExtensionCrud<
       const parsed = config.createSchema.safeParse(body);
       if (!parsed.success) {
         return badRequest(`Invalid ${config.entityName}`, parsed.error.issues);
+      }
+      // Mirror retry-safety: a retried create must not collide on the id.
+      const data = parsed.data as TCreate & { id?: string };
+      if (data.id) {
+        const getStore = resolveStore<
+          (id: string) => Promise<TItem | undefined>
+        >(provider, config.store.get);
+        if (!("response" in getStore)) {
+          const existing = await getStore.fn(data.id);
+          if (existing) return duplicateIdConflict(config.entityName);
+        }
       }
       if (config.validateCreateRefs) {
         const refErr = await config.validateCreateRefs(parsed.data, provider);
@@ -201,7 +213,7 @@ export function defineExtensionCrud<
   }
 
   async function bulkCreate(req: Request): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const body: unknown = await req.json().catch(() => null);
@@ -227,6 +239,30 @@ export function defineExtensionCrud<
       }
 
       const provider = getServerProvider();
+      // Mirror retry-safety: detect duplicate ids up front, before any
+      // write, honoring the validate-first contract.
+      const getStore = resolveStore<(id: string) => Promise<TItem | undefined>>(
+        provider,
+        config.store.get,
+      );
+      if (!("response" in getStore)) {
+        const dupes = await findDuplicateIds(
+          validated.items as Array<TCreate & { id?: string }>,
+          async (id) => (await getStore.fn(id)) !== undefined,
+        );
+        if (dupes.existing.length > 0) {
+          return conflict(
+            `${config.entityName} id already exists`,
+            dupes.existing,
+          );
+        }
+        if (dupes.inBatch.length > 0) {
+          return badRequest(
+            `Duplicate ${config.entityName} ids in batch`,
+            dupes.inBatch,
+          );
+        }
+      }
       if (config.validateCreateRefs) {
         const errors: { index: number; issues: unknown }[] = [];
         for (let i = 0; i < validated.items.length; i++) {
@@ -258,7 +294,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const store = resolveStore<(id: string) => Promise<TItem | undefined>>(
@@ -275,7 +311,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     return withIdempotency(req, async () => {
       const provider = getServerProvider();
@@ -314,7 +350,7 @@ export function defineExtensionCrud<
     req: Request,
     { params }: { params: { id: string } },
   ): Promise<Response> {
-    const authErr = await requireApiToken(req);
+    const authErr = await requireApiOrSession(req);
     if (authErr) return authErr;
     const provider = getServerProvider();
     const getStore = resolveStore<(id: string) => Promise<TItem | undefined>>(
