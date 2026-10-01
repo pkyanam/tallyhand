@@ -46,3 +46,10 @@ it("serves short legacy calls as JSON and preserves no-transform", async () => {
   expect(response.headers.get("cache-control")).toContain("no-transform");
   expect((await payload(response)).result.tools).toHaveLength(86);
 });
+
+it("keeps legacy streaming when progress is requested", async () => {
+  const response = await POST(request("tools/list", { _meta: { progressToken: "fixture-progress" } }));
+  expect(response.headers.get("content-type")).toContain("text/event-stream");
+  expect(response.headers.get("cache-control")).toContain("no-transform");
+  expect((await payload(response)).result.tools).toHaveLength(86);
+});

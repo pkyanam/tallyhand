@@ -59,9 +59,8 @@ describe("mcp route with personal api tokens", () => {
     const res = await postInit(personalToken);
     expect(res.status).toBe(200);
     const text = await res.text();
-    const m = text.match(/^data: (.+)$/m);
-    expect(m).not.toBeNull();
-    const payload = JSON.parse(m![1]) as {
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const payload = JSON.parse(text) as {
       result?: { protocolVersion?: string };
     };
     expect(payload.result?.protocolVersion).toBe("2025-11-25");
