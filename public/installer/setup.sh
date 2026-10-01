@@ -31,19 +31,23 @@ main() (
   trap 'exit 143' TERM
   url="$repo/releases/download/$version"
   printf 'Installing Tallyhand %s (%s)…\n' "$version" "$target"
-  curl --proto '=https' --proto-redir '=https' -fsSL --retry 2 --connect-timeout 15 --max-time 300 "$url/$target" -o "$tmp/tally"
   curl --proto '=https' --proto-redir '=https' -fsSL --retry 2 --connect-timeout 15 --max-time 60 "$url/SHA256SUMS" -o "$tmp/SHA256SUMS"
   expected=$(awk -v target="$target" '$2 == target || $2 == "*" target {print $1}' "$tmp/SHA256SUMS")
   [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]] || { echo 'Missing or invalid release checksum. Existing installation preserved.' >&2; return 1; }
-  actual=$(hash "$tmp/tally")
-  [ "$actual" = "$expected" ] || { echo 'Checksum mismatch. Existing installation preserved.' >&2; return 1; }
-  chmod 755 "$tmp/tally"
-  "$tmp/tally" --help > "$tmp/help"
-  grep -q 'Usage:' "$tmp/help" || { echo 'CLI smoke check failed. Existing installation preserved.' >&2; return 1; }
   current=''
   if [ -f "$dest/tally" ]; then current=$(hash "$dest/tally"); fi
-  if [ "$current" = "$actual" ]; then echo 'Already up to date.'
-  else mv -f "$tmp/tally" "$dest/tally"; echo 'CLI installed successfully.'; fi
+  if [ "$current" = "$expected" ] && [ -x "$dest/tally" ]; then
+    echo 'Already up to date.'
+  else
+    curl --proto '=https' --proto-redir '=https' -fsSL --retry 2 --connect-timeout 15 --max-time 300 "$url/$target" -o "$tmp/tally"
+    actual=$(hash "$tmp/tally")
+    [ "$actual" = "$expected" ] || { echo 'Checksum mismatch. Existing installation preserved.' >&2; return 1; }
+    chmod 755 "$tmp/tally"
+    "$tmp/tally" --help > "$tmp/help"
+    grep -q 'Usage:' "$tmp/help" || { echo 'CLI smoke check failed. Existing installation preserved.' >&2; return 1; }
+    mv -f "$tmp/tally" "$dest/tally"
+    echo 'CLI installed successfully.'
+  fi
   rm -rf -- "$tmp"; rmdir "$dest/.tally-install-lock"; trap - EXIT INT TERM
   printf '\nYour saved credentials and workspace data were left untouched.\n'
   case ":$PATH:" in *":$dest:"*) ;; *) printf 'Add this directory to PATH in your shell profile:\n  export PATH="%s:$PATH"\n' "$dest" ;; esac
