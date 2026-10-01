@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../_lib/sync-auth";
 import { badRequest, conflict, created, ok, notFound, paginated, parsePagination } from "@/server/http";
@@ -22,7 +23,7 @@ function asRecurring(provider: unknown): RecurringCapableProvider {
 const STATUSES: RecurringStatus[] = ["active", "paused", "ended"];
 const SORT_FIELDS = ["nextRunAt", "name", "createdAt"] as const;
 
-export async function GET(req: Request) {
+async function GETHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
   return paginated(sort ? applySort(filtered, sort) : filtered, limit, cursor);
 }
 
-export async function POST(req: Request) {
+async function POSTHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const execute = async () => {
@@ -85,3 +86,6 @@ export async function POST(req: Request) {
   if (new URL(req.url).searchParams.get("dry_run") === "true") return execute();
   return withIdempotency(req, execute);
 }
+
+export const GET = withApiRequestCache(GETHandler);
+export const POST = withApiRequestCache(POSTHandler);

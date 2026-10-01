@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../../_lib/sync-auth";
 import { badRequest, created } from "@/server/http";
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
  * returns 400 with per-index details and creates nothing. The whole batch
  * shares one Idempotency-Key, so a retried batch never double-creates.
  */
-export async function POST(req: Request) {
+async function POSTHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
@@ -80,3 +81,5 @@ export async function POST(req: Request) {
     return created(createdItems);
   });
 }
+
+export const POST = withApiRequestCache(POSTHandler);

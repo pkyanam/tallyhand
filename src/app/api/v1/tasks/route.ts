@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../_lib/sync-auth";
 import { badRequest, conflict, created, notFound, paginated, parsePagination } from "@/server/http";
@@ -16,7 +17,7 @@ export const runtime = "nodejs";
 
 const SORT_FIELDS = ["startAt", "endAt", "durationMinutes", "name", "createdAt"] as const;
 
-export async function GET(req: Request) {
+async function GETHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const { limit, cursor } = parsePagination(req);
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
   return paginated(tasks, limit, cursor);
 }
 
-export async function POST(req: Request) {
+async function POSTHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   return withIdempotency(req, async () => {
@@ -77,3 +78,6 @@ export async function POST(req: Request) {
     return created(task);
   });
 }
+
+export const GET = withApiRequestCache(GETHandler);
+export const POST = withApiRequestCache(POSTHandler);

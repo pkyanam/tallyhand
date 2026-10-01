@@ -44,7 +44,8 @@ export function badRequest(message: string, details?: unknown): Response {
   if (Array.isArray(details)) error.details = details.flatMap(issue => {
     if (!issue || typeof issue !== "object") return [issue];
     if (typeof issue.field === "string" && typeof issue.reason === "string") return [{ code: issue.code ?? "invalid_value", field: issue.field, reason: issue.reason }];
-    const path = Array.isArray(issue.path) ? issue.path.map(String) : [];
+    if (!Array.isArray(issue.path) || typeof issue.code !== "string") return [issue];
+    const path = issue.path.map(String);
     const keys = issue.code === "unrecognized_keys" && Array.isArray(issue.keys) ? issue.keys : [undefined];
     return keys.map((key: unknown) => ({ code: issue.code ?? "invalid_value", field: [...path, ...(typeof key === "string" ? [key] : [])].join("."), reason: typeof key === "string" ? "Unsupported field" : issue.message, ...(issue.expected ? { expected: issue.expected } : {}) }));
   });

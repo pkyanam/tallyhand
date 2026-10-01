@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../_lib/sync-auth";
 import { badRequest, ok, json } from "@/server/http";
@@ -7,7 +8,7 @@ import { settingsPatchSchema } from "@/server/validation";
 export const runtime = "nodejs";
 
 /** Read the singleton settings (business profile, invoice prefs, …). */
-export async function GET(req: Request) {
+async function GETHandler(req: Request) {
   const started = performance.now();
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
 }
 
 /** Partially update settings. Nested objects merge key-wise. */
-export async function PATCH(req: Request) {
+async function PATCHHandler(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
   const body: unknown = await req.clone().json().catch(() => null);
@@ -35,3 +36,6 @@ export async function PATCH(req: Request) {
   if (new URL(req.url).searchParams.get("dry_run") === "true") return ok({ dryRun: true, valid: true, patch: parsed.data, warnings: [] });
   return withIdempotency(req, async () => ok(await getServerProvider().updateSettings(parsed.data)));
 }
+
+export const GET = withApiRequestCache(GETHandler);
+export const PATCH = withApiRequestCache(PATCHHandler);

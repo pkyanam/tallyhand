@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../../../_lib/sync-auth";
 import { notFound, ok } from "@/server/http";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
  * `?dry_run=true` returns what would change without mutating. Dry-run
  * responses are never stored under an Idempotency-Key.
  */
-export async function POST(
+async function POSTHandler(
   req: Request,
   { params }: { params: { id: string } },
 ) {
@@ -43,3 +44,5 @@ export async function POST(
     return ok(updated);
   });
 }
+
+export const POST = withApiRequestCache(POSTHandler);

@@ -19,3 +19,8 @@ describe("settings and recurring write contracts", () => {
     expect(JSON.stringify(body)).not.toContain("secret value");
   });
 });
+
+it("preserves indexed bulk validation details", async () => {
+  const details = [{ index: 1, issues: [{ message: "Invalid project" }] }];
+  expect((await badRequest("Invalid items", details).json()).error.details).toEqual(details);
+});

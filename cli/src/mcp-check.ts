@@ -16,16 +16,21 @@ export async function checkMcp(config: ResolvedConfig, opts: { transport?: strin
   const transport = opts.transport === "stdio"
     ? new StdioClientTransport({ command: process.execPath, args: [process.argv[1], "mcp"], env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")), stderr: "pipe" })
     : new StreamableHTTPClientTransport(target, { requestInit: { headers: config.token ? { Authorization: `Bearer ${config.token}` } : {} } });
+  const timings: Record<string, number> = {};
   let stage = "connect";
   try {
+    let started = performance.now();
     await client.connect(transport);
+    timings.connectMs = Math.round(performance.now() - started);
     stage = "tool catalog";
     const tools = await client.listTools();
     const resources = await client.listResources();
     const templates = await client.listResourceTemplates();
     const prompts = await client.listPrompts();
     const guide = await client.readResource({ uri: "tally://guide" });
+    started = performance.now();
     const health = await client.callTool({ name: "health_check", arguments: {} });
+    timings.healthMs = Math.round(performance.now() - started);
     if (health.isError) throw new Error(`MCP health tool failed: ${JSON.stringify(health.content)}`);
     for (const tool of tools.tools) {
       const schemes = tool._meta?.securitySchemes as Array<{ scopes?: string[] }> | undefined;
@@ -40,14 +45,16 @@ export async function checkMcp(config: ResolvedConfig, opts: { transport?: strin
     }
     stage = "workspace reads";
     if (opts.workspace) {
+      started = performance.now();
       const settings = await client.callTool({ name: "get_settings", arguments: {} });
+      timings.settingsMs = Math.round(performance.now() - started);
       if (settings.isError) throw new Error("Authenticated MCP settings read failed");
       await client.readResource({ uri: "tally://workspace/settings" });
       await client.getPrompt({ name: "weekly_review", arguments: {} });
       stage = "prompt completion";
       await client.complete({ ref: { type: "ref/prompt", name: "weekly_review" }, argument: { name: "clientId", value: "" } });
     }
-    console.log(JSON.stringify({ ok: true, transport: opts.transport ?? "http", protocol: modern ? "2026-07-28" : "legacy", tools: tools.tools.length, resources: resources.resources.length, resourceTemplates: templates.resourceTemplates.length, prompts: prompts.prompts.length, guide: guide.contents.length > 0, elicitation: modern ? "declined safely" : "not exercised", workspace: !!opts.workspace }, null, 2));
+    console.log(JSON.stringify({ ok: true, timings, transport: opts.transport ?? "http", protocol: modern ? "2026-07-28" : "legacy", tools: tools.tools.length, resources: resources.resources.length, resourceTemplates: templates.resourceTemplates.length, prompts: prompts.prompts.length, guide: guide.contents.length > 0, elicitation: modern ? "declined safely" : "not exercised", workspace: !!opts.workspace }, null, 2));
   } catch (error) { throw new Error(`${stage}: ${error instanceof Error ? error.message : "MCP check failed"}`); }
   finally { await client.close(); }
 }

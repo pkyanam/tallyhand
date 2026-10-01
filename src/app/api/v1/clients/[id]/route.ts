@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../../_lib/sync-auth";
 import { badRequest, noContent, notFound, ok } from "@/server/http";
@@ -9,7 +10,7 @@ import type { RecurringCapableProvider } from "@/server/scheduler";
 
 export const runtime = "nodejs";
 
-export async function GET(
+async function GETHandler(
   req: Request,
   { params }: { params: { id: string } },
 ) {
@@ -20,7 +21,7 @@ export async function GET(
   return ok(client);
 }
 
-export async function PATCH(
+async function PATCHHandler(
   req: Request,
   { params }: { params: { id: string } },
 ) {
@@ -41,7 +42,7 @@ export async function PATCH(
   });
 }
 
-export async function DELETE(
+async function DELETEHandler(
   req: Request,
   { params }: { params: { id: string } },
 ) {
@@ -83,3 +84,7 @@ export async function DELETE(
   await provider.removeClient(params.id);
   return noContent();
 }
+
+export const GET = withApiRequestCache(GETHandler);
+export const PATCH = withApiRequestCache(PATCHHandler);
+export const DELETE = withApiRequestCache(DELETEHandler);
