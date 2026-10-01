@@ -5,7 +5,7 @@ import { badRequest, conflict, created, notFound, paginated, parsePagination } f
 import { withIdempotency } from "../_lib/idempotency";
 import { invoiceCreateSchema, type InvoiceCreate } from "@/server/validation";
 import { newId, newInvoicePublicToken } from "@/core/id";
-import { computeLineAmount, invoiceTotals } from "@/core/invoice";
+import { computeLineAmount, computeDueDate, invoiceTotals } from "@/core/invoice";
 import type { InvoiceCreateInput, StorageProvider } from "@/core/storage";
 import type { InvoiceLineItem } from "@/core/entities";
 import {
@@ -54,7 +54,7 @@ async function buildInvoiceInput(
     clientId: input.clientId,
     invoiceNumber: input.invoiceNumber ?? (await provider.assignNextInvoiceNumber()),
     issueDate: input.issueDate,
-    dueDate: input.dueDate,
+    dueDate: input.dueDate ?? computeDueDate(input.issueDate, settings.invoice.paymentTermsDays),
     status: input.status ?? "draft",
     lineItems,
     subtotal: input.subtotal ?? subtotal,
@@ -72,7 +72,7 @@ async function buildInvoiceInput(
     ...(input.serviceStart != null ? { serviceStart: input.serviceStart } : {}),
     ...(input.serviceEnd != null ? { serviceEnd: input.serviceEnd } : {}),
     ...(input.invoiceType ? { invoiceType: input.invoiceType } : {}),
-    ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
+    paymentMethod: input.paymentMethod ?? settings.invoice.defaultPaymentMethod,
     ...(input.paymentUrl ? { paymentUrl: input.paymentUrl } : {}),
     ...(input.bankAccount ? { bankAccount: input.bankAccount } : {}),
     ...(input.swiftBic ? { swiftBic: input.swiftBic } : {}),
@@ -146,7 +146,7 @@ async function POSTHandler(req: Request) {
     if (!client) {
       return notFound(`client "${parsed.data.clientId}"`);
     }
-    if (parsed.data.dueDate < parsed.data.issueDate) {
+    if (parsed.data.dueDate != null && parsed.data.dueDate < parsed.data.issueDate) {
       return badRequest("dueDate must be >= issueDate");
     }
     if (parsed.data.status && parsed.data.status !== "draft") {

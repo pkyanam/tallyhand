@@ -34,7 +34,7 @@ import {
   computeLineAmount,
   type LineItemInput,
 } from "./billing.js";
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {
@@ -459,15 +459,12 @@ export async function handleInvoiceDraft(
       li.taxRate == null ? { ...li, taxRate } : li,
     );
   }
-  const { subtotal, total } = invoiceTotals(lineItems);
+  const { total } = invoiceTotals(lineItems);
   const now = Date.now();
   const invoice = await api.createInvoice({
     clientId,
     lineItems,
-    subtotal,
-    total,
     issueDate: now,
-    dueDate: now + 14 * 24 * 3600 * 1000,
     status: "draft",
     ...(opts.currency ? { currency: opts.currency } : {}),
     ...(taxRegion ? { taxRegion } : {}),

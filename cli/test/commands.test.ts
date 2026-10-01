@@ -333,7 +333,8 @@ describe("invoice draft handler", () => {
       rate: 2000,
       amount: 2000,
     });
-    expect(input.total).toBe(2000);
+    expect(input.total).toBeUndefined();
+    expect(input.dueDate).toBeUndefined(); // Server applies workspace terms and tax defaults.
   });
 
   it("requires --client with --items", async () => {

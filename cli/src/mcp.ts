@@ -19,7 +19,6 @@ import {
 import {
   collectUnbilled,
   buildUnbilledLineItems,
-  invoiceTotals,
   computeLineAmount,
 } from "./billing.js";
 import { findOpenTimers, type Api } from "./commands.js";
@@ -30,7 +29,7 @@ import { registerExtendedTools } from "./mcp-extensions.js";
 import { registerAgentSkills } from "./mcp-skills.js";
 import { GUIDE } from "./guide.js";
 
-export const MCP_VERSION = "0.3.0";
+export const MCP_VERSION = "0.3.1";
 
 const ok = (data: unknown): CallToolResult => ({
   structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
@@ -426,15 +425,11 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
           li.taxRate == null ? { ...li, taxRate } : li,
         );
       }
-      const { subtotal, total } = invoiceTotals(lineItems);
       const now = Date.now();
       const invoice = await api.createInvoice({
         clientId,
         lineItems,
-        subtotal,
-        total,
         issueDate: now,
-        dueDate: now + 14 * 24 * 3600 * 1000,
         status: "draft",
         ...(currency ? { currency } : {}),
         ...(taxRegion ? { taxRegion } : {}),

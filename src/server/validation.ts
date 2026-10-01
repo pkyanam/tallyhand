@@ -153,7 +153,7 @@ export const invoiceCreateSchema = z
     clientId: z.string().min(1, "clientId is required"),
     invoiceNumber: z.string().min(1).optional(),
     issueDate: dateMs,
-    dueDate: dateMs,
+    dueDate: dateMs.optional(),
     status: z.enum(["draft", "sent", "paid"]).optional(),
     lineItems: z.array(lineItemInputSchema),
     subtotal: z.number().nonnegative().optional(),

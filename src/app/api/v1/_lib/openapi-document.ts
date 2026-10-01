@@ -1466,7 +1466,7 @@ export const OPENAPI_V1 = {
       },
       InvoiceInput: {
         type: "object",
-        required: ["clientId", "issueDate", "dueDate", "lineItems"],
+        required: ["clientId", "issueDate", "lineItems"],
         properties: {
           id: { type: "string" },
           clientId: { type: "string" },
