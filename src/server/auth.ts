@@ -53,9 +53,10 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
   if (sharedTokenMatches(provided)) return null;
 
   if (provided) {
-    const { isOAuthToken, verifyTallyOAuth, requiredRestScope, oauthChallenge } = await import("@/lib/auth/oauth");
+    const { isOAuthToken, verifyTallyOAuth, requiredRestScope, oauthChallenge, oauthUnavailableResponse } = await import("@/lib/auth/oauth");
     if (isOAuthToken(provided)) {
-      const identity = await verifyTallyOAuth(provided);
+      let identity;
+      try { identity = await verifyTallyOAuth(provided); } catch { return oauthUnavailableResponse(); }
       if (!identity) return oauthChallenge();
       const required = requiredRestScope(req);
       if (!required) return jsonError(403, "forbidden", "OAuth access is limited to workspace API operations");

@@ -19,6 +19,7 @@
  * out of the static import graph; node:sqlite is a static import (same as
  * the v1 idempotency helper).
  */
+import { memoRequestAuth } from "./request-cache";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { newId } from "@/core/id";
@@ -371,9 +372,10 @@ export interface VerifiedApiToken {
  * Verify a presented raw token. Returns the token's owner on success,
  * null otherwise. Updates last_used_at on success (best-effort).
  */
-export async function findApiToken(
-  token: string,
-): Promise<VerifiedApiToken | null> {
+export async function findApiToken(token: string): Promise<VerifiedApiToken | null> {
+  return memoRequestAuth(`api-key:${token}`, () => findApiTokenUncached(token));
+}
+async function findApiTokenUncached(token: string): Promise<VerifiedApiToken | null> {
   if (!RAW_TOKEN_RE.test(token)) return null;
   const hash = hashApiToken(token);
   const row = await getBackend().findByHash(hash);
@@ -385,7 +387,7 @@ export async function findApiToken(
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   const now = Date.now();
   try {
-    await getBackend().touch(row.id, now);
+    if (row.lastUsedAt == null || now - row.lastUsedAt >= 60_000) await getBackend().touch(row.id, now);
   } catch {
     /* last_used_at is advisory — never fail auth on it */
   }

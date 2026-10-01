@@ -34,7 +34,7 @@ import {
   computeLineAmount,
   type LineItemInput,
 } from "./billing.js";
-export const VERSION = "0.2.1";
+export const VERSION = "0.2.2";
 
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {
@@ -70,7 +70,7 @@ export interface Api {
   sendInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   markInvoicePaid(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   listSchedules(p?: any): Promise<any>;
-  createSchedule(i: any): Promise<any>;
+  createSchedule(i: any, opts?: { dryRun?: boolean }): Promise<any>;
   getSchedule(id: string): Promise<any>;
   updateSchedule(id: string, p: any): Promise<any>;
   deleteSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any>;
@@ -82,7 +82,7 @@ export interface Api {
   updateRetainer(id: string, p: any): Promise<any>;
   deleteRetainer(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   getSettings(): Promise<any>;
-  updateSettings(p: any): Promise<any>;
+  updateSettings(p: any, opts?: { dryRun?: boolean }): Promise<any>;
   backup?(): Promise<{ bundle: Record<string, unknown>; revision: number }>;
   replaceData?(input: { action: "import" | "reset"; expectedRevision: number; confirmation: string; bundle?: unknown }): Promise<any>;
 }
@@ -94,6 +94,7 @@ export interface Out {
 export function fail(err: unknown): never {
   if (err instanceof ApiError) {
     console.error(`Error: ${err.message}`);
+    if (err.details !== undefined) console.error(JSON.stringify({ code: err.code, details: err.details }));
     if (err.status === 401 || err.code === "unauthorized")
       console.error("Hint: bad or missing token — `tally config set token <token>` or TALLYHAND_API_TOKEN.");
     else if (err.code === "connection_failed")
@@ -564,6 +565,7 @@ export async function handleRecurringList(
 export async function handleRecurringCreate(
   api: Api,
   opts: {
+    dryRun?: boolean;
     client: string;
     name: string;
     frequency: string;
@@ -610,15 +612,15 @@ export async function handleRecurringCreate(
     mode,
     frequency: opts.frequency,
     interval: opts.interval ? Number(opts.interval) : 1,
-    lineItems,
+    lineItems: (lineItems ?? []).map(({ description, quantity, rate }) => ({ description, quantity, rate })),
     startDate,
     nextRunAt: startDate,
     maxOccurrences: opts.endsAfter ? Number(opts.endsAfter) : undefined,
     status: "active",
-  });
+  }, { dryRun: opts.dryRun });
   emit(out.json, schedule, () => {
     console.log(
-      `Recurring schedule "${schedule.name}" created — next run ${fmtDay(schedule.nextRunAt)} (id: ${schedule.id})`,
+      opts.dryRun ? "Recurring schedule validated; no changes made." : `Recurring schedule "${schedule.name}" created — next run ${fmtDay(schedule.nextRunAt)} (id: ${schedule.id})`,
     );
   });
 }
@@ -1182,7 +1184,7 @@ export async function handleSettingsShow(api: Api, out: Out): Promise<void> {
 
 export async function handleSettingsSet(
   api: Api,
-  opts: { patch: string },
+  opts: { patch: string; dryRun?: boolean },
   out: Out,
 ): Promise<void> {
   needAuth(api);
@@ -1194,8 +1196,8 @@ export async function handleSettingsSet(
   }
   if (!patch || typeof patch !== "object" || Array.isArray(patch))
     throw new Error("--patch must be a JSON object.");
-  const updated = await api.updateSettings(patch as Record<string, unknown>);
-  emit(out.json, updated, () => console.log("Settings updated."));
+  const updated = await api.updateSettings(patch as Record<string, unknown>, { dryRun: opts.dryRun });
+  emit(out.json, updated, () => console.log(opts.dryRun ? "Settings patch validated; no changes saved." : "Settings updated."));
 }
 
 /** Monthly revenue summary: paid invoices issued in YYYY-MM. */

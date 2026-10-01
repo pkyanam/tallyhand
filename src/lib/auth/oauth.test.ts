@@ -35,3 +35,12 @@ describe("resource-bound Clerk OAuth", () => {
     expect(requiredRestScope(new Request("https://tally.example/api/v1/data", { method: "POST" }))).toBe("tally:manage");
   });
 });
+
+it("does not misreport temporary provider failure as an invalid token", async () => {
+  verify.mockRejectedValue({ status: 503 });
+  await expect(verifyTallyOAuth("oat_synthetic_fixture")).rejects.toThrow("temporarily unavailable");
+});
+it("still rejects a provider-rejected token", async () => {
+  verify.mockRejectedValue({ status: 401 });
+  expect(await verifyTallyOAuth("oat_synthetic_fixture")).toBeNull();
+});

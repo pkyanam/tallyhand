@@ -218,7 +218,7 @@ export const recurringScheduleCreateSchema = z
     mode: z.enum(["fixed", "unbilled"]),
     frequency: z.enum(["weekly", "monthly", "quarterly", "yearly"]),
     interval: z.number().int().min(1, "interval must be >= 1"),
-    lineItems: z.array(recurringLineInputSchema),
+    lineItems: z.array(recurringLineInputSchema).default([]),
     startDate: dateMs,
     endDate: dateMs.optional(),
     maxOccurrences: z.number().int().min(1).optional(),
@@ -341,87 +341,7 @@ export const rateCardCreateSchema = z
   .strict();
 export const rateCardPatchSchema = rateCardCreateSchema.partial();
 
-// -- dunning (settings sub-schema) ----------------------------------------
-export const dunningSettingsSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    reminderDays: z.array(z.number().int().nonnegative()).optional(),
-    escalatingTone: z.boolean().optional(),
-    lateFee: z
-      .object({
-        enabled: z.boolean().optional(),
-        type: z.enum(["flat", "percent"]).optional(),
-        amount: z.number().nonnegative().optional(),
-        graceDays: z.number().int().nonnegative().optional(),
-        recurring: z.enum(["once", "monthly"]).optional(),
-        maxTotal: z.number().nonnegative().optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict()
-  .optional();
-
-// -- settings ------------------------------------------------------------
-export const settingsPatchSchema = z
-  .object({
-    business: z
-      .object({
-        name: z.string().optional(),
-        ownerName: z.string().optional(),
-        email: z.string().optional(),
-        address: z.string().optional(),
-        taxId: z.string().optional(),
-        paymentInstructions: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    invoice: z
-      .object({
-        numberPrefix: z.string().optional(),
-        nextNumber: z.number().int().nonnegative().optional(),
-        logoB64: z.string().optional(),
-        accentColor: z.string().optional(),
-        footerText: z.string().optional(),
-        paymentTermsDays: z.number().int().nonnegative().optional(),
-      })
-      .strict()
-      .optional(),
-    reckoning: z
-      .object({
-        enabled: z.boolean().optional(),
-        dayOfWeek: z.number().int().min(0).max(6).optional(),
-        hourOfDay: z.number().int().min(0).max(23).optional(),
-        lastCompletedAtMs: z.number().int().nonnegative().optional(),
-      })
-      .strict()
-      .optional(),
-    expenseCategories: z.array(z.string()).optional(),
-    appearance: z
-      .object({
-        theme: z.enum(["light", "dark", "system"]).optional(),
-      })
-      .strict()
-      .optional(),
-    dunning: dunningSettingsSchema,
-    tax: z
-      .object({
-        setAsidePercent: z.number().min(0).max(1).optional(),
-      })
-      .strict()
-      .optional(),
-    analytics: z
-      .object({
-        weeklyBillableTargetHours: z.number().nonnegative().optional(),
-        monthlyRevenueTarget: z.number().nonnegative().optional(),
-      })
-      .strict()
-      .optional(),
-    pluginSettings: z
-      .record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])))
-      .optional(),
-  })
-  .strict();
+export { settingsPatchSchema, dunningSettingsSchema } from "../../cli/src/settings-schema";
 
 export type ClientCreate = z.infer<typeof clientCreateSchema>;
 export type InvoiceCreate = z.infer<typeof invoiceCreateSchema>;

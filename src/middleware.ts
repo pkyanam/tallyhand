@@ -68,6 +68,9 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   const { pathname } = req.nextUrl;
 
   if (isPublic(pathname)) return NextResponse.next();
+  // MCP owns its OAuth/API-key gate and challenges; browser-session middleware
+  // must not replace them with a Clerk-session handshake. No data is served here.
+  if (pathname === "/api/mcp") return NextResponse.next();
   // OAuth grants cover workspace APIs/MCP, never admin or browser sessions.
   const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if ((bearer.startsWith("oat_") || /^ey[^.]+\.[^.]+\.[^.]+$/.test(bearer)) &&

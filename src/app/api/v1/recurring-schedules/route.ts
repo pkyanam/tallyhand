@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../_lib/sync-auth";
-import { badRequest, conflict, created, notFound, paginated, parsePagination } from "@/server/http";
+import { badRequest, conflict, created, ok, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { recurringScheduleCreateSchema } from "@/server/validation";
 import type { RecurringCapableProvider } from "@/server/scheduler";
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
-  return withIdempotency(req, async () => {
+  const execute = async () => {
     const body: unknown = await req.json().catch(() => null);
     const parsed = recurringScheduleCreateSchema.safeParse(body);
     if (!parsed.success) {
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       if (!project) {
         return notFound(`project "${parsed.data.projectId}"`);
       }
+      if (project.clientId !== parsed.data.clientId) return badRequest("Project belongs to a different client", [{ field: "projectId", code: "invalid_reference", reason: "Choose a project belonging to the selected client" }]);
     }
     if (parsed.data.endDate != null && parsed.data.endDate < parsed.data.startDate) {
       return badRequest("endDate must be >= startDate");
@@ -75,7 +76,12 @@ export async function POST(req: Request) {
     if (parsed.data.mode === "fixed" && parsed.data.lineItems.length === 0) {
       return badRequest("fixed-mode schedules need at least one line item");
     }
+    const warnings = ["Runs create draft invoices only; sending and payment are separate actions.", "A scheduler or explicit run is required; this does not install a background job."];
+    if (parsed.data.mode === "unbilled") warnings.push("Unbilled mode currently includes all dates. Draft generation currently reserves source entries; review before running.");
+    if (new URL(req.url).searchParams.get("dry_run") === "true") return ok({ dryRun: true, valid: true, schedule: parsed.data, warnings });
     const schedule = await provider.createRecurringSchedule(parsed.data);
-    return created(schedule);
-  });
+    return created({ ...schedule, warnings });
+  };
+  if (new URL(req.url).searchParams.get("dry_run") === "true") return execute();
+  return withIdempotency(req, execute);
 }

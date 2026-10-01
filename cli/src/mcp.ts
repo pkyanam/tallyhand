@@ -25,6 +25,7 @@ import {
 import { findOpenTimers, type Api } from "./commands.js";
 import { registerWorkspaceFeatures } from "./mcp-features.js";
 import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
+import { settingsPatchSchema } from "./settings-schema.js";
 import { GUIDE } from "./guide.js";
 
 export const MCP_VERSION = "0.2.0";
@@ -38,7 +39,8 @@ const err = (e: unknown) => {
   const code = e instanceof ApiError ? e.code : "error";
   const message = e instanceof Error ? e.message : String(e);
   return {
-    content: [{ type: "text" as const, text: `Error ${code}: ${message}` }],
+    structuredContent: { data: { error: { code, message, ...(e instanceof ApiError && e.details !== undefined ? { details: e.details } : {}) } } },
+    content: [{ type: "text" as const, text: JSON.stringify({ error: { code, message, ...(e instanceof ApiError && e.details !== undefined ? { details: e.details } : {}) } }) }],
     isError: true as const,
   };
 };
@@ -468,7 +470,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
 
   tool(
     "list_recurring_schedules",
-    "List recurring invoice schedules (auto-billing templates).",
+    "List recurring invoice draft schedules. Sending is always a separate action.",
     { status: z.string().optional().describe("Filter: active|paused|ended.") },
     safe(async ({ status }) => {
       let s = (await api.listSchedules({ all: true })) as any[];
@@ -479,12 +481,12 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
 
   tool(
     "create_recurring_schedule",
-    "Create an auto-billing schedule. mode 'fixed' invoices the same lineItems every period; mode 'unbilled' sweeps the client's unbilled work each run. nextRunAt starts at startDate.",
+    "Create a recurring draft-invoice schedule. It never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults lineItems to an empty array. nextRunAt starts at startDate. A runner must invoke due schedules; creating a schedule does not provision a background job.",
     {
       clientId: z.string(),
       name: z.string().describe("Schedule name, e.g. 'Monthly retainer'."),
       frequency: z.enum(["weekly", "monthly", "quarterly", "yearly"]),
-      interval: z.number().optional().describe("Every N periods (default 1)."),
+      interval: z.number().int().min(1).optional().describe("Every N periods (default 1)."),
       mode: z.enum(["fixed", "unbilled"]).optional().describe("Default 'fixed'."),
       projectId: z.string().optional(),
       lineItems: z
@@ -494,7 +496,8 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
         .optional()
         .describe("Required for mode 'fixed'. Dollars."),
       startDate: dateArg("First run date (default today)."),
-      maxOccurrences: z.number().optional().describe("Stop after N runs."),
+      maxOccurrences: z.number().int().min(1).optional().describe("Stop after N runs."),
+      dryRun: z.boolean().optional().describe("Validate the configuration and references without creating a schedule"),
     },
     safe(async (a) => {
       const mode = a.mode ?? "fixed";
@@ -512,14 +515,12 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
           description: it.description,
           quantity: it.quantity,
           rate: it.rate,
-          amount: computeLineAmount(it.quantity, it.rate),
-          sourceType: "manual",
-        })),
+        })) ?? [],
         startDate: start,
         nextRunAt: start,
         maxOccurrences: a.maxOccurrences,
         status: "active",
-      });
+      }, { dryRun: a.dryRun });
     }),
   );
 
@@ -907,9 +908,10 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
     "update_settings",
     "Patch server settings, e.g. { invoice: { paymentTermsDays: 30 } } or { business: { name: 'Acme Consulting' } }. Nested objects merge key-wise.",
     {
-      patch: z.record(z.string(), z.unknown()).describe("Settings patch object, e.g. { invoice: { paymentTermsDays: 30 } }."),
+      patch: settingsPatchSchema.describe("Writable settings only. Nested fields merge. Validation is atomic."),
+      dryRun: z.boolean().optional().describe("Validate without saving changes"),
     },
-    safe(async ({ patch }) => api.updateSettings(patch)),
+    safe(async ({ patch, dryRun }) => api.updateSettings(patch, { dryRun })),
   );
 
   server.registerResource(

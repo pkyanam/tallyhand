@@ -26,11 +26,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code: string, message: string) {
+  readonly details?: unknown;
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -114,12 +116,14 @@ export class TallyhandClient {
   private readonly token?: string;
   private readonly timing: boolean;
   private readonly signal?: AbortSignal;
+  private readonly fetcher: typeof fetch;
 
-  constructor(opts: { baseUrl: string; token?: string; timing?: boolean; signal?: AbortSignal }) {
+  constructor(opts: { baseUrl: string; token?: string; timing?: boolean; signal?: AbortSignal; fetcher?: typeof fetch }) {
     this.baseUrl = normalizeBaseUrl(opts.baseUrl);
     this.token = opts.token;
     this.timing = opts.timing ?? false;
     this.signal = opts.signal;
+    this.fetcher = opts.fetcher ?? fetch;
   }
 
   get hasToken(): boolean {
@@ -156,7 +160,7 @@ export class TallyhandClient {
     const started = performance.now();
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetcher(url, {
         method,
         signal: this.signal,
         headers,
@@ -189,7 +193,7 @@ export class TallyhandClient {
         json && typeof json === "object" && json.error?.message
           ? String(json.error.message)
           : text || res.statusText || `HTTP ${res.status}`;
-      throw new ApiError(res.status, code, message);
+      throw new ApiError(res.status, code, message, json?.error?.details);
     }
     if (json && typeof json === "object" && "data" in json) return json.data;
     return json;
@@ -219,7 +223,7 @@ export class TallyhandClient {
       const started = performance.now();
       let res: Response;
       try {
-        res = await fetch(url, { headers, signal: this.signal });
+        res = await this.fetcher(url, { headers, signal: this.signal });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new ApiError(
@@ -236,6 +240,7 @@ export class TallyhandClient {
           res.status,
           json?.error?.code ?? `http_${res.status}`,
           json?.error?.message ?? res.statusText,
+          json?.error?.details,
         );
       }
       const page = Array.isArray(json?.data)
@@ -366,8 +371,8 @@ export class TallyhandClient {
   listSchedules(params?: RequestOpts): Promise<any> {
     return this.list("/recurring-schedules", params);
   }
-  createSchedule(input: Record<string, unknown>): Promise<any> {
-    return this.request("POST", "/recurring-schedules", input);
+  createSchedule(input: Record<string, unknown>, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("POST", "/recurring-schedules", input, opts?.dryRun ? { dry_run: true } : undefined);
   }
   getSchedule(id: string): Promise<any> {
     return this.request("GET", `/recurring-schedules/${pathId(id)}`);
@@ -414,7 +419,7 @@ export class TallyhandClient {
   getSettings(): Promise<any> {
     return this.request("GET", "/settings");
   }
-  updateSettings(patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", "/settings", patch);
+  updateSettings(patch: Record<string, unknown>, opts?: { dryRun?: boolean }): Promise<any> {
+    return this.request("PATCH", "/settings", patch, opts?.dryRun ? { dry_run: true } : undefined);
   }
 }

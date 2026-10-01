@@ -29,13 +29,9 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
-  return withIdempotency(req, async () => {
-    const body: unknown = await req.json().catch(() => null);
-    const parsed = settingsPatchSchema.safeParse(body);
-    if (!parsed.success) {
-      return badRequest("Invalid settings patch", parsed.error.issues);
-    }
-    const updated = await getServerProvider().updateSettings(parsed.data);
-    return ok(updated);
-  });
+  const body: unknown = await req.clone().json().catch(() => null);
+  const parsed = settingsPatchSchema.safeParse(body);
+  if (!parsed.success) return badRequest("Invalid settings patch", parsed.error.issues);
+  if (new URL(req.url).searchParams.get("dry_run") === "true") return ok({ dryRun: true, valid: true, patch: parsed.data, warnings: [] });
+  return withIdempotency(req, async () => ok(await getServerProvider().updateSettings(parsed.data)));
 }

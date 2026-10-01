@@ -1,4 +1,5 @@
 /** Clerk OAuth tokens are resource-bound; session JWTs are never substitutes. */
+import { memoRequestAuth } from "./request-cache";
 import { createClerkClient } from "@clerk/backend";
 
 export const TALLY_SCOPES = ["tally:read", "tally:write", "tally:manage"] as const;
@@ -13,7 +14,16 @@ export function oauthConfig() {
 export function isOAuthToken(token: string): boolean {
   return token.length <= 8192 && (token.startsWith("oat_") || /^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token));
 }
+export class OAuthVerificationUnavailable extends Error {
+  constructor() { super("OAuth verification temporarily unavailable; retry without reconnecting"); this.name = "OAuthVerificationUnavailable"; }
+}
+export function oauthUnavailableResponse(): Response {
+  return Response.json({ error: { code: "auth_temporarily_unavailable", message: "Could not verify access right now. Retry shortly; reconnecting is not required." } }, { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } });
+}
 export async function verifyTallyOAuth(token: string): Promise<TallyOAuthIdentity | null> {
+  return memoRequestAuth(`oauth:${token}`, () => verifyTallyOAuthUncached(token));
+}
+async function verifyTallyOAuthUncached(token: string): Promise<TallyOAuthIdentity | null> {
   const config = oauthConfig();
   if (!config.enabled || !isOAuthToken(token) || !process.env.CLERK_SECRET_KEY) return null;
   try {
@@ -25,7 +35,14 @@ export async function verifyTallyOAuth(token: string): Promise<TallyOAuthIdentit
         !verified.aud?.includes(config.resource) || !verified.clientId ||
         (verified.expiration != null && verified.expiration <= Date.now() / 1000)) return null;
     return { userId: verified.subject, clientId: verified.clientId, scopes: verified.scopes, ...(verified.expiration != null ? { expiresAt: verified.expiration } : {}) };
-  } catch { return null; } // Never echo an upstream error containing credentials.
+  } catch (error) {
+    // A transient provider/network outage must not look like revoked credentials.
+    // Never echo the upstream exception, which can contain credentials.
+    const status = Number((error as { status?: number }).status);
+    const name = (error as { name?: string }).name;
+    if ([400, 401, 403, 404, 422].includes(status) || name === "TokenVerificationError") return null;
+    throw new OAuthVerificationUnavailable();
+  }
 }
 export function oauthChallenge(status = 401, scopes: string[] = ["tally:read"]): Response {
   const config = oauthConfig();

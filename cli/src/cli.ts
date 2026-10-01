@@ -413,7 +413,8 @@ export function buildProgram(): Command {
     }));
   recurring
     .command("create")
-    .description("Create a recurring schedule")
+    .description("Create a recurring draft schedule")
+    .option("--dry-run", "validate without creating a schedule")
     .requiredOption("--client <id>", "client id")
     .requiredOption("--name <name>", "schedule name")
     .requiredOption("--frequency <weekly|monthly|quarterly|yearly>", "how often")
@@ -595,6 +596,7 @@ export function buildProgram(): Command {
   settings
     .command("set")
     .description("Patch server settings with a JSON object")
+    .option("--dry-run", "validate without saving changes")
     .requiredOption("--patch <json>", "e.g. '{\"invoice\":{\"paymentTermsDays\":30}}'")
     .action(wrap(async (cmd, opts) => {
       const { api, out } = ctx(cmd);
