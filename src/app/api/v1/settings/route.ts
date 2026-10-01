@@ -8,12 +8,15 @@ export const runtime = "nodejs";
 
 /** Read the singleton settings (business profile, invoice prefs, …). */
 export async function GET(req: Request) {
+  const started = performance.now();
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
+  const authenticated = performance.now();
   try {
     const settings = await getServerProvider().getSettings();
     const response = ok(settings);
     response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Server-Timing", `auth;dur=${(authenticated - started).toFixed(1)}, storage;dur=${(performance.now() - authenticated).toFixed(1)}, app;dur=${(performance.now() - started).toFixed(1)}`);
     return response;
   } catch (error) {
     const status = (error as { status?: number }).status;

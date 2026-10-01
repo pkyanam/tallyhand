@@ -105,10 +105,12 @@ function normalizeBaseUrl(raw: string): string {
 export class TallyhandClient {
   readonly baseUrl: string;
   private readonly token?: string;
+  private readonly timing: boolean;
 
-  constructor(opts: { baseUrl: string; token?: string }) {
+  constructor(opts: { baseUrl: string; token?: string; timing?: boolean }) {
     this.baseUrl = normalizeBaseUrl(opts.baseUrl);
     this.token = opts.token;
+    this.timing = opts.timing ?? false;
   }
 
   get hasToken(): boolean {
@@ -142,6 +144,7 @@ export class TallyhandClient {
       headers["Idempotency-Key"] = randomUUID();
     }
 
+    const started = performance.now();
     let res: Response;
     try {
       res = await fetch(url, {
@@ -159,6 +162,8 @@ export class TallyhandClient {
     }
 
     const text = await res.text();
+    if (this.timing) console.error(JSON.stringify({ timing: { method, path, status: res.status,
+      roundTripMs: Math.round(performance.now() - started), serverTiming: res.headers.get("server-timing") } }));
     let json: any = null;
     try {
       json = text ? JSON.parse(text) : null;
@@ -201,6 +206,7 @@ export class TallyhandClient {
         "User-Agent": "tallyhand-cli/0.1.0",
       };
       if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+      const started = performance.now();
       let res: Response;
       try {
         res = await fetch(url, { headers });
@@ -213,6 +219,8 @@ export class TallyhandClient {
         );
       }
       const json = (await res.json().catch(() => null)) as any;
+      if (this.timing) console.error(JSON.stringify({ timing: { method: "GET", path, status: res.status,
+        roundTripMs: Math.round(performance.now() - started), serverTiming: res.headers.get("server-timing") } }));
       if (!res.ok) {
         throw new ApiError(
           res.status,

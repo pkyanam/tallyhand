@@ -74,7 +74,7 @@ import { runMcpServer } from "./mcp.js";
 function ctx(cmd: Command): { api: TallyhandClient; out: Out } {
   const g = cmd.optsWithGlobals();
   const cfg = resolveConfig({ apiUrl: g.apiUrl, token: g.token });
-  return { api: new TallyhandClient(cfg), out: { json: !!g.json } };
+  return { api: new TallyhandClient({ ...cfg, timing: !!g.timing }), out: { json: !!g.json } };
 }
 
 const wrap =
@@ -92,7 +92,8 @@ export function buildProgram(): Command {
     .version(VERSION)
     .option("--api-url <url>", "Tallyhand server URL (default http://localhost:3000)")
     .option("--token <token>", "API token")
-    .option("--json", "machine-readable JSON output");
+    .option("--json", "machine-readable JSON output")
+    .option("--timing", "write request timings to stderr (never prints credentials)");
 
   const timer = program.command("timer").description("Run a live timer");
   timer

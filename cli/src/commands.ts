@@ -151,7 +151,7 @@ export async function handleTimerStart(
     durationMinutes: 0,
     tags: parseTags(opts.tags),
   });
-  const pname = await projectName(api, opts.project);
+  const pname = out.json ? opts.project : await projectName(api, opts.project);
   emit(out.json, task, () => {
     console.log(`Timer started on "${pname}" at ${fmtDate(now)} (id: ${task.id})`);
   });
@@ -196,7 +196,7 @@ export async function handleTimerStatus(api: Api, out: Out): Promise<void> {
   needAuth(api);
   const open = await findOpenTimers(api);
   const now = Date.now();
-  const rows = await Promise.all(
+  const rows = out.json ? [] : await Promise.all(
     open.map(async (t) => [
       t.id,
       await projectName(api, t.projectId),
@@ -232,7 +232,7 @@ export async function handleLog(
     durationMinutes: round2(minutes),
     tags: parseTags(opts.tags),
   });
-  const pname = await projectName(api, opts.project);
+  const pname = out.json ? opts.project : await projectName(api, opts.project);
   emit(out.json, task, () => {
     console.log(`Logged ${fmtHours(round2(minutes))} on "${pname}" (${fmtDay(startAt)}).`);
   });

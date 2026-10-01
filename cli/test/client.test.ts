@@ -14,6 +14,7 @@ function mockFetch(handler: (url: URL, init: any) => any) {
       ok: body.status < 400,
       status: body.status,
       statusText: body.statusText ?? "",
+      headers: new Headers(body.headers ?? {}),
       text: async () => (typeof body.json === "string" ? body.json : JSON.stringify(body.json)),
       json: async () => body.json,
     };
@@ -137,5 +138,21 @@ describe("resolveConfig", () => {
   it("picks up token from env", () => {
     process.env.TALLYHAND_API_TOKEN = "tok123";
     expect(resolveConfig({}).token).toBe("tok123");
+  });
+});
+
+
+describe("safe request timing", () => {
+  it("reports timing and server phases without authentication headers", async () => {
+    mockFetch(() => ({ status: 200, json: { data: {} }, headers: { "server-timing": "app;dur=12.0" } }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const c = new TallyhandClient({ baseUrl: "http://test.local", token: "synthetic-test-secret", timing: true });
+      await c.getSettings();
+      const line = String(log.mock.calls[0][0]);
+      expect(JSON.parse(line).timing).toMatchObject({ path: "/settings", status: 200, serverTiming: "app;dur=12.0" });
+      expect(line).not.toContain("synthetic-test-secret");
+      expect(line).not.toContain("Authorization");
+    } finally { log.mockRestore(); }
   });
 });

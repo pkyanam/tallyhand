@@ -239,7 +239,9 @@ describe("command registration (parse smoke)", () => {
 describe("timer handlers", () => {
   it("start creates an open task (endAt 0)", async () => {
     const api = fakeApi();
+    const lookup = vi.spyOn(api, "getProject");
     await handleTimerStart(api, { project: "p1", note: "Design", tags: "a,b" }, { json: true });
+    expect(lookup).not.toHaveBeenCalled();
     const [, input] = api.calls.find(([m]: any) => m === "createTask");
     expect(input.projectId).toBe("p1");
     expect(input.startAt).toBeGreaterThan(0);
@@ -289,11 +291,13 @@ describe("timer handlers", () => {
 describe("log handler", () => {
   it("creates a completed task with date math", async () => {
     const api = fakeApi();
+    const lookup = vi.spyOn(api, "getProject");
     await handleLog(
       api,
       { project: "p1", minutes: 90, date: "2026-09-20", note: "Review" },
       { json: true },
     );
+    expect(lookup).not.toHaveBeenCalled();
     const [, input] = api.calls.find(([m]: any) => m === "createTask");
     expect(input.durationMinutes).toBe(90);
     expect(input.endAt - input.startAt).toBe(90 * 60000);
