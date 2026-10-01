@@ -177,9 +177,10 @@ export class TallyhandClient {
       );
     }
 
+    const headersReceived = performance.now();
     const text = await res.text();
     if (this.timing) console.error(JSON.stringify({ timing: { method, path, status: res.status,
-      roundTripMs: Math.round(performance.now() - started), serverTiming: res.headers.get("server-timing") } }));
+      roundTripMs: Math.round(performance.now() - started), responseHeadersMs: Math.round(headersReceived - started), bodyReadMs: Math.round(performance.now() - headersReceived), serverTiming: res.headers.get("server-timing") } }));
     let json: any = null;
     try {
       json = text ? JSON.parse(text) : null;

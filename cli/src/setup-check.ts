@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /** Public deployment checks, owned by the CLI and never using account credentials. */
 export async function checkSetup(baseUrl: string) {
   const origin = new URL(baseUrl).origin;
@@ -19,5 +20,11 @@ export async function checkSetup(baseUrl: string) {
   const discovery = await res.json() as { client_id_metadata_document_supported?: boolean; code_challenge_methods_supported?: string[]; scopes_supported?: string[] };
   if (!discovery.client_id_metadata_document_supported || !discovery.code_challenge_methods_supported?.includes("S256")) throw new Error("Clerk CIMD/PKCE discovery incomplete");
   for (const scope of ["tally:read", "tally:write", "tally:manage"]) if (!discovery.scopes_supported?.includes(scope)) throw new Error(`Clerk discovery missing ${scope}`);
-  console.log(JSON.stringify({ ok: true, publicPaths: paths, oauthDiscovery: true, note: "Discovery checks do not verify consent or token exchange" }, null, 2));
+  const pluginPath = "/plugins/tallyhand-0.3.0.zip";
+  const [archive, checksum] = await Promise.all([fetch(origin + pluginPath, { signal: AbortSignal.timeout(30_000), redirect: "error" }), fetch(origin + pluginPath + ".sha256", { signal: AbortSignal.timeout(30_000), redirect: "error" })]);
+  if (!archive.ok || !checksum.ok) throw new Error("Plugin download unavailable");
+  const bytes = Buffer.from(await archive.arrayBuffer());
+  const expected = (await checksum.text()).trim().split(/\s+/)[0];
+  if (bytes.length > 8 * 1024 * 1024 || bytes.readUInt32LE(0) !== 0x04034b50 || createHash("sha256").update(bytes).digest("hex") !== expected) throw new Error("Plugin package integrity check failed");
+  console.log(JSON.stringify({ ok: true, plugin: { path: pluginPath, bytes: bytes.length, checksum: "verified" }, publicPaths: paths, oauthDiscovery: true, note: "Discovery checks do not verify consent or token exchange" }, null, 2));
 }
