@@ -30,9 +30,11 @@ export class TallyhandMcpServer extends McpServer {
     }) as typeof this.registerTool;
   }
 
-  installToolCatalog(): void {
-    this.server.setRequestHandler("tools/list", () => ({
-      tools: this.catalog.map(read => read()).filter(tool => tool.enabled).map(({ enabled: _enabled, ...tool }) => tool as any),
-    }));
+  installToolCatalog(observe?: (tools: ReadonlyArray<Record<string, unknown>>) => void): void {
+    this.server.setRequestHandler("tools/list", () => {
+      const tools = this.catalog.map(read => read()).filter(tool => tool.enabled).map(({ enabled: _enabled, ...tool }) => tool as any);
+      observe?.(tools);
+      return { tools };
+    });
   }
 }

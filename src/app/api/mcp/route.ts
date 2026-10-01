@@ -6,6 +6,8 @@ import { requireApiToken } from "@/server/auth";
 import { isOAuthToken, oauthChallenge, oauthConfig, verifyTallyOAuth, oauthUnavailableResponse, TALLY_SCOPES } from "@/lib/auth/oauth";
 import { createMcpServer } from "../../../../cli/src/mcp.js";
 import { TallyhandClient } from "../../../../cli/src/client.js";
+import { MCP_VERSION } from "../../../../cli/src/mcp.js";
+import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +34,22 @@ const factory: McpServerFactory = ctx => {
   // Never derive the credential forwarding destination from Host/Origin input.
   const base = oauthConfig().origin;
   const api = new TallyhandClient({ baseUrl: base, token: ctx.authInfo?.token, signal: ctx.requestInfo?.signal, fetcher: dispatchWorkspaceApi });
-  return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth", legacyOAuth: ctx.era === "legacy" });
+  return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth", legacyOAuth: ctx.era === "legacy" }, tools => {
+    // Observe public definitions only. Never log credentials, account identity,
+    // tool arguments, or account data. This distinguishes server catalog output
+    // from downstream discovery without changing registration or authorization.
+    const serialized = JSON.stringify(tools);
+    console.info("mcp_catalog", {
+      version: MCP_VERSION,
+      protocolEra: ctx.era,
+      authKind: ctx.authInfo?.extra?.kind === "oauth" ? "oauth" : "api-key",
+      toolCount: tools.length,
+      updateToolCount: tools.filter(tool => String(tool.name).startsWith("update_")).length,
+      settingsPresent: tools.some(tool => tool.name === "update_settings"),
+      bytes: Buffer.byteLength(serialized),
+      sha256: createHash("sha256").update(serialized).digest("hex"),
+    });
+  });
 };
 const handler = createMcpHandler(factory, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: 4 * 1024 * 1024 + 32768, maxSubscriptions: 32 });
 

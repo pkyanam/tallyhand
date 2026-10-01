@@ -1,11 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { compareToolCatalog } from '../src/mcp-catalog.js';
+import { compareToolCatalog, inspectMcpCatalog } from '../src/mcp-catalog.js';
 import { RELEASE_VERSION } from '../src/version.js';
 import { VERSION } from '../src/commands.js';
 import { MCP_VERSION } from '../src/mcp.js';
 import { readFileSync } from 'node:fs';
 
 describe('release diagnostics', () => {
+  it('preserves top-level auth descriptors across the complete bundled catalog', async () => {
+    const catalog = await inspectMcpCatalog();
+    expect(catalog.total).toBe(86);
+    expect(catalog.tools).toHaveLength(86);
+    expect(new Set(catalog.tools.map(tool => tool.name)).size).toBe(86);
+    for (const tool of catalog.tools) {
+      expect(tool.securitySchemes, tool.name).toEqual(tool._meta?.securitySchemes);
+      expect(tool.securitySchemes, tool.name).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'oauth2', scopes: expect.arrayContaining(['tally:read']) }),
+      ]));
+    }
+    const settings = catalog.tools.find(tool => tool.name === 'update_settings')!;
+    expect(settings.securitySchemes).toEqual([{ type: 'oauth2', scopes: ['tally:read', 'tally:write'] }]);
+  });
   it('reports missing tools without echoing private export fields', () => {
     expect(compareToolCatalog(['get_settings', 'update_settings'], { tools: [{ name: 'get_settings', description: 'private' }] }))
       .toEqual({ expected: 2, observed: 1, missing: ['update_settings'], unexpected: [], duplicateNames: 0 });

@@ -1,6 +1,8 @@
 /** Inspect the bundled server without loading credentials or making network calls. */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ListToolsResultSchema, ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { createMcpServer, MCP_VERSION } from './mcp.js';
 import { TallyhandClient } from './client.js';
 /** Accept exported tool names or a tools/list response; never print unrelated data. */
@@ -22,7 +24,11 @@ export async function inspectMcpCatalog(name?: string) {
   try {
     await server.connect(st);
     await client.connect(ct);
-    const { tools } = await client.listTools();
+    // The SDK's default tool parser strips descriptor extensions such as
+    // OpenAI's top-level securitySchemes. Keep them in diagnostic output while
+    // still validating the standard MCP descriptor fields.
+    const { tools } = await client.request({ method: 'tools/list' },
+      ListToolsResultSchema.extend({ tools: z.array(ToolSchema.passthrough()) }));
     const selected = name ? tools.filter(tool => tool.name === name) : tools;
     if (!selected.length) throw new Error(`Unknown bundled tool: ${name}`);
     return { source: 'bundled CLI, not host approval state', version: MCP_VERSION, total: tools.length, tools: selected };

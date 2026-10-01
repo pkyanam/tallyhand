@@ -64,7 +64,7 @@ const dateArg = (desc: string) =>
 const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
-export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServer {
+export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeCatalog?: (tools: ReadonlyArray<Record<string, unknown>>) => void): McpServer {
   const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
     instructions: "Contractor finance workspace. Read tally://guide. Amounts are dollars, timestamps milliseconds. Draft invoices before sending. Obtain explicit user consent for financial status changes, deletes, reset and import. Never request credentials through tools or prompts.",
     cacheHints: {
@@ -931,7 +931,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
   registerWorkspaceFeatures(server, api, options);
   registerExtendedTools(server, api, options);
   registerAgentSkills(server);
-  server.installToolCatalog();
+  server.installToolCatalog(observeCatalog);
   return server;
 }
 
