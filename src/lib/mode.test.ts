@@ -134,6 +134,12 @@ describe("clerk auto-detect", () => {
     expect(parseAuth(KEYS)).toBe("none");
   });
 
+  it("reports the same effective auth mode to config consumers and validation", () => {
+    expect(getConfig(KEYS)).toMatchObject({ auth: "clerk", hosted: true });
+    expect(validateConfig(KEYS)).toEqual(expect.arrayContaining([expect.stringMatching(/TALLY_SHARE_SECRET/)]));
+    expect(getConfig({ ...KEYS, TALLY_AUTH: "none" })).toMatchObject({ auth: "none", hosted: false });
+  });
+
   it("validateConfig accepts the NEXT_PUBLIC publishable key alias", () => {
     const problems = validateConfig({
       TALLY_AUTH: "clerk",

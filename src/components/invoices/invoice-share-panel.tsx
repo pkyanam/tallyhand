@@ -16,10 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { Client, Invoice, Settings } from "@/lib/db/types";
 import {
-  classifyHostReachability,
-  type ShareReachability,
-} from "@/lib/share-reachability";
-import {
   buildShareableInvoiceHtml,
   shareInvoiceFileName,
 } from "@/lib/invoice-share-file";
@@ -30,43 +26,17 @@ function publicInvoiceUrl(token: string): string {
   return `${window.location.origin}${path}`;
 }
 
-const REACHABILITY_COPY: Record<
-  ShareReachability,
-  { badge: string; badgeClass: string; message: React.ReactNode }
-> = {
-  device: {
-    badge: "This device only",
-    badgeClass: "border-border bg-secondary text-secondary-foreground",
-    message: (
-      <>
-        You&rsquo;re running Tallyhand on this device only. If you send this
-        link to someone else it will <strong>not</strong> work — their browser
-        can&rsquo;t reach your computer. Use the file option below to share
-        with anyone.
-      </>
-    ),
-  },
-  lan: {
-    badge: "Local network",
-    badgeClass: "border-border text-foreground",
-    message: (
-      <>
-        Devices on your local network — like your phone on the same Wi-Fi —
-        can open this link. It won&rsquo;t work over the internet; use the
-        file option below for that.
-      </>
-    ),
-  },
-  internet: {
-    badge: "Anyone with the link",
-    badgeClass: "badge-positive",
-    message: (
-      <>
-        This Tallyhand is reachable from the internet, so anyone you send the
-        link to can open it.
-      </>
-    ),
-  },
+const LOCAL_LINK_COPY = {
+  badge: "This browser only",
+  badgeClass: "border-border bg-secondary text-secondary-foreground",
+  message: (
+    <>
+      This invoice is stored only in this browser. Its link cannot share it
+      with someone using another browser or device, even when Tallyhand is
+      hosted online. Download the shareable file below, or sign in and create
+      a cloud link.
+    </>
+  ),
 };
 
 export function InvoiceSharePanel({
@@ -95,15 +65,7 @@ export function InvoiceSharePanel({
   const [cloudUrl, setCloudUrl] = React.useState<string | null>(null);
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudError, setCloudError] = React.useState<string | null>(null);
-  // Set after mount so server and client render identically (no hydration
-  // mismatch); the classifier's conservative default is "device".
-  const [hostname, setHostname] = React.useState("");
-  React.useEffect(() => {
-    setHostname(window.location.hostname);
-  }, []);
-
-  const reachability = classifyHostReachability(hostname);
-  const copy_ = REACHABILITY_COPY[reachability];
+  const copy_ = LOCAL_LINK_COPY;
   const token = invoice.publicToken;
 
   // The file must reflect saved data. When the draft is dirty we export the

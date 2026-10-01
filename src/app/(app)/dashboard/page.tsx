@@ -7,7 +7,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Your week at a glance."
+        description="Your work, your time, at a glance."
         actions={<ManualEntryDialog />}
       />
       <DashboardContent />

@@ -51,7 +51,7 @@ export function verifyState(state: string, expectedUserId?: string): string {
   try {
     const [payload, sig, extra] = state.split("."); if (!payload || !sig || extra) throw new Error();
     const expected = createHmac("sha256", derive(stateInfo)).update(payload).digest();
-    const got = Buffer.from(sig, "base64url"); if (got.length !== expected.length || !timingSafeEqual(got, expected)) throw new Error();
+    const got = Buffer.from(sig, "base64url"); if (got.toString("base64url") !== sig || got.length !== expected.length || !timingSafeEqual(got, expected)) throw new Error();
     const p = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { userId?: unknown; exp?: unknown };
     if (typeof p.userId !== "string" || typeof p.exp !== "number" || p.exp <= Date.now() || (expectedUserId !== undefined && p.userId !== expectedUserId)) throw new Error();
     return p.userId;

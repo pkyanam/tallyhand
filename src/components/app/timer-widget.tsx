@@ -46,7 +46,7 @@ export function TimerWidget() {
           value={projectId}
           onChange={setProject}
           placeholder="No project"
-          triggerClassName="hidden max-w-[220px] md:inline-flex"
+          triggerClassName="hidden max-w-[180px] xl:inline-flex"
           size="sm"
         />
       )}
@@ -63,7 +63,7 @@ export function TimerWidget() {
         variant={running ? "destructive" : "default"}
         size="sm"
         onClick={toggle}
-        className="gap-1.5"
+        className="gap-2 sm:min-w-24"
         aria-label={running ? "Stop timer" : "Start timer"}
         title={running ? "Stop timer (⌘⇧T)" : "Start timer (⌘⇧T)"}
       >

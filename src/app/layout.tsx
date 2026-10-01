@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import dynamic from "next/dynamic";
-import { effectiveAuth, clerkPublishableKey } from "@/lib/mode";
+import { effectiveAuth, clerkPublishableKey, parseStorage } from "@/lib/mode";
 
 // Code-split: the @clerk/nextjs client bundle only loads when the app
 // actually runs with TALLY_AUTH=clerk. Local mode never downloads it.
@@ -29,8 +29,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   applicationName: "Tallyhand",
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon-maskable.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/brand/icon-32.png", type: "image/png", sizes: "32x32" }, { url: "/brand/icon-192.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/brand/icon-180.png", type: "image/png", sizes: "180x180" }],
   },
   appleWebApp: {
     capable: true,
@@ -60,6 +60,9 @@ export default function RootLayout({
   // be rotated without rebuilding (unlike NEXT_PUBLIC_* vars).
   const clerkKey =
     effectiveAuth() === "clerk" ? clerkPublishableKey() : undefined;
+  const convexUrl = parseStorage() === "convex"
+    ? process.env.CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL
+    : undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -72,7 +75,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {clerkKey ? (
-            <ClerkAuthProvider publishableKey={clerkKey}>{children}</ClerkAuthProvider>
+            <ClerkAuthProvider publishableKey={clerkKey} convexUrl={convexUrl}>{children}</ClerkAuthProvider>
           ) : (
             children
           )}

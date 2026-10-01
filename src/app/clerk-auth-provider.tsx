@@ -11,13 +11,20 @@
  */
 import { ClerkProvider } from "@clerk/nextjs";
 import type { ReactNode } from "react";
+import dynamic from "next/dynamic";
+
+const ConvexRealtimeProvider = dynamic(() => import("@/components/app/convex-realtime-provider").then((m) => m.ConvexRealtimeProvider));
 
 export function ClerkAuthProvider({
   children,
   publishableKey,
+  convexUrl,
 }: {
   children: ReactNode;
   publishableKey: string;
+  convexUrl?: string;
 }) {
-  return <ClerkProvider publishableKey={publishableKey}>{children}</ClerkProvider>;
+  return <ClerkProvider publishableKey={publishableKey}>
+    {convexUrl ? <ConvexRealtimeProvider url={convexUrl}>{children}</ConvexRealtimeProvider> : children}
+  </ClerkProvider>;
 }

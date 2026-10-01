@@ -357,17 +357,27 @@ export function StripeCard({ settings }: { settings: Settings }) {
   );
 }
 
-type ConnectStatus = { connected: boolean; accountId?: string; livemode?: boolean; chargesEnabled?: boolean | null; payoutsEnabled?: boolean | null };
+type ConnectStatus = { connected: boolean; supported?: boolean; message?: string; accountId?: string; livemode?: boolean; chargesEnabled?: boolean | null; payoutsEnabled?: boolean | null };
 export function StripeConnectCard() {
   const [status, setStatus] = React.useState<ConnectStatus | null>(null);
   const [banner, setBanner] = React.useState<{kind:"success"|"error";text:string}|null>(null);
   const [busy, setBusy] = React.useState(false);
-  const refresh = React.useCallback(async () => { const r=await fetch("/api/v1/stripe/connect/status"); if(r.ok) { const j=await r.json(); setStatus(j.data); } }, []);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const refresh = React.useCallback(async () => {
+    setLoadError(null);
+    try {
+      const r = await fetch("/api/v1/stripe/connect/status");
+      if (!r.ok) throw new Error(r.status === 401 ? "Sign in to manage Stripe Connect." : "Couldn’t load Stripe connection status. Try again.");
+      const j = await r.json();
+      if (typeof j.data?.connected !== "boolean") throw new Error("Couldn’t load Stripe connection status. Try again.");
+      setStatus(j.data);
+    } catch (error) { setLoadError(error instanceof Error ? error.message : "Couldn’t load Stripe connection status. Try again."); }
+  }, []);
   React.useEffect(() => { void refresh(); const u=new URL(window.location.href), result=u.searchParams.get("stripe"); if(result) { setBanner(result==="connected"?{kind:"success",text:"Stripe account connected."}:{kind:"error",text:result==="cancelled"?"Stripe connection was cancelled.":"Stripe connection failed."}); u.searchParams.delete("stripe"); u.searchParams.delete("reason"); window.history.replaceState({},"",u.toString()); } }, [refresh]);
-  const disconnect=async()=>{setBusy(true);try{await fetch("/api/v1/stripe/connect",{method:"DELETE",headers:{"x-tallyhand-sync":"1"}});await refresh();}finally{setBusy(false);}};
+  const disconnect=async()=>{setBusy(true);try{const r=await fetch("/api/v1/stripe/connect",{method:"DELETE",headers:{"x-tallyhand-sync":"1"}});if(!r.ok)throw new Error("Couldn’t disconnect Stripe. Your connection has not been confirmed removed.");await refresh();}catch{setBanner({kind:"error",text:"Couldn’t disconnect Stripe. Check its status before trying again."});}finally{setBusy(false);}};
   return <Card><CardHeader><CardTitle>Stripe Connect</CardTitle><CardDescription>Connect your Stripe account to receive invoice payments directly.</CardDescription></CardHeader><CardContent className="space-y-4">
     {banner&&<p role="status" className={banner.kind==="success"?"text-sm text-green-700":"text-sm text-destructive"}>{banner.text}</p>}
-    {status?.connected ? <><div className="flex flex-wrap items-center gap-2"><Badge variant={status.livemode?"default":"secondary"}>{status.livemode?"LIVE":"TEST"}</Badge><Badge variant="outline">Charges {status.chargesEnabled?"enabled":"not enabled"}</Badge><Badge variant="outline">Payouts {status.payoutsEnabled?"enabled":"not enabled"}</Badge></div><p className="font-mono text-sm">{status.accountId}</p><div className="flex flex-wrap gap-3"><a className="text-sm underline" href="https://dashboard.stripe.com/settings/payouts" target="_blank" rel="noreferrer">Manage payouts &amp; bank details</a><button className="text-sm text-destructive underline" disabled={busy} onClick={()=>void disconnect()}>Disconnect</button></div></> : status ? <button className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" onClick={()=>{window.location.href="/api/v1/stripe/connect/start"}}>Connect with Stripe</button> : <p className="text-sm text-muted-foreground">Loading Stripe status…</p>}
+    {loadError ? <div role="alert" className="space-y-2"><p className="text-sm text-destructive">{loadError}</p><button className="text-sm underline" onClick={()=>void refresh()}>Retry Stripe status</button></div> : status?.supported === false ? <p className="text-sm text-muted-foreground">{status.message ?? "Stripe Connect is unavailable for this storage backend."}</p> : status?.connected ? <><div className="flex flex-wrap items-center gap-2"><Badge variant={status.livemode?"default":"secondary"}>{status.livemode?"LIVE":"TEST"}</Badge><Badge variant="outline">Charges {status.chargesEnabled?"enabled":"not enabled"}</Badge><Badge variant="outline">Payouts {status.payoutsEnabled?"enabled":"not enabled"}</Badge></div><p className="font-mono text-sm">{status.accountId}</p><div className="flex flex-wrap gap-3"><a className="text-sm underline" href="https://dashboard.stripe.com/settings/payouts" target="_blank" rel="noreferrer">Manage payouts &amp; bank details</a><button className="text-sm text-destructive underline" disabled={busy} onClick={()=>void disconnect()}>Disconnect</button></div></> : status ? <button className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" onClick={()=>{window.location.href="/api/v1/stripe/connect/start"}}>Connect with Stripe</button> : <p className="text-sm text-muted-foreground">Loading Stripe status…</p>}
   </CardContent></Card>;
 }
 

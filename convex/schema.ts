@@ -15,6 +15,22 @@ const timestamps = {
 };
 
 export default defineSchema({
+  extensionEntities: defineTable({
+    userId: v.string(), id: v.string(),
+    kind: v.union(v.literal("mileage"), v.literal("contract"), v.literal("taxPayment"), v.literal("rateCard")),
+    data: v.any(), updatedAt: v.number(),
+  }).index("by_owner_kind", ["userId", "kind"])
+    .index("by_owner_kind_id", ["userId", "kind", "id"]),
+  workspaceRevisions: defineTable({
+    userId: v.string(),
+    revision: v.number(),
+  }).index("by_user", ["userId"]),
+  requestReceipts: defineTable({
+    key: v.string(), fingerprint: v.string(), claimId: v.string(),
+    state: v.union(v.literal("pending"), v.literal("complete")),
+    createdAt: v.number(), status: v.optional(v.number()), body: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+  }).index("by_key", ["key"]),
   clients: defineTable({
     id: v.string(),
     userId: v.string(),
@@ -177,7 +193,7 @@ export default defineSchema({
     ...timestamps,
   })
     .index("by_user", ["userId"])
-    .index("by_id", ["id"]),
+    .index("by_link_id", ["id"]),
 
   timesheetApprovals: defineTable({
     id: v.string(),

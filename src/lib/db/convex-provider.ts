@@ -20,6 +20,11 @@
  * undefined values before sending (`cleanArgs`).
  */
 import { newId } from "@/core/id";
+import type { MileageEntry, MileageEntryCreateInput } from "@/core/mileage";
+import type { Contract, ContractCreateInput } from "@/core/contracts";
+import type { TaxPayment, TaxPaymentCreateInput } from "@/core/tax";
+import type { RateCard, RateCardCreateInput } from "@/core/rate-cards";
+
 import { newShareLinkId, type ShareLinkType } from "@/core/share";
 import type {
   Client,
@@ -195,21 +200,8 @@ export class ConvexStorageProvider implements StorageProvider {
     convexUrl: string,
     userId: UserIdSource,
   ): Promise<ConvexStorageProvider> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ConvexHttpClient } = require("convex/browser") as typeof import(
-      "convex/browser"
-    );
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { makeFunctionReference } = require("convex/server") as typeof import(
-      "convex/server"
-    );
-    const http = new ConvexHttpClient(convexUrl);
-    const client: ConvexClientLike = {
-      query: (path, args) =>
-        http.query(makeFunctionReference<"query">(`tally:${path}`), args),
-      mutation: (path, args) =>
-        http.mutation(makeFunctionReference<"mutation">(`tally:${path}`), args),
-    };
+    const { createConvexRequestClient } = await import("./convex-client");
+    const client = createConvexRequestClient(convexUrl);
     return new ConvexStorageProvider(client, userId);
   }
 
@@ -424,6 +416,34 @@ export class ConvexStorageProvider implements StorageProvider {
   async removeRetainer(id: ID): Promise<void> {
     await this.m("retainersRemove", { id });
   }
+
+  private async extensionCall<T>(method: "query" | "mutation", operation: string, kind: string, args: Record<string, unknown> = {}): Promise<T> {
+    return await this.client[method](`extensions:${operation}`, cleanArgs({ userId: await this.uid(), kind, ...args })) as T;
+  }
+
+  listMileageEntries(): Promise<MileageEntry[]> { return this.extensionCall("query", "list", "mileage"); }
+  async getMileageEntry(id: ID): Promise<MileageEntry | undefined> { return (await this.extensionCall<MileageEntry | null>("query", "get", "mileage", { id })) ?? undefined; }
+  createMileageEntry(input: MileageEntryCreateInput): Promise<MileageEntry> { return this.extensionCall("mutation", "create", "mileage", { id: input.id ?? newId("mil"), data: input }); }
+  async updateMileageEntry(id: ID, patch: Partial<MileageEntry>): Promise<void> { await this.extensionCall("mutation", "update", "mileage", { id, patch }); }
+  async removeMileageEntry(id: ID): Promise<void> { await this.extensionCall("mutation", "remove", "mileage", { id }); }
+
+  listContracts(): Promise<Contract[]> { return this.extensionCall("query", "list", "contract"); }
+  async getContract(id: ID): Promise<Contract | undefined> { return (await this.extensionCall<Contract | null>("query", "get", "contract", { id })) ?? undefined; }
+  createContract(input: ContractCreateInput): Promise<Contract> { return this.extensionCall("mutation", "create", "contract", { id: input.id ?? newId("ctr"), data: input }); }
+  async updateContract(id: ID, patch: Partial<Contract>): Promise<void> { await this.extensionCall("mutation", "update", "contract", { id, patch }); }
+  async removeContract(id: ID): Promise<void> { await this.extensionCall("mutation", "remove", "contract", { id }); }
+
+  listTaxPayments(): Promise<TaxPayment[]> { return this.extensionCall("query", "list", "taxPayment"); }
+  async getTaxPayment(id: ID): Promise<TaxPayment | undefined> { return (await this.extensionCall<TaxPayment | null>("query", "get", "taxPayment", { id })) ?? undefined; }
+  createTaxPayment(input: TaxPaymentCreateInput): Promise<TaxPayment> { return this.extensionCall("mutation", "create", "taxPayment", { id: input.id ?? newId("txp"), data: input }); }
+  async updateTaxPayment(id: ID, patch: Partial<TaxPayment>): Promise<void> { await this.extensionCall("mutation", "update", "taxPayment", { id, patch }); }
+  async removeTaxPayment(id: ID): Promise<void> { await this.extensionCall("mutation", "remove", "taxPayment", { id }); }
+
+  listRateCards(): Promise<RateCard[]> { return this.extensionCall("query", "list", "rateCard"); }
+  async getRateCard(id: ID): Promise<RateCard | undefined> { return (await this.extensionCall<RateCard | null>("query", "get", "rateCard", { id })) ?? undefined; }
+  createRateCard(input: RateCardCreateInput): Promise<RateCard> { return this.extensionCall("mutation", "create", "rateCard", { id: input.id ?? newId("rc"), data: input }); }
+  async updateRateCard(id: ID, patch: Partial<RateCard>): Promise<void> { await this.extensionCall("mutation", "update", "rateCard", { id, patch }); }
+  async removeRateCard(id: ID): Promise<void> { await this.extensionCall("mutation", "remove", "rateCard", { id }); }
 
   // -- transactional domain workflows (atomic Convex mutations) -----------
   async assignNextInvoiceNumber(): Promise<string> {

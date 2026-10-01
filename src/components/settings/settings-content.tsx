@@ -52,6 +52,8 @@ import {
   importTallyhandBundleV1,
   resetAllLocalData,
 } from "@/lib/app-bundle";
+import { readCloudBackup, replaceCloudData } from "@/lib/cloud-backup-client";
+import { validateCloudBackup, MAX_BACKUP_BYTES, BACKUP_TABLES } from "@/core/cloud-backup";
 import { parseAndValidateBundle } from "@/lib/v1-import";
 import { settingsRepo } from "@/lib/db/repos";
 import { downloadText } from "@/lib/ledger-export";
@@ -87,6 +89,8 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   const modeCopy = dataModeCopy(dataMode);
   const { setTheme } = useTheme();
   const [newCategory, setNewCategory] = React.useState("");
+  const [dataBusy, setDataBusy] = React.useState(false);
+  const dataLock = React.useRef(false);
   const importRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -163,40 +167,49 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   };
 
   const handleImport = async (file: File | null) => {
-    if (!file) return;
+    if (!file || dataLock.current) return;
+    dataLock.current = true; setDataBusy(true);
     try {
-      const text = await file.text();
-      const parsed: unknown = JSON.parse(text);
-      // Detection → field migration → zod validation (src/lib/v1-import.ts).
-      const { bundle, migratedFields } = parseAndValidateBundle(parsed);
-      await importTallyhandBundleV1(bundle);
-      showNotice(
-        migratedFields > 0
-          ? `Import complete (${migratedFields} legacy field(s) defaulted) — reloading.`
-          : "Import complete — reloading.",
-      );
+      if (dataMode === "cloud" && file.size > MAX_BACKUP_BYTES) throw new Error("Cloud import supports backups up to 4 MiB. Nothing was changed.");
+      const { bundle, migratedFields } = parseAndValidateBundle(JSON.parse(await file.text()));
+      if (dataMode === "cloud") {
+        validateCloudBackup(bundle);
+        const count = BACKUP_TABLES.reduce((n, key) => n + (bundle[key]?.length ?? 0), 0);
+        const current = await readCloudBackup();
+        const confirmation = window.prompt(`Import ${count} records into YOUR cloud account? This replaces its existing business data and settings and revokes existing shared links and approvals. Your sign-in and API keys remain. Your offline app is untouched. A backup of current cloud data will download first. Type REPLACE CLOUD DATA to continue.`);
+        if (confirmation !== "REPLACE CLOUD DATA") return;
+        downloadText(`tallyhand-before-import-${Date.now()}.json`, JSON.stringify(current.bundle, null, 2), "application/json");
+        if (!window.confirm("Confirm your downloaded cloud backup is saved before replacing data. Cancel if the download was blocked.")) return;
+        await replaceCloudData("import", current.revision, confirmation, bundle);
+      } else {
+        if (!window.confirm("Replace this browser's data with this backup? Export your current data first if you need to keep it.")) return;
+        await importTallyhandBundleV1(bundle);
+      }
+      showNotice(`Import complete${migratedFields ? ` (${migratedFields} legacy fields defaulted)` : ""} — reloading.`);
       window.location.reload();
-    } catch (e) {
-      showNotice(
-        e instanceof Error ? e.message : "Import failed — invalid file?",
-      );
-    } finally {
-      if (importRef.current) importRef.current.value = "";
-    }
+    } catch (e) { showNotice(e instanceof Error ? e.message : "Import failed."); }
+    finally { dataLock.current = false; setDataBusy(false); if (importRef.current) importRef.current.value = ""; }
   };
 
   const handleReset = async () => {
-    if (!window.confirm(modeCopy.resetConfirmation))
-      return;
-    if (
-      !window.confirm(
-        "This cannot be undone. Type OK in your mind and click OK to wipe everything.",
-      )
-    )
-      return;
-    await resetAllLocalData();
-    showNotice("Database cleared — reloading.");
-    window.location.reload();
+    if (dataLock.current) return;
+    dataLock.current = true; setDataBusy(true);
+    try {
+      if (dataMode === "cloud") {
+        const current = await readCloudBackup();
+        const confirmation = window.prompt("Delete YOUR cloud business data and reset settings? This revokes shared links and approvals, but keeps your sign-in and API keys. Your offline app is untouched. A backup will download first. Type RESET CLOUD DATA to continue.");
+        if (confirmation !== "RESET CLOUD DATA") return;
+        downloadText(`tallyhand-before-reset-${Date.now()}.json`, JSON.stringify(current.bundle, null, 2), "application/json");
+        if (!window.confirm("Confirm your downloaded cloud backup is saved before deleting data. Cancel if the download was blocked.")) return;
+        await replaceCloudData("reset", current.revision, confirmation);
+      } else {
+        if (!window.confirm(modeCopy.resetConfirmation)) return;
+        if (window.prompt("This cannot be undone. Type RESET LOCAL DATA to confirm.") !== "RESET LOCAL DATA") return;
+        await resetAllLocalData();
+      }
+      showNotice("Database cleared — reloading."); window.location.reload();
+    } catch (e) { showNotice(e instanceof Error ? e.message : "Reset failed."); }
+    finally { dataLock.current = false; setDataBusy(false); }
   };
 
   const handleLogoFile = async (file: File | null) => {
@@ -674,7 +687,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
             <CardTitle>Data</CardTitle>
             <CardDescription>
               Full backups use the <code className="text-xs">tallyhand.v1</code>{" "}
-              JSON bundle (settings + every table). Ledger JSON matches the
+              JSON bundle (business settings and records). Ledger JSON matches the
               Stage 2 export shape.
             </CardDescription>
           </CardHeader>
@@ -684,13 +697,13 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
                 type="button"
                 variant="outline"
                 onClick={() =>
-                  void exportBundleJsonString().then((s) =>
+                  void (dataMode === "cloud" ? readCloudBackup().then(({ bundle }) => JSON.stringify(bundle, null, 2)) : exportBundleJsonString()).then((s) =>
                     downloadText(
                       `tallyhand-backup-${new Date().toISOString().slice(0, 10)}.json`,
                       s,
                       "application/json",
                     ),
-                  )
+                  ).catch((e) => showNotice(e instanceof Error ? e.message : "Export failed."))
                 }
               >
                 <Download className="mr-1 h-4 w-4" />
@@ -746,34 +759,15 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
                 Ledger Markdown
               </Button>
             </div>
-            {dataMode === "cloud" ? (
-              <p className="border-t pt-3 text-sm text-muted-foreground">
-                Import and reset aren&apos;t available in cloud mode — your data
-                lives in the cloud database, not in this browser&apos;s local
-                storage.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={(e) => void handleImport(e.target.files?.[0] ?? null)}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => importRef.current?.click()}
-                >
-                  <Upload className="mr-1 h-4 w-4" />
-                  Import bundle (JSON)
-                </Button>
-                <Button type="button" variant="destructive" onClick={() => void handleReset()}>
-                  Reset data…
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2 border-t pt-3" aria-busy={dataBusy}>
+              <input ref={importRef} type="file" accept="application/json,.json" className="hidden" disabled={dataBusy} onChange={(e) => void handleImport(e.target.files?.[0] ?? null)} />
+              <Button type="button" variant="secondary" disabled={dataBusy} onClick={() => importRef.current?.click()}>
+                <Upload className="mr-1 h-4 w-4" />Import bundle (JSON)
+              </Button>
+              <Button type="button" variant="destructive" disabled={dataBusy} onClick={() => void handleReset()}>Reset data…</Button>
+              {dataBusy && <span role="status">Working… Do not close this page.</span>}
+            </div>
+            {dataMode === "cloud" && <p className="text-sm text-muted-foreground">Import replaces your cloud business data and settings after confirmation. A backup downloads first. Only your account is affected; your offline app stays untouched. Shared links and approvals are revoked. Atomic imports support up to 2,000 records and 4 MiB.</p>}
           </CardContent>
         </Card>
 

@@ -1,27 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { BrandMark } from "./brand-mark";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { APP_NAV_ITEMS } from "@/components/app/app-nav-items";
 import { useAppChrome } from "@/components/app/app-chrome-provider";
-import { dataModeCopy } from "@/components/app/data-mode-copy";
+import dynamic from "next/dynamic";
+import type { TallyAuth } from "@/lib/mode";
+import { UserPill } from "./user-pill";
+import { settingsRepo } from "@/lib/db/repos";
+import { useLiveQuery } from "@/lib/data/use-live-query";
+const ClerkUserPill = dynamic(() => import("./clerk-user-pill").then(m => m.ClerkUserPill), { ssr: false });
 
-export function Sidebar() {
+export function Sidebar({ authMode = "none" }: { authMode?: TallyAuth }) {
   const pathname = usePathname();
+  const settings = useLiveQuery(() => settingsRepo.read(), []);
   const { dataMode } = useAppChrome();
 
   return (
-    <aside className="hidden w-56 shrink-0 border-r bg-background md:flex md:flex-col">
-      <div className="flex h-14 items-center border-b px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-sm bg-foreground" />
-          <span className="font-display text-base font-semibold tracking-tight">
+    <aside className="sticky top-0 hidden h-[100dvh] w-[244px] shrink-0 border-r bg-background md:flex md:flex-col">
+      <div className="flex h-16 shrink-0 items-center px-7">
+        <Link href="/" className="flex items-center gap-3">
+          <BrandMark className="-ml-2" />
+          <span className="font-display text-[23px] font-semibold tracking-tight">
             Tallyhand
           </span>
         </Link>
       </div>
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-5 py-4">
         {APP_NAV_ITEMS.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -30,27 +37,22 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-3 text-sm transition-colors",
                 active
-                  ? "bg-accent text-accent-foreground"
+                  ? "bg-accent font-medium text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-[19px] w-[19px] shrink-0" strokeWidth={1.7} aria-hidden="true" />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="border-t p-3 text-xs text-muted-foreground">
-        <div>{dataModeCopy(dataMode).navigationStatus}</div>
-        <Link
-          href="/shortcuts"
-          className="mt-2 block text-foreground/80 underline-offset-4 hover:underline"
-        >
-          Keyboard shortcuts
-        </Link>
+      <div className="mx-5 shrink-0 border-t py-3">
+        {dataMode === "cloud" && authMode === "clerk" ? <ClerkUserPill /> : <UserPill name={settings?.business.ownerName || settings?.business.name || (dataMode === "cloud" ? "My workspace" : "Local workspace")} cloud={dataMode === "cloud"} />}
       </div>
     </aside>
   );

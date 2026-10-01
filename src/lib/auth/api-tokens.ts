@@ -258,22 +258,14 @@ let convexClient: ConvexClientLike | null = null;
 
 function getConvexClient(): ConvexClientLike {
   if (convexClient) return convexClient;
-  const url = process.env.CONVEX_URL;
+  const url = process.env.CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL;
   if (!url) throw new Error("TALLY_STORAGE=convex requires CONVEX_URL");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ConvexHttpClient } = require("convex/browser") as typeof import(
-    "convex/browser"
-  );
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { makeFunctionReference } = require("convex/server") as typeof import(
-    "convex/server"
-  );
-  const http = new ConvexHttpClient(url);
+  const { createConvexRequestClient } = require("@/lib/db/convex-client") as typeof import("@/lib/db/convex-client");
+  const client = createConvexRequestClient(url);
   convexClient = {
-    query: (path, args) =>
-      http.query(makeFunctionReference<"query">(`tally:${path}`), args),
-    mutation: (path, args) =>
-      http.mutation(makeFunctionReference<"mutation">(`tally:${path}`), args),
+    query: (path, args) => client.query(`tally:${path}`, args),
+    mutation: (path, args) => client.mutation(`tally:${path}`, args),
   };
   return convexClient;
 }

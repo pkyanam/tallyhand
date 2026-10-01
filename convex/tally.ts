@@ -11,13 +11,13 @@
  * undefined values before calling (see `convex-provider.ts`).
  */
 import {
-  mutationGeneric,
-  queryGeneric,
   type GenericDatabaseReader,
   type GenericDatabaseWriter,
 } from "convex/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
+import { ownerQuery as queryGeneric, ownerMutation as mutationGeneric, serverQuery, serverMutation } from "./access";
 import { DEFAULT_SETTINGS } from "../src/core/entities";
+import { taskPatchSchema } from "../src/server/validation";
 import { normalizeSettings } from "../src/core/settings";
 import { formatInvoiceNumber } from "../src/core/invoice";
 
@@ -104,6 +104,8 @@ export const clientsGet = queryGeneric({
 
 export const clientsCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     name: v.string(),
@@ -125,9 +127,12 @@ export const clientsCreate = mutationGeneric({
       ...(args.defaultRate !== undefined ? { defaultRate: args.defaultRate } : {}),
       ...(args.notes !== undefined ? { notes: args.notes } : {}),
       archived: args.archived ?? false,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "clients", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("clients", doc);
     return doc;
   },
@@ -176,6 +181,8 @@ export const projectsGet = queryGeneric({
 
 export const projectsCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     clientId: v.string(),
@@ -193,9 +200,12 @@ export const projectsCreate = mutationGeneric({
       name: args.name,
       ...(args.rateOverride !== undefined ? { rateOverride: args.rateOverride } : {}),
       archived: args.archived ?? false,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "projects", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("projects", doc);
     return doc;
   },
@@ -257,6 +267,8 @@ export const tasksListUnbilled = queryGeneric({
 
 export const tasksCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     projectId: v.string(),
@@ -284,9 +296,12 @@ export const tasksCreate = mutationGeneric({
       tags: args.tags,
       isBilled: args.isBilled ?? false,
       ...(args.invoiceId !== undefined ? { invoiceId: args.invoiceId } : {}),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "tasks", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("tasks", doc);
     return doc;
   },
@@ -294,8 +309,16 @@ export const tasksCreate = mutationGeneric({
 
 export const tasksUpdate = mutationGeneric({
   args: { userId: v.string(), id: v.string(), patch: v.any() },
-  handler: async (ctx, args) =>
-    patchDoc(ctx, "tasks", needUser(args.userId), args.id, args.patch),
+  handler: async (ctx, args) => {
+    const userId = needUser(args.userId);
+    const patch = taskPatchSchema.parse(args.patch);
+    const current = await docById(ctx, "tasks", userId, args.id);
+    if (!current) throw new Error("Task not found");
+    if (patch.startAt !== undefined || patch.endAt !== undefined) {
+      patch.durationMinutes = Math.max(0, Math.round(((patch.endAt ?? current.endAt) - (patch.startAt ?? current.startAt)) / 60_000));
+    }
+    return patchDoc(ctx, "tasks", userId, args.id, patch);
+  },
 });
 
 export const tasksRemove = mutationGeneric({
@@ -325,6 +348,8 @@ export const expensesGet = queryGeneric({
 
 export const expensesCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     clientId: v.optional(v.string()),
@@ -354,9 +379,12 @@ export const expensesCreate = mutationGeneric({
       ...(args.receiptKey !== undefined ? { receiptKey: args.receiptKey } : {}),
       isBilled: args.isBilled ?? false,
       ...(args.invoiceId !== undefined ? { invoiceId: args.invoiceId } : {}),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "expenses", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("expenses", doc);
     return doc;
   },
@@ -408,6 +436,8 @@ export const invoicesGetByPublicToken = queryGeneric({
 
 export const invoicesCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     clientId: v.string(),
@@ -475,9 +505,12 @@ export const invoicesCreate = mutationGeneric({
       ...(args.qrDescription !== undefined ? { qrDescription: args.qrDescription } : {}),
       ...(args.amountInWords !== undefined ? { amountInWords: args.amountInWords } : {}),
       ...(args.template !== undefined ? { template: args.template } : {}),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "invoices", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("invoices", doc);
     return doc;
   },
@@ -593,6 +626,8 @@ export const recurringGet = queryGeneric({
 
 export const recurringCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     clientId: v.string(),
@@ -628,9 +663,12 @@ export const recurringCreate = mutationGeneric({
       occurrences: 0,
       status: args.status ?? "active",
       ...(args.notes !== undefined ? { notes: args.notes } : {}),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "recurringSchedules", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("recurringSchedules", doc);
     return doc;
   },
@@ -684,6 +722,8 @@ export const retainersGet = queryGeneric({
 
 export const retainersCreate = mutationGeneric({
   args: {
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     userId: v.string(),
     id: v.string(),
     clientId: v.string(),
@@ -717,9 +757,12 @@ export const retainersCreate = mutationGeneric({
         ? { recurringScheduleId: args.recurringScheduleId }
         : {}),
       ...(args.notes !== undefined ? { notes: args.notes } : {}),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: args.createdAt ?? now,
+      updatedAt: args.updatedAt ?? now,
     };
+    if (await docById(ctx, "retainers", userId, doc.id)) {
+      throw new ConvexError({ code: "CONFLICT", message: "Record already exists" });
+    }
     await ctx.db.insert("retainers", doc);
     return doc;
   },
@@ -842,13 +885,12 @@ export const shareList = queryGeneric({
  * Capability lookup for public share-token resolution. No userId: runs only
  * after HMAC signature verification; the signed token is the authorization.
  */
-export const shareGetById = queryGeneric({
+export const shareGetById = serverQuery({
   args: { id: v.string() },
-  handler: async (ctx, args) =>
-    ctx.db
-      .query("shareLinks")
-      .withIndex("by_id", (q) => q.eq("id", args.id))
-      .unique(),
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.query("shareLinks").withIndex("by_link_id", (q) => q.eq("id", args.id)).unique();
+    return doc;
+  },
 });
 
 export const shareRevoke = mutationGeneric({
@@ -984,7 +1026,7 @@ export const apiTokensRevoke = mutationGeneric({
   },
 });
 
-export const apiTokensFindByHash = queryGeneric({
+export const apiTokensFindByHash = serverQuery({
   args: { tokenHash: v.string() },
   handler: async (ctx, args) => {
     // No userId here: the hash IS the credential. by_hash is unique.
@@ -997,7 +1039,7 @@ export const apiTokensFindByHash = queryGeneric({
   },
 });
 
-export const apiTokensTouch = mutationGeneric({
+export const apiTokensTouch = serverMutation({
   args: { id: v.string(), lastUsedAt: v.number() },
   handler: async (ctx, args) => {
     // Best-effort "last used" stamp. The tokens table is tiny (a handful of

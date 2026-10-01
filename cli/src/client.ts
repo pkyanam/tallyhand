@@ -384,6 +384,14 @@ export class TallyhandClient {
     return this.request("DELETE", `/retainers/${id}`, undefined, this.dryRunQuery(opts));
   }
 
+  /** Atomic, owner-scoped cloud backup and restore (Convex). */
+  backup(): Promise<{ bundle: Record<string, unknown>; revision: number }> {
+    return this.request("GET", "/data");
+  }
+  replaceData(input: { action: "import" | "reset"; expectedRevision: number; confirmation: string; bundle?: unknown }): Promise<any> {
+    return this.request("POST", "/data", input);
+  }
+
   /* -- settings --------------------------------------------------------- */
   getSettings(): Promise<any> {
     return this.request("GET", "/settings");

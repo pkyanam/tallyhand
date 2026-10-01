@@ -233,6 +233,12 @@ export function CommandPalette() {
                 Open ledger
               </CommandItem>
             )}
+            {actionMatches("Open projects") && (
+              <CommandItem onSelect={() => { router.push("/projects"); close(); }}>
+                <FolderKanban className="h-4 w-4" />
+                Open projects
+              </CommandItem>
+            )}
             {actionMatches("Toggle theme") && (
               <CommandItem
                 onSelect={() => {

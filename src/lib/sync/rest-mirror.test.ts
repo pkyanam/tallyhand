@@ -284,6 +284,23 @@ describe("applyRestMirror", () => {
     }
   });
 
+  it.each(["task", "expense", "mileageEntry", "contract", "taxPayment", "rateCard"] as const)("splits large %s uploads into bounded batches without losing rows", async (type) => {
+    const seen = captureFetch((req) => {
+      const items = (req.body as { items: MirrorEntity[] }).items;
+      return items.length > 200
+        ? new Response("too many items", { status: 400 })
+        : jsonOk({});
+    });
+    const entities = Array.from({ length: 401 }, (_, i) => entity(`row-${i}`, 100));
+    await expect(applyRestMirror({
+      create: entities.map((item) => ({ type, entity: item })),
+      update: [], remove: [],
+    })).resolves.toEqual({ created: 401, updated: 0, removed: 0 });
+    const batches = seen.map((req) => (req.body as { items: MirrorEntity[] }).items);
+    expect(batches.map((items) => items.length)).toEqual([200, 200, 1]);
+    expect(batches.flat().map((item) => item.id)).toEqual(entities.map((item) => item.id));
+  });
+
   it("retries per-entity POSTs to the collection endpoint when the bulk POST returns 409", async () => {
     const seen = captureFetch((req) => {
       if (req.method === "POST" && req.url.includes("/bulk")) {

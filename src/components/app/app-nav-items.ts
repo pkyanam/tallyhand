@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  CalendarRange,
+  Clock,
+  Folder,
   ChartColumn,
   LayoutDashboard,
-  ListChecks,
+  FileClock,
   Users,
   FileText,
   Wallet,
@@ -19,9 +20,10 @@ export type AppNavItem = {
 
 export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/timesheet", label: "Timesheet", icon: CalendarRange },
-  { href: "/ledger", label: "Ledger", icon: ListChecks },
+  { href: "/timesheet", label: "Timesheet", icon: Clock },
+  { href: "/ledger", label: "Ledger", icon: FileClock },
   { href: "/clients", label: "Clients", icon: Users },
+  { href: "/projects", label: "Projects", icon: Folder },
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/expenses", label: "Expenses", icon: Wallet },
   { href: "/analytics", label: "Analytics", icon: ChartColumn },

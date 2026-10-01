@@ -19,4 +19,17 @@ describe("useLiveQuery with REST provider", () => {
     await waitFor(() => expect(result.current).toEqual(["updated"]));
     expect(querier).toHaveBeenCalledTimes(2);
   });
+
+  it("does not overwrite a fresh result when an earlier request finishes late", async () => {
+    setStorageProvider(restStorageProvider);
+    let finishOld!: (value: string[]) => void;
+    const oldRequest = new Promise<string[]>((resolve) => { finishOld = resolve; });
+    const querier = vi.fn().mockReturnValueOnce(oldRequest).mockResolvedValue(["fresh"]);
+    const { result } = renderHook(() => useLiveQuery(querier, []));
+    await waitFor(() => expect(querier).toHaveBeenCalledTimes(1));
+    act(() => notifyDataChanged());
+    await waitFor(() => expect(result.current).toEqual(["fresh"]));
+    await act(async () => { finishOld(["stale"]); await oldRequest; });
+    expect(result.current).toEqual(["fresh"]);
+  });
 });

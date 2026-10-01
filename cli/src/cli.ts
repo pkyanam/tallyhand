@@ -3,6 +3,7 @@
  * Human-friendly tables by default, `--json` for scripts and agents.
  * `tally mcp` launches the MCP server over stdio.
  */
+import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { Command } from "commander";
 import {
   TallyhandClient,
@@ -619,6 +620,38 @@ export function buildProgram(): Command {
     .action(wrap(async (cmd, opts) => {
       const { api } = ctx(cmd);
       await handleExport(api, opts, { json: true });
+    }));
+
+  const data = program.command("data").description("Atomic cloud backup/import/reset (Convex; affects only your account)");
+  data.command("export").requiredOption("--out <path>", "new backup file; existing files are never overwritten")
+    .action(wrap(async (cmd, opts) => {
+      const { api, out } = ctx(cmd); needAuth(api);
+      const backup = await api.backup();
+      writeFileSync(opts.out, JSON.stringify(backup.bundle, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+      emit(out.json, { saved: opts.out, revision: backup.revision }, () => console.log(`Backup saved to ${opts.out}`));
+    }));
+  data.command("import").requiredOption("--file <path>", "tallyhand.v1 backup (up to 4 MiB and 2,000 records)")
+    .requiredOption("--backup-out <path>", "save current cloud data to a NEW file before replacing")
+    .requiredOption("--confirm <phrase>", "must be REPLACE CLOUD DATA; replaces data/settings and revokes shares")
+    .action(wrap(async (cmd, opts) => {
+      if (opts.confirm !== "REPLACE CLOUD DATA") throw new Error("Required confirmation: REPLACE CLOUD DATA");
+      if (statSync(opts.file).size > 4 * 1024 * 1024) throw new Error("Backup exceeds 4 MiB; nothing changed.");
+      const bundle = JSON.parse(readFileSync(opts.file, "utf8"));
+      const { api, out } = ctx(cmd); needAuth(api);
+      const current = await api.backup();
+      writeFileSync(opts.backupOut, JSON.stringify(current.bundle, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+      const result = await api.replaceData({ action: "import", expectedRevision: current.revision, confirmation: opts.confirm, bundle });
+      emit(out.json, result, () => console.log("Cloud import complete; previous data saved in " + opts.backupOut));
+    }));
+  data.command("reset").requiredOption("--backup-out <path>", "save current cloud data to a NEW file before resetting")
+    .requiredOption("--confirm <phrase>", "must be RESET CLOUD DATA; keeps login and API tokens")
+    .action(wrap(async (cmd, opts) => {
+      if (opts.confirm !== "RESET CLOUD DATA") throw new Error("Required confirmation: RESET CLOUD DATA");
+      const { api, out } = ctx(cmd); needAuth(api);
+      const current = await api.backup();
+      writeFileSync(opts.backupOut, JSON.stringify(current.bundle, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+      const result = await api.replaceData({ action: "reset", expectedRevision: current.revision, confirmation: opts.confirm });
+      emit(out.json, result, () => console.log("Cloud reset complete; previous data saved in " + opts.backupOut));
     }));
 
   const config = program.command("config").description("Manage CLI config");

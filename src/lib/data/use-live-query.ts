@@ -21,11 +21,15 @@ export function useLiveQuery<T>(querier: () => Promise<T> | T, deps: unknown[] =
 
   React.useEffect(() => {
     let active = true;
+    let requestVersion = 0;
     const run = () => {
       setRevision((n) => n + 1);
       if (isDexie) return;
-      void Promise.resolve(querier()).then((next: T) => { if (active) setValue(next); }).catch((error: unknown) => {
-        console.error("Live query failed", error);
+      const version = ++requestVersion;
+      void Promise.resolve().then(querier).then((next: T) => {
+        if (active && version === requestVersion) setValue(next);
+      }).catch((error: unknown) => {
+        if (active && version === requestVersion) console.error("Live query failed", error);
       });
     };
     run();

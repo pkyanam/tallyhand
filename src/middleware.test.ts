@@ -71,6 +71,12 @@ beforeEach(() => {
 });
 
 describe("middleware", () => {
+  it.each(["/projects", "/timesheet", "/analytics", "/tax"])("requires a session or explicit local choice for %s", async (path) => {
+    await expect(invoke(fakeReq(path))).rejects.toMatchObject({ digest: "NEXT_REDIRECT" });
+    expect(clerkState.protectCalls).toBe(1);
+    expect((await invoke(fakeReq(path, {}, { tallyhand_local: "1" }))).status).toBe(200);
+    expect(clerkState.protectCalls).toBe(1);
+  });
   it("returns the JSON 401 envelope for unauthenticated v1 API requests", async () => {
     const response = await invoke(fakeReq("/api/v1/clients"));
     expect(response.status).toBe(401);

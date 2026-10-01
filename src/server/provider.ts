@@ -37,7 +37,7 @@ import { readOnlyIfViewer } from "@/lib/auth/read-only";
 let sqliteSingleton: StorageProvider | null = null;
 let pgDb: unknown | null = null;
 let neonDb: unknown | null = null;
-let convexClient: unknown | null = null;
+
 let warnedDexieFallback = false;
 
 function getSqliteProvider(): StorageProvider {
@@ -68,19 +68,13 @@ function getPgDb(): unknown {
   return pgDb;
 }
 
-function getConvexClient(): unknown {
-  if (!convexClient) {
-    const convexUrl = process.env.CONVEX_URL;
-    if (!convexUrl) {
-      throw new Error("TALLY_STORAGE=convex requires CONVEX_URL");
-    }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ConvexHttpClient } = require("convex/browser") as typeof import(
-      "convex/browser"
-    );
-    convexClient = new ConvexHttpClient(convexUrl);
-  }
-  return convexClient;
+function getConvexClient(): ConvexClientLike {
+  const url = process.env.CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) throw new Error("TALLY_STORAGE=convex requires CONVEX_URL");
+  // Create a request-scoped transport; a shared client's auth can leak across requests.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createConvexRequestClient } = require("@/lib/db/convex-client") as typeof import("@/lib/db/convex-client");
+  return createConvexRequestClient(url);
 }
 
 /**
@@ -206,6 +200,5 @@ export function resetServerProviderForTests(): void {
   pgDb = null;
   // The neon-http driver holds no connections — nothing to close.
   neonDb = null;
-  convexClient = null;
   warnedDexieFallback = false;
 }

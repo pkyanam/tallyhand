@@ -145,7 +145,7 @@ export function isHosted(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
   const storage = parseStorage(env);
-  const auth = parseAuth(env);
+  const auth = effectiveAuth(env);
   return (
     storage === "postgres" ||
     storage === "neon" ||
@@ -157,7 +157,7 @@ export function isHosted(
 export function getConfig(
   env: Record<string, string | undefined> = process.env,
 ): TallyConfig {
-  return { storage: parseStorage(env), auth: parseAuth(env), hosted: isHosted(env) };
+  return { storage: parseStorage(env), auth: effectiveAuth(env), hosted: isHosted(env) };
 }
 
 /**
@@ -177,8 +177,11 @@ export function validateConfig(
   if (storage === "neon" && !env.DATABASE_URL) {
     problems.push("TALLY_STORAGE=neon requires DATABASE_URL (a Neon connection string)");
   }
-  if (storage === "convex" && !env.CONVEX_URL) {
+  if (storage === "convex" && !env.CONVEX_URL && !env.NEXT_PUBLIC_CONVEX_URL) {
     problems.push("TALLY_STORAGE=convex requires CONVEX_URL");
+  }
+  if (storage === "convex" && (env.TALLY_CONVEX_SERVER_SECRET ?? "").length < 32) {
+    problems.push("TALLY_STORAGE=convex requires TALLY_CONVEX_SERVER_SECRET (min 32 chars), matching the Convex deployment");
   }
   if (auth === "clerk") {
     if (!clerkPublishableKey(env))

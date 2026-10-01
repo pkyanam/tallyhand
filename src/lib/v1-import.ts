@@ -28,7 +28,7 @@ import { z } from "zod";
 import {
   TALLYHAND_BUNDLE_FORMAT,
   type TallyhandBundleV1,
-} from "./app-bundle";
+} from "@/core/backup";
 
 export type DetectedFormat =
   | "tallyhand.v1"

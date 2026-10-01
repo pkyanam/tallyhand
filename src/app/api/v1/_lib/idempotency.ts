@@ -8,9 +8,9 @@
  * deploy boundary execute again.
  *
  * `sqlite` and `dexie` use the local SQLite file. `neon` uses the Neon HTTP
- * driver, `postgres` uses a lazy pg Pool, and `convex` currently runs without
- * persistence because Convex has no SQL table (native support is future
- * work). Persistence errors in every mode fail open to the handler so
+ * driver, `postgres` uses a lazy pg Pool, and `convex` uses native atomic claims and durable response receipts.
+ * Convex fails closed if a receipt is uncertain; other providers retain
+ * their legacy behavior. Persistence errors in legacy modes fail open to the handler so
  * idempotency degradation never turns a write into a 500. Cloud mode uses
  * first-writer-wins inserts but has no cross-request locking; concurrent
  * retries may execute twice. Neon HTTP also has no transactions, as noted in
@@ -159,7 +159,7 @@ async function withCloudSql(key: string, mode: "neon" | "postgres", handler: () 
 }
 
 /**
- * Idempotency machinery never throws or produces a 500 by itself: storage,
+ * Legacy-provider idempotency falls back on persistence errors: storage,
  * mode detection, path resolution, and key namespacing failures fail open to
  * the handler. Handler exceptions propagate unchanged after one execution.
  * Only the documented concurrent-retry race can execute a handler twice.
@@ -170,14 +170,17 @@ export async function withIdempotency(
 ): Promise<Response> {
   const key = req.headers.get("Idempotency-Key");
   if (!key || !["POST", "PUT", "PATCH"].includes(req.method)) return handler();
+  const mode = parseStorage();
+  if (mode === "convex") {
+    const { withConvexIdempotency } = await import("@/server/convex-idempotency");
+    return withConvexIdempotency(req, key, handler);
+  }
   let storedKey: string;
   try {
     storedKey = await namespacedKey(key);
   } catch {
     storedKey = key;
   }
-  const mode = parseStorage();
-  if (mode === "convex") return handler();
   if (mode === "neon" || mode === "postgres") return withCloudSql(storedKey, mode, handler);
   return withLocalSqlite(storedKey, handler);
 }

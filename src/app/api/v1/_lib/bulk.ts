@@ -35,7 +35,7 @@ export function validateBulk<S extends z.ZodTypeAny>(
   return errors.length > 0 ? { ok: false, errors } : { ok: true, items };
 }
 
-export const MAX_BULK_ITEMS = 200;
+export { MAX_BULK_ITEMS } from "@/core/api-limits";
 
 /**
  * Duplicate-id pre-check for bulk create (mirror retry-safety). Runs after

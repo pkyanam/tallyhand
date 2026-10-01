@@ -42,6 +42,7 @@ export function ProjectForm({
   onSubmit,
   onCancel,
 }: ProjectFormProps) {
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const form = useForm<ProjectFormInput>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
@@ -58,8 +59,13 @@ export function ProjectForm({
       input.rateOverride && input.rateOverride.trim() !== ""
         ? Number(input.rateOverride)
         : undefined;
-    await onSubmit({ name: input.name, rateOverride: rate });
-    if (!defaultValues?.id) form.reset();
+    setSubmitError(null);
+    try {
+      await onSubmit({ name: input.name, rateOverride: rate });
+      if (!defaultValues?.id) form.reset();
+    } catch {
+      setSubmitError("Couldn’t save this project. Your entries are still here; try again.");
+    }
   });
 
   return (
@@ -101,9 +107,10 @@ export function ProjectForm({
           )}
         </div>
       </div>
+      {submitError && <p role="alert" className="text-sm text-destructive">{submitError}</p>}
       <div className="flex items-center justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          <Button type="button" variant="outline" size="sm" disabled={form.formState.isSubmitting} onClick={onCancel}>
             Cancel
           </Button>
         )}

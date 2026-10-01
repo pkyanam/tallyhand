@@ -392,6 +392,11 @@ if [[ "$STORAGE" == Convex* ]]; then
   STORAGE_ENV=convex
   ask CONVEX_URL_VAL "CONVEX_URL (from \`npx convex dev\`)" "$(env_value CONVEX_URL)"
   [ -z "$CONVEX_URL_VAL" ] && die "CONVEX_URL is required for Convex storage."
+  TALLY_CONVEX_SERVER_SECRET="$(env_value TALLY_CONVEX_SERVER_SECRET)"
+  info "Enter the server bridge secret configured on your Convex deployment."
+  info "Use at least 32 characters; never use a NEXT_PUBLIC_ name for this secret."
+  ask_secret TALLY_CONVEX_SERVER_SECRET "TALLY_CONVEX_SERVER_SECRET"
+  [ "${#TALLY_CONVEX_SERVER_SECRET}" -ge 32 ] || die "A matching Convex server secret of at least 32 characters is required."
 fi
 
 # ------------------------------------------------------------- write .env
@@ -406,7 +411,7 @@ ENV_KV=(
   "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
 )
 if [ "$STORAGE_ENV" = "convex" ]; then
-  ENV_KV+=("CONVEX_URL=$CONVEX_URL_VAL")
+  ENV_KV+=("CONVEX_URL=$CONVEX_URL_VAL" "TALLY_CONVEX_SERVER_SECRET=$TALLY_CONVEX_SERVER_SECRET")
 fi
 if [ "$AUTH_ENV" = "clerk" ]; then
   ENV_KV+=("CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY:-}" "CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}")

@@ -83,7 +83,7 @@ export function ClerkAccountCard() {
         <CardTitle>Account</CardTitle>
         <CardDescription>
           {isSignedIn
-            ? `Signed in${email ? ` as ${email}` : ""}. Your encrypted data syncs across devices.`
+            ? `Signed in${email ? ` as ${email}` : ""}. Your cloud data syncs across devices.`
             : "You chose to use Tallyhand locally, without an account."}
         </CardDescription>
       </CardHeader>

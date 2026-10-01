@@ -18,6 +18,7 @@
  * Deliberately imports nothing from @clerk/nextjs: /login renders Clerk's
  * own <SignIn>/<SignUp> components, so this screen stays light.
  */
+import { BrandMark } from "@/components/app/brand-mark";
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Cloud, HardDrive } from "lucide-react";
@@ -100,8 +101,8 @@ export function LandingChoiceScreen() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
-        <span className="font-display text-lg font-semibold tracking-tight">
-          Tallyhand
+        <span className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
+          <BrandMark /> Tallyhand
         </span>
         <Button asChild variant="ghost" size="sm">
           <a
@@ -138,7 +139,7 @@ export function LandingChoiceScreen() {
                   Sign in / Create account
                 </span>
                 <span className="mt-1 block text-sm text-muted-foreground">
-                  Encrypted cloud sync across devices, hosted share links, API
+                  Cloud sync across devices, hosted share links, API
                   tokens, and CLI &amp; MCP access.
                 </span>
                 <span className="mt-4 inline-flex items-center text-sm font-medium">

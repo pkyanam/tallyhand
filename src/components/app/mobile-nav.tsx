@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { BrandMark } from "./brand-mark";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,8 +49,8 @@ export function MobileNav() {
         >
           <DialogTitle className="sr-only">App sections</DialogTitle>
           <div className="flex items-center gap-2 border-b px-4 py-3 pr-14 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
-            <div className="h-6 w-6 shrink-0 rounded bg-foreground" aria-hidden />
-            <span className="font-semibold tracking-tight">Tallyhand</span>
+            <BrandMark size={36} />
+            <span className="font-display text-xl font-semibold tracking-tight">Tallyhand</span>
           </div>
           <nav className="flex-1 space-y-1 p-2" aria-label="Main">
             {APP_NAV_ITEMS.map((item) => {
@@ -68,7 +69,7 @@ export function MobileNav() {
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <Icon className="h-[19px] w-[19px] shrink-0" strokeWidth={1.7} />
                   {item.label}
                 </Link>
               );

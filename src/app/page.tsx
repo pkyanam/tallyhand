@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/app/brand-mark";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,8 +28,8 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
-        <span className="font-display text-lg font-semibold tracking-tight">
-          Tallyhand
+        <span className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
+          <BrandMark /> Tallyhand
         </span>
         <Button asChild variant="ghost" size="sm">
           <a

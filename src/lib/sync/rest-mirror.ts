@@ -32,6 +32,7 @@
 
 import type { SyncEntityType } from "@/lib/db/sync-store";
 import { getSyncDb } from "@/lib/sync/sync-db";
+import { MAX_BULK_ITEMS } from "@/core/api-limits";
 
 export type RestEntityType = Exclude<SyncEntityType, "setting">;
 
@@ -232,28 +233,31 @@ export async function applyRestMirror(
       continue;
     }
 
-    const response = await fetch(bulkPath, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        ...SYNC_CSRF_HEADERS,
-        ...idempotencyHeaders(),
-      },
-      body: JSON.stringify({ items: entities }),
-    });
+    for (let offset = 0; offset < entities.length; offset += MAX_BULK_ITEMS) {
+      const batch = entities.slice(offset, offset + MAX_BULK_ITEMS);
+      const response = await fetch(bulkPath, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          ...SYNC_CSRF_HEADERS,
+          ...idempotencyHeaders(),
+        },
+        body: JSON.stringify({ items: batch }),
+      });
 
-    if (response.status === 409) {
-      for (const entity of entities) {
-        const result = await createEntity(type, entity);
-        if (result === "created") created += 1;
-        else updated += 1;
+      if (response.status === 409) {
+        for (const entity of batch) {
+          const result = await createEntity(type, entity);
+          if (result === "created") created += 1;
+          else updated += 1;
+        }
+        continue;
       }
-      continue;
-    }
 
-    await expectOk(response, type, entities.map((entity) => entity.id).join(","));
-    created += entities.length;
+      await expectOk(response, type, batch.map((entity) => entity.id).join(","));
+      created += batch.length;
+    }
   }
 
   for (const item of plan.update) {

@@ -46,3 +46,5 @@ next-env.d.ts
 
 # playwright-mcp smoke-test artifacts
 /.playwright-mcp/
+.env*
+!.env.example

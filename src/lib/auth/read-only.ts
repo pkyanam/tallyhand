@@ -47,6 +47,10 @@ export const WRITE_METHODS = new Set([
   "assignNextInvoiceNumber",
   "markInvoiceSent",
   "markInvoicePaid",
+  "createMileageEntry", "updateMileageEntry", "removeMileageEntry",
+  "createContract", "updateContract", "removeContract",
+  "createTaxPayment", "updateTaxPayment", "removeTaxPayment",
+  "createRateCard", "updateRateCard", "removeRateCard",
   // hosted-only share writes — viewers can't mint links either
   "createShareLink",
   "revokeShareLink",
