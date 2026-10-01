@@ -78,6 +78,10 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     return NextResponse.json({ error: { code: "forbidden", message: "OAuth tokens authorize workspace API requests only" } }, { status: 403 });
   }
 
+  // Workspace bearer routes validate credentials and scopes themselves. Avoid
+  // invoking browser-session machinery before those authenticated API handlers.
+  if (pathname.startsWith("/api/v1/") && hasBearer(req)) return NextResponse.next();
+
   if (authMode === "clerk") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = (await import("@clerk/nextjs/server")) as typeof import(

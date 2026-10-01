@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import middleware from "./middleware";
 
-const clerkState = vi.hoisted(() => ({ userId: null as string | null, protectCalls: 0 }));
+const clerkState = vi.hoisted(() => ({ userId: null as string | null, protectCalls: 0, middlewareCalls: 0 }));
 const modeState = vi.hoisted(() => ({ authMode: "clerk" as "clerk" | "builtin" | "none" }));
 
 vi.mock("next/server", () => {
@@ -30,6 +30,7 @@ vi.mock("@clerk/nextjs/server", () => ({
     }),
   clerkMiddleware: (handler: (auth: unknown, request: NextRequest, event: unknown) => unknown) =>
     async (req: NextRequest, event: unknown) => {
+      clerkState.middlewareCalls++;
       const auth = Object.assign(async () => ({ userId: clerkState.userId }), {
         protect: async () => {
           clerkState.protectCalls++;
@@ -67,6 +68,7 @@ const invoke = async (req: NextRequest): Promise<Response> =>
 beforeEach(() => {
   clerkState.userId = null;
   clerkState.protectCalls = 0;
+  clerkState.middlewareCalls = 0;
   modeState.authMode = "clerk";
 });
 
@@ -150,4 +152,11 @@ describe("middleware", () => {
     const response = await invoke(fakeReq("/api/v1/clients"));
     expect(response.status).toBe(200);
   });
+});
+
+it("avoids browser-session processing for machine workspace requests", async () => {
+  await invoke(fakeReq("/api/v1/settings", { Authorization: "Bearer synthetic_fixture" }));
+  expect(clerkState.middlewareCalls).toBe(0);
+  expect((await invoke(fakeReq("/api/v1/settings"))).status).toBe(401);
+  expect(clerkState.middlewareCalls).toBe(1);
 });
