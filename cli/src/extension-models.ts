@@ -1,0 +1,13 @@
+/** Agent-facing schemas for the extension REST collections. API validation remains authoritative. */
+import { z } from "zod";
+const id = z.string().min(1);
+const date = z.number().int().nonnegative().describe("Unix timestamp in milliseconds");
+const refs = { clientId: id.optional(), projectId: id.optional() };
+export const extensionModels = {
+  mileage: { path: "mileage", singular: "mileage_entry", plural: "mileage_entries", description: "Business mileage records; recording mileage does not file a tax return", schema: z.object({ date, miles: z.number().positive(), rate: z.number().positive().optional(), purpose: z.string().min(1), ...refs, origin: z.string().optional(), destination: z.string().optional(), vehicleNote: z.string().optional(), isBilled: z.boolean().optional(), invoiceId: id.optional() }).strict() },
+  contracts: { path: "contracts", singular: "contract", plural: "contracts", description: "Stored contract records and attachments; updating a record does not sign or accept a contract", schema: z.object({ clientId: id, projectId: id.optional(), type: z.enum(["sow", "msa", "nda", "other"]), title: z.string().min(1), startDate: date, endDate: date.optional(), renewalNoticeDays: z.number().int().nonnegative().optional(), autoRenew: z.boolean().optional(), fileB64: z.string().max(1_000_000).optional(), fileName: z.string().optional(), notes: z.string().optional(), archived: z.boolean().optional() }).strict() },
+  "tax-payments": { path: "tax-payments", singular: "tax_payment", plural: "tax_payments", description: "Bookkeeping records of tax payments already made; this never transfers money or files taxes", schema: z.object({ taxYear: z.number().int().min(2000).max(2100), quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]), date, amount: z.number().nonnegative().describe("Dollars, not cents"), jurisdiction: z.enum(["federal", "state"]), method: z.string().optional(), note: z.string().optional() }).strict() },
+  "rate-cards": { path: "rate-cards", singular: "rate_card", plural: "rate_cards", description: "Client/project rate cards and effective dates", schema: z.object({ clientId: id, projectId: id.optional(), name: z.string().min(1), defaultRate: z.number().nonnegative(), lines: z.array(z.object({ id: id.optional(), label: z.string().min(1), rate: z.number().nonnegative() }).strict()).optional(), effectiveFrom: date, effectiveTo: date.optional(), archived: z.boolean().optional() }).strict() },
+} as const;
+export type ExtensionEntity = keyof typeof extensionModels;
+export const extensionEntityNames = Object.keys(extensionModels) as ExtensionEntity[];

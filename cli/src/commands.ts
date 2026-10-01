@@ -34,11 +34,26 @@ import {
   computeLineAmount,
   type LineItemInput,
 } from "./billing.js";
-export const VERSION = "0.2.2";
+export const VERSION = "0.3.0";
 
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {
   hasToken: boolean;
+  extensionList?: TallyhandClient["extensionList"];
+  extensionGet?: TallyhandClient["extensionGet"];
+  extensionCreate?: TallyhandClient["extensionCreate"];
+  extensionUpdate?: TallyhandClient["extensionUpdate"];
+  extensionDelete?: TallyhandClient["extensionDelete"];
+  extensionBulk?: TallyhandClient["extensionBulk"];
+  profile?: TallyhandClient["profile"];
+  capabilities?: TallyhandClient["capabilities"];
+  listShares?: TallyhandClient["listShares"];
+  createShare?: TallyhandClient["createShare"];
+  revokeShare?: TallyhandClient["revokeShare"];
+  shareApprovals?: TallyhandClient["shareApprovals"];
+  dunning?: TallyhandClient["dunning"];
+  controlLink?: TallyhandClient["controlLink"];
+
   health(): Promise<any>;
   listClients(p?: any): Promise<any>;
   createClient(i: any): Promise<any>;

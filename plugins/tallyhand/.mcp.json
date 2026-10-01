@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "tallyhand": {
+      "url": "https://tallyhand.xyz/api/mcp"
+    }
+  }
+}

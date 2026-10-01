@@ -26,13 +26,15 @@ import { findOpenTimers, type Api } from "./commands.js";
 import { registerWorkspaceFeatures } from "./mcp-features.js";
 import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
 import { settingsPatchSchema } from "./settings-schema.js";
+import { registerExtendedTools } from "./mcp-extensions.js";
+import { registerAgentSkills } from "./mcp-skills.js";
 import { GUIDE } from "./guide.js";
 
-export const MCP_VERSION = "0.2.0";
+export const MCP_VERSION = "0.3.0";
 
 const ok = (data: unknown): CallToolResult => ({
   structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
-  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  content: [{ type: "text" as const, text: JSON.stringify(data) }],
 });
 
 const err = (e: unknown) => {
@@ -930,6 +932,8 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
   );
 
   registerWorkspaceFeatures(server, api, options);
+  registerExtendedTools(server, api, options);
+  registerAgentSkills(server);
   return server;
 }
 

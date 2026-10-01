@@ -1,0 +1,35 @@
+{
+  "name": "tallyhand",
+  "version": "0.3.0",
+  "description": "Contractor time tracking, invoicing and financial records with guided agent workflows.",
+  "author": {
+    "name": "Preetham Kyanam"
+  },
+  "homepage": "https://tallyhand.xyz",
+  "repository": "https://github.com/pkyanam/tallyhand",
+  "license": "MIT",
+  "keywords": [
+    "contractors",
+    "invoices",
+    "timesheets",
+    "finance"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Tallyhand",
+    "shortDescription": "Time tracking and invoicing for independent contractors",
+    "longDescription": "Manage contractor work, clients, projects, invoices and financial records through Tallyhand. Includes guided workflows and account-scoped tools.",
+    "developerName": "Preetham Kyanam",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://tallyhand.xyz",
+    "defaultPrompt": "Set up my contractor workspace",
+    "brandColor": "#111827",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png"
+  }
+}

@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createMcpServer } from "../src/mcp.js";
 import { ApiError } from "../src/client.js";
 
+import { CLI_MCP_PARITY } from "../src/mcp-parity.js";
 const EXPECTED_TOOLS = [
   "export_data", "export_workspace_backup", "import_workspace", "reset_workspace",
   "health_check",
@@ -56,6 +57,8 @@ const EXPECTED_TOOLS = [
   "get_settings",
   "update_settings",
 ];
+
+for (const name of Object.values(CLI_MCP_PARITY)) if (!EXPECTED_TOOLS.includes(name)) EXPECTED_TOOLS.push(name);
 
 function fakeApi() {
   return {

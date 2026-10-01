@@ -66,6 +66,7 @@ import {
   handleExport,
   handleDoctor,
 } from "./commands.js";
+import { registerExtensionCommands } from "./extension-commands.js";
 import { runMcpServer } from "./mcp.js";
 /* ------------------------------------------------------------------ */
 /* program                                                             */
@@ -727,6 +728,7 @@ export function buildProgram(): Command {
       const { checkOAuth } = await import("./oauth-check.js");
       await checkOAuth(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl);
     }));
+  registerExtensionCommands(program);
   return program;
 }
 

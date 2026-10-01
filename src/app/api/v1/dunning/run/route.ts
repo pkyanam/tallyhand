@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
   // Parse + validate before idempotency: the wrapper only inspects
   // headers, so reading the body here is safe.
-  const body: unknown = await req.json().catch(() => null);
+  const body: unknown = await req.clone().json().catch(() => null);
   const parsed = body as { dryRun?: unknown; invoiceIds?: unknown } | null;
 
   const dryRun = isDryRun(req) || (parsed != null && parsed.dryRun === true);

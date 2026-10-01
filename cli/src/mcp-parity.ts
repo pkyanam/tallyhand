@@ -1,3 +1,4 @@
+import { extensionModels, extensionEntityNames } from "./extension-models.js";
 /** Public business-feature contract. Local credential/process controls stay local. */
 export const CLI_MCP_PARITY: Record<string, string> = {
   "timer start": "timer_start", "timer stop": "timer_stop", "timer status": "timer_status", log: "log_time", unbilled: "list_unbilled",
@@ -12,3 +13,9 @@ export const CLI_MCP_PARITY: Record<string, string> = {
   "data export": "export_workspace_backup", "data import": "import_workspace", "data reset": "reset_workspace",
 };
 export const LOCAL_ONLY_COMMANDS = ["setup-check", "login", "config set", "config show", "doctor", "mcp", "mcp check", "mcp oauth-check"];
+
+for (const entity of extensionEntityNames) {
+  const model = extensionModels[entity];
+  for (const [command, tool] of Object.entries({ list: `list_${model.plural}`, show: `get_${model.singular}`, create: `create_${model.singular}`, update: `update_${model.singular}`, delete: `delete_${model.singular}`, bulk: `bulk_create_${model.plural}` })) CLI_MCP_PARITY[`${entity} ${command}`] = tool;
+}
+Object.assign(CLI_MCP_PARITY, { profile: "get_profile", capabilities: "get_workspace_capabilities", control: "get_control_link", "share list": "list_share_links", "share create": "create_share_link", "share revoke": "revoke_share_link", "share approvals": "get_share_approvals", "reminders preview": "preview_overdue_reminders", "reminders run": "run_overdue_reminders" });

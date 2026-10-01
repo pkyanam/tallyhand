@@ -7,7 +7,7 @@ import { buildExport, type Api } from "./commands.js";
 
 const result = (data: unknown): CallToolResult => ({
   structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
-  content: [{ type: "text", text: JSON.stringify(data ?? null, null, 2) }],
+  content: [{ type: "text", text: JSON.stringify(data ?? null) }],
 });
 
 export function registerWorkspaceFeatures(server: McpServer, api: Api, options: McpAuthOptions) {

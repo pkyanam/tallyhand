@@ -1,3 +1,4 @@
+import { withApiRequestCache } from "@/lib/auth/request-cache";
 /**
  * SERVER ONLY — never import from client components.
  *
@@ -388,5 +389,5 @@ export function defineExtensionCrud<
     return noContent();
   }
 
-  return { list, create, bulkCreate, get, patch, remove };
+  return { list: withApiRequestCache(list), create: withApiRequestCache(create), bulkCreate: withApiRequestCache(bulkCreate), get: withApiRequestCache(get), patch: withApiRequestCache(patch), remove: withApiRequestCache(remove) };
 }

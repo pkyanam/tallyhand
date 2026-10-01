@@ -18,6 +18,7 @@
  *   timer. `timer start` creates such a task; `timer stop` patches endAt.
  */
 
+import { extensionModels, type ExtensionEntity } from "./extension-models.js";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
@@ -139,6 +140,7 @@ export class TallyhandClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | boolean | undefined>,
+    envelope = false,
   ): Promise<any> {
     const url = new URL(this.baseUrl + path);
     if (query) {
@@ -195,6 +197,7 @@ export class TallyhandClient {
           : text || res.statusText || `HTTP ${res.status}`;
       throw new ApiError(res.status, code, message, json?.error?.details);
     }
+    if (envelope) return json;
     if (json && typeof json === "object" && "data" in json) return json.data;
     return json;
   }
@@ -255,6 +258,21 @@ export class TallyhandClient {
     }
     return items;
   }
+
+  extensionList(entity: ExtensionEntity, params: RequestOpts = {}) { const { all, ...query } = params; return all ? this.list(`/${extensionModels[entity].path}`, params) : this.request("GET", `/${extensionModels[entity].path}`, undefined, query as Record<string, string | number | boolean | undefined>, true); }
+  extensionGet(entity: ExtensionEntity, id: string) { return this.request("GET", `/${extensionModels[entity].path}/${pathId(id)}`); }
+  extensionCreate(entity: ExtensionEntity, input: unknown) { return this.request("POST", `/${extensionModels[entity].path}`, input); }
+  extensionUpdate(entity: ExtensionEntity, id: string, input: unknown) { return this.request("PATCH", `/${extensionModels[entity].path}/${pathId(id)}`, input); }
+  extensionDelete(entity: ExtensionEntity, id: string, dryRun = true) { return this.request("DELETE", `/${extensionModels[entity].path}/${pathId(id)}`, undefined, { dry_run: dryRun }); }
+  extensionBulk(entity: ExtensionEntity, items: unknown[]) { return this.request("POST", `/${extensionModels[entity].path}/bulk`, { items }); }
+  profile() { return this.request("GET", "/profile"); }
+  capabilities() { return this.request("GET", "/capabilities"); }
+  listShares() { return this.request("GET", "/share-links"); }
+  createShare(input: unknown) { return this.request("POST", "/share-links", input); }
+  revokeShare(id: string) { return this.request("DELETE", `/share-links/${pathId(id)}`); }
+  shareApprovals(id: string) { return this.request("GET", `/share-links/${pathId(id)}/approvals`); }
+  dunning(opts: { dryRun?: boolean; invoiceIds?: string[] } = {}) { return this.request("POST", "/dunning/run", { invoiceIds: opts.invoiceIds }, { dry_run: opts.dryRun !== false }); }
+  controlLink(control: string) { return this.request("GET", "/controls", undefined, { control }); }
 
   private list(
     path: string,

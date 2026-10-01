@@ -21,6 +21,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify bundled agent skills
+        run: |
+          node scripts/build-agent-skills.mjs --check
+          python3 scripts/package-agent-plugin.py --check
+
       - name: Lint
         run: npm run lint
 
