@@ -13,7 +13,16 @@ export function memoRequestAuth<T>(key: string, fn: () => Promise<T>): Promise<T
 
 /** Boundary wrapper for REST handlers; nested MCP dispatch retains its request cache. */
 export function withApiRequestCache<Args extends unknown[]>(handler: (...args: Args) => Promise<Response>) {
-  return (...args: Args): Promise<Response> => requestCache.getStore()
-    ? handler(...args)
-    : withRequestAuthCache(() => handler(...args));
+  return (...args: Args): Promise<Response> => {
+    const execute = async () => {
+      const started = performance.now();
+      const response = await handler(...args);
+      const elapsed = performance.now() - started;
+      response.headers.append("Server-Timing", `api;dur=${elapsed.toFixed(1)}`);
+      response.headers.set("Cache-Control", "private, no-store");
+      if (elapsed > 1000) console.info("slow_workspace_api", { handler: handler.name, durationMs: Math.round(elapsed), status: response.status });
+      return response;
+    };
+    return requestCache.getStore() ? execute() : withRequestAuthCache(execute);
+  };
 }

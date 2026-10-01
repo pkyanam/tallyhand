@@ -30,10 +30,10 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(res.status).toBe(403);
     expect(res.headers.get("www-authenticate")).toContain("tally:read tally:write");
   });
-  it("advertises precise tool scopes for all 53 tools", async () => {
+  it("advertises precise tool scopes for all 86 tools", async () => {
     const res = await POST(request("tools/list", {}));
     const body = await payload(res);
-    expect(body.result.tools).toHaveLength(53);
+    expect(body.result.tools).toHaveLength(86);
     for (const tool of body.result.tools) expect(tool._meta.securitySchemes[0].scopes).toContain("tally:read");
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "update_settings")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:write"]);
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "reset_workspace")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:manage"]);

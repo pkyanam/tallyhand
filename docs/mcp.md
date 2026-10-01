@@ -15,7 +15,7 @@ Tallyhand exposes the **same workspace API and authenticated owner** through its
 
 ## Workspace capabilities
 
-53 tools cover all CLI business operations, including JSON/CSV export and atomic cloud backup/import/reset. `tally://capabilities/cli-parity` contains the maintained command-to-tool map. CI fails when a new CLI leaf lacks either a tool mapping or an explicit local-only classification.
+86 tools cover all CLI business operations, including JSON/CSV export and atomic cloud backup/import/reset. `tally://capabilities/cli-parity` contains the maintained command-to-tool map. CI fails when a new CLI leaf lacks either a tool mapping or an explicit local-only classification.
 
 Local file paths, storing credentials, spawning the server and CLI health benchmarks are not remote workspace operations. MCP exports return content for the client to save. MCP discovery/authentication provide the corresponding connection controls without exposing configuration secrets as tools.
 

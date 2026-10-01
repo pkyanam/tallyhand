@@ -17,7 +17,7 @@ Clerk OAuth with PKCE, user consent, and resource https://tallyhand.xyz/api/mcp;
 Personal API keys use Authorization: Bearer in headers. Never place keys in URLs or tool arguments.
 CLI: tally config set api-url https://tallyhand.xyz, then tally login and tally doctor.
 Local stdio MCP: tally mcp. Run tally --help for command discovery; --json gives structured output.
-53 tools cover the CLI business API; resources, prompts, completion, structured output, and form elicitation are supported.
+86 tools cover the CLI business API; resources, prompts, completion, structured output, and form elicitation are supported.
 Optional Tasks, Skills, and MCP Apps extensions are not currently advertised.
 
 ## Data and action semantics

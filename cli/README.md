@@ -85,7 +85,7 @@ stderr with a hint and exit 1.
 
 ## For AI agents
 
-`tally mcp` launches an MCP server over stdio with 53 tools
+`tally mcp` launches an MCP server over stdio with 86 tools
 (`health_check`, `timer_start`, `timer_stop`, `timer_status`, `log_time`,
 `list_unbilled`, `create_invoice_draft`, `send_invoice`, `mark_invoice_paid`,
 `list_recurring_schedules`, `create_recurring_schedule`,
