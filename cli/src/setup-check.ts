@@ -14,7 +14,7 @@ export async function checkSetup(baseUrl: string) {
   const client = JSON.parse(texts.get("/.well-known/tally-cli.json")!);
   if (metadata.resource !== `${origin}/api/mcp` || !metadata.authorization_servers?.length || client.client_id !== `${origin}/.well-known/tally-cli.json`) throw new Error("OAuth metadata incomplete");
   const issuer = metadata.authorization_servers[0];
-  const res = await fetch(`${issuer}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(30_000), redirect: "error" });
+  const res = await fetch(`${issuer}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(30_000), redirect: "error" });
   if (!res.ok) throw new Error(`Clerk discovery: HTTP ${res.status}`);
   const discovery = await res.json() as { client_id_metadata_document_supported?: boolean; code_challenge_methods_supported?: string[]; scopes_supported?: string[] };
   if (!discovery.client_id_metadata_document_supported || !discovery.code_challenge_methods_supported?.includes("S256")) throw new Error("Clerk CIMD/PKCE discovery incomplete");
