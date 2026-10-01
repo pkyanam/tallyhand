@@ -58,4 +58,18 @@ For each, capture the precise user prompt, expected tools, expected result and C
 
 OAuth lifecycle reliability remains under investigation. Initial cloud latency still exceeds warm-request latency. Client-specific invoice defaults and previous-calendar-month recurring cutoffs remain pending. Recurring schedules currently reserve source entries at draft creation. The browser checks schedules on startup and periodically; saving a schedule does not provision an always-on server job. Keep all skill, guide and tool descriptions consistent with these limitations.
 
-The development archive is not submission-ready: legal/support URLs, targeting, review metadata and the recorded demonstration remain incomplete. Version 0.3.3 corrects the listing subtitle to the documented 30-character limit. The bundled CLI/server version remains 0.3.2.
+The development archive is not submission-ready: legal/support URLs, targeting, review metadata and the recorded demonstration remain incomplete. Version 0.3.4 synchronizes CLI/server/plugin identifiers, adds offline host tool-list comparison, and clarifies separate package, connection, and scan lifecycles. Hosted acceptance and OAuth lifecycle checks remain pending until actually exercised.
+
+## 0.3.4 release evidence (in progress)
+
+- Source catalog: 86 tools; host report: 76. The missing set has not been supplied, so no causal claim is made from counts alone.
+- Offline catalog comparison implemented; it reports missing/unexpected/duplicate names without transmitting account data.
+- Current SDK strips top-level OAuth descriptors by default. A public-handler catalog adapter now mirrors auth metadata at the descriptor top level; raw legacy and modern response tests pass. Scope enforcement remains in the existing call handlers.
+- Local dual dependency installs caused modern HTTP tests to fail class-identity detection. Vite deduplication and a root ESM Next alias keep one server implementation. This local failure is not evidence of a production outage.
+- Local checks: 683 web tests, 94 CLI tests, CLI typecheck, lint, installer rerun/checksum tests and production build passed before deployment. Packaged review cases are drafted, not certified as executed in ChatGPT.
+- Live CLI access is blocked by the execution environment network policy. No live release verification or new OAuth grant is claimed.
+- Known related public host reports: openai/codex #37313 and #43195. Different scopes; neither establishes Tallyhand's cause.
+
+## Demo walkthrough to record after host verification
+
+Use an isolated synthetic reviewer account, never the owner's HIPCO workspace. Show the installed version, OAuth consent, stable workspace identity, and the exact tool inventory. Ask to preview a business profile and Net 30 defaults; verify no mutation before approval. Approve the preview, then create a synthetic client/project, log one hour at $45, and prepare an unsent $45 draft. Show settings and invoice readback. Ask for a bank transfer to demonstrate the supported bookkeeping boundary without attempting one. Reconnect and read the same workspace again. Keep credentials and unrelated tabs off screen. A recording is not yet made or certified.

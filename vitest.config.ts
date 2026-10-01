@@ -9,6 +9,7 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
+    dedupe: ["@modelcontextprotocol/server"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },

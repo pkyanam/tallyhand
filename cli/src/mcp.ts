@@ -28,8 +28,10 @@ import { settingsPatchSchema } from "./settings-schema.js";
 import { registerExtendedTools } from "./mcp-extensions.js";
 import { registerAgentSkills } from "./mcp-skills.js";
 import { GUIDE } from "./guide.js";
+import { TallyhandMcpServer } from "./mcp-server.js";
 
-export const MCP_VERSION = "0.3.2";
+import { RELEASE_VERSION } from "./version.js";
+export const MCP_VERSION = RELEASE_VERSION;
 
 const ok = (data: unknown): CallToolResult => ({
   structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
@@ -63,7 +65,7 @@ const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
 export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServer {
-  const server = new McpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
+  const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
     instructions: "Contractor finance workspace. Read tally://guide. Amounts are dollars, timestamps milliseconds. Draft invoices before sending. Obtain explicit user consent for financial status changes, deletes, reset and import. Never request credentials through tools or prompts.",
     cacheHints: {
       "tools/list": { ttlMs: 300000, cacheScope: "private" },
@@ -98,7 +100,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
 
   tool(
     "health_check",
-    "Check that the Tallyhand server is reachable. No auth required. Run this first when anything else fails — it distinguishes 'server down' from 'bad token'.",
+    "Check application health through the current MCP connection. Hosted MCP requires authentication even for this tool. Use tally doctor to diagnose connectivity before an MCP connection is established.",
     {},
     safe(async () => api.health()),
   );
@@ -929,6 +931,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
   registerWorkspaceFeatures(server, api, options);
   registerExtendedTools(server, api, options);
   registerAgentSkills(server);
+  server.installToolCatalog();
   return server;
 }
 

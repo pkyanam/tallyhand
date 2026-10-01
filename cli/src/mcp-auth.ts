@@ -5,6 +5,7 @@ export function toolScopes(scope: string): [string, ...string[]] { return scope 
 export function toolAuthPolicy(options: McpAuthOptions, scope: string) {
   const scopes = toolScopes(scope);
   return {
+    securitySchemes: [{ type: "oauth2", scopes }],
     _meta: { securitySchemes: [{ type: "oauth2", scopes }] },
     scopeChallenge: options.oauth && !options.legacyOAuth ? requireScopes(...scopes) : undefined,
   };

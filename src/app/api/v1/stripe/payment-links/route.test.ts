@@ -11,6 +11,10 @@ vi.mock("@/server/auth", () => ({
 vi.mock("@/server/provider", () => ({
   getServerProvider: mockGetServerProvider,
 }));
+// These cases exercise the platform-key path, not a real user's connection
+// store. Keep isolated tests independent of the developer's home database.
+vi.mock("@/lib/auth/session", () => ({ resolveUserId: async () => "user_fixture" }));
+vi.mock("@/lib/stripe-connect/store", () => ({ getStripeConnectionMeta: async () => null }));
 // Pass straight through the handler — the real wrapper needs a sqlite file.
 vi.mock("../../_lib/idempotency", () => ({
   withIdempotency: (_req: Request, handler: () => Promise<Response>) => handler(),

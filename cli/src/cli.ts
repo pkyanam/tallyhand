@@ -715,9 +715,18 @@ export function buildProgram(): Command {
 
   mcp.command("catalog").description("Inspect bundled MCP tool definitions without network or account access")
     .option("--tool <name>", "show one exact tool definition")
+    .option("--names", "show only tool names for a compact inventory")
+    .option("--compare <file>", "compare an exported host JSON tool list with this release (no network)")
     .action(wrap(async (_cmd, opts) => {
-      const { inspectMcpCatalog } = await import("./mcp-catalog.js");
-      console.log(JSON.stringify(await inspectMcpCatalog(opts.tool), null, 2));
+      const { inspectMcpCatalog, compareToolCatalog } = await import("./mcp-catalog.js");
+      if (opts.compare && opts.tool) throw new Error('--compare cannot be combined with --tool');
+      const catalog = await inspectMcpCatalog(opts.tool);
+      if (opts.compare) {
+        if (statSync(opts.compare).size > 4 * 1024 * 1024) throw new Error('Tool inventory must be at most 4 MiB');
+        const comparison = compareToolCatalog(catalog.tools.map(tool => tool.name), JSON.parse(readFileSync(opts.compare, 'utf8')));
+        console.log(JSON.stringify({ source: catalog.source, version: catalog.version, ...comparison }, null, 2));
+        if (comparison.missing.length || comparison.unexpected.length || comparison.duplicateNames) process.exitCode = 1;
+      } else console.log(JSON.stringify(opts.names ? { ...catalog, tools: catalog.tools.map(tool => tool.name) } : catalog, null, 2));
     }));
   mcp.command("check").description("Read-only MCP protocol and feature verification")
     .option("--transport <http|stdio>", "transport to verify", "http")

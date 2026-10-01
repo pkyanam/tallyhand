@@ -20,7 +20,7 @@ export async function checkSetup(baseUrl: string) {
   const discovery = await res.json() as { client_id_metadata_document_supported?: boolean; code_challenge_methods_supported?: string[]; scopes_supported?: string[] };
   if (!discovery.client_id_metadata_document_supported || !discovery.code_challenge_methods_supported?.includes("S256")) throw new Error("Clerk CIMD/PKCE discovery incomplete");
   for (const scope of ["tally:read", "tally:write", "tally:manage"]) if (!discovery.scopes_supported?.includes(scope)) throw new Error(`Clerk discovery missing ${scope}`);
-  const pluginPath = "/plugins/tallyhand-0.3.3.zip";
+  const pluginPath = "/plugins/tallyhand-0.3.4.zip";
   const [archive, checksum] = await Promise.all([fetch(origin + pluginPath, { signal: AbortSignal.timeout(30_000), redirect: "error" }), fetch(origin + pluginPath + ".sha256", { signal: AbortSignal.timeout(30_000), redirect: "error" })]);
   if (!archive.ok || !checksum.ok) throw new Error("Plugin download unavailable");
   const bytes = Buffer.from(await archive.arrayBuffer());

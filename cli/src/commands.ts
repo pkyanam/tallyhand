@@ -34,7 +34,8 @@ import {
   computeLineAmount,
   type LineItemInput,
 } from "./billing.js";
-export const VERSION = "0.3.1";
+import { RELEASE_VERSION } from "./version.js";
+export const VERSION = RELEASE_VERSION;
 
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {

@@ -16,6 +16,30 @@ Inspect the script first if desired. The installer verifies the release checksum
 For source installation (Node 22+): `cd cli && npm ci && npm run build && npm link`.
 A server-backed deployment (Convex, SQLite, or Postgres) is required for API access. Browser-only offline data must first be imported into your cloud account.
 
+## Plugin installation and connection diagnostics
+
+The latest development ZIP is at [tallyhand.xyz/plugins/tallyhand.zip](https://tallyhand.xyz/plugins/tallyhand.zip).
+Use ChatGPT's **Plugins → Upload plugin** where available, complete the account connection, then start a new chat.
+This is not a public marketplace listing. Installing skills does not grant account access.
+
+- **Account connection:** Settings → Plugins → Tallyhand → Connected accounts or Connection; use the available Reconnect or Disconnect controls and review warnings.
+- **Developer-mode MCP tool updates:** Refresh the connection metadata, then use a new conversation.
+- **Platform submissions:** inspect MCPs → server → Issues → Rescan, including any held versus live tool definitions. This is distinct from OAuth reconnection.
+- **Package updates:** update the existing plugin with the new ZIP through the supported host flow. Do not create duplicate entries to hide a failure.
+
+Version 0.3.4 adds offline catalog comparison. This reads no account data and performs no network requests:
+
+```bash
+tally --version
+tally mcp catalog --names
+tally mcp catalog --tool update_settings
+tally mcp catalog --compare host-tools.json
+```
+
+The comparison accepts an array of exact MCP names, an object with `tools`, or a JSON-RPC `result.tools` response. Missing, unexpected, or duplicate names produce exit status 1. The output contains names only; it does not echo unrelated exported fields. Remove host-specific prefixes before comparison. Never put tokens or financial records into the file.
+
+A bundled catalog is not proof of the deployed or host-approved catalog. For live, read-only transport checks use `tally mcp check --transport http --protocol legacy --workspace` and the corresponding `--protocol modern` check with an authorized test account.
+
 ## Config
 
 ```bash

@@ -6,7 +6,7 @@ const withPWA = require("next-pwa")({
   register: true,
   skipWaiting: true,
   runtimeCaching: [
-    { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
+    { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|plugins\/|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
     // Authenticated data must never come from a previous session's SW cache.
     { urlPattern: /\/api\//, handler: "NetworkOnly", method: "GET" },
     ...require("next-pwa/cache"),
@@ -17,11 +17,22 @@ const withPWA = require("next-pwa")({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    const { version } = require("./plugins/tallyhand/plugin.json");
+    return [{ source: "/plugins/tallyhand.zip", destination: `/plugins/tallyhand-${version}.zip`, permanent: false }];
+  },
   async headers() { return ["/setup.sh", "/installer/setup.sh", "/llms.txt"].map(source => ({ source, headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }, { key: "Cache-Control", value: "public, max-age=0, must-revalidate" }, { key: "X-Content-Type-Options", value: "nosniff" }] })); },
   // Avoid EMFILE: too many open files on some macOS setups (watchers exhaust
   // `ulimit -n`). Polling is slightly slower but far fewer file descriptors.
   // Raise limits if you prefer fast native watch: `ulimit -n 10240` in the shell.
   webpack: (config, { dev }) => {
+    // The CLI can also have its own node_modules during local development.
+    // MCP's HTTP factory uses class identity; resolve every server import to
+    // the same ESM copy used by the web application's transport.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@modelcontextprotocol/server$": require.resolve("@modelcontextprotocol/server").replace(/\.cjs$/, ".mjs"),
+    };
     if (dev) {
       config.watchOptions = {
         ...config.watchOptions,

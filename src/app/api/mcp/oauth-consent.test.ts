@@ -24,19 +24,25 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(body.result.isError).toBe(true);
     expect(body.result._meta["mcp/www_authenticate"][0]).toContain('scope="tally:read tally:write"');
     expect(body.result._meta["mcp/www_authenticate"][0]).toContain('error="insufficient_scope"');
+    expect(JSON.stringify(body)).not.toContain("oat_synthetic_fixture");
   });
   it("preserves modern HTTP scope challenges and the mandatory base scope", async () => {
     const res = await POST(request("tools/call", { name: "update_settings", arguments: { patch: {} } }, true));
     expect(res.status).toBe(403);
     expect(res.headers.get("www-authenticate")).toContain("tally:read tally:write");
+    expect(await res.text()).not.toContain("oat_synthetic_fixture");
   });
   it("advertises precise tool scopes for all 86 tools", async () => {
     const res = await POST(request("tools/list", {}));
     const body = await payload(res);
     expect(body.result.tools).toHaveLength(86);
-    for (const tool of body.result.tools) expect(tool._meta.securitySchemes[0].scopes).toContain("tally:read");
+    for (const tool of body.result.tools) {
+      expect(tool._meta.securitySchemes[0].scopes).toContain("tally:read");
+      expect(tool.securitySchemes).toEqual(tool._meta.securitySchemes);
+    }
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "update_settings")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:write"]);
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "reset_workspace")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:manage"]);
+    expect(body.result.tools.find((tool: { name: string }) => tool.name === "get_profile")._meta["openai/profile"]).toBe(true);
   });
 });
 

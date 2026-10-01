@@ -205,6 +205,15 @@ export function ConnectClient() {
       />
 
       <div className="mx-auto grid max-w-3xl gap-6">
+        <Card>
+          <CardHeader><CardTitle>ChatGPT &amp; Codex plugin</CardTitle><CardDescription>Guided workflows with your own Tallyhand account</CardDescription></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p><a href="/plugins/tallyhand.zip" className="underline">Download the latest development plugin</a>, upload it from ChatGPT’s Plugins page where supported, then complete OAuth when prompted. Start a new chat after installation.</p>
+            <p>Already connected? Manage the account in ChatGPT Settings → Plugins → Tallyhand → Connected accounts or Connection. Use Reconnect if offered; review warnings before disconnecting. API tokens below are separate from OAuth connections.</p>
+            <p>Missing a tool after an update? Refresh the developer-mode connection’s metadata. Publisher tool scans and package updates are separate from signing in again.</p>
+            <a href="/docs#plugin" className="underline">Installation, updates, and troubleshooting</a>
+          </CardContent>
+        </Card>
         {/* ------------------------------------------------ tokens */}
         <Card>
           <CardHeader>
