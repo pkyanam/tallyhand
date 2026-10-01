@@ -27,6 +27,10 @@ export async function checkMcp(config: ResolvedConfig, opts: { transport?: strin
     const guide = await client.readResource({ uri: "tally://guide" });
     const health = await client.callTool({ name: "health_check", arguments: {} });
     if (health.isError) throw new Error(`MCP health tool failed: ${JSON.stringify(health.content)}`);
+    for (const tool of tools.tools) {
+      const schemes = tool._meta?.securitySchemes as Array<{ scopes?: string[] }> | undefined;
+      if (!schemes?.[0]?.scopes?.includes("tally:read")) throw new Error(`Missing OAuth policy for ${tool.name}`);
+    }
     const missing = Object.values(CLI_MCP_PARITY).filter(name => !tools.tools.some(tool => tool.name === name));
     if (missing.length) throw new Error(`Missing MCP tools: ${missing.join(", ")}`);
     stage = "elicitation";

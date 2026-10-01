@@ -1,5 +1,6 @@
 /** MCP-native resources, prompts and missing CLI data operations. */
 import { McpServer, ResourceTemplate, completable, inputRequired, acceptedContent, requireScopes, type CallToolResult } from "@modelcontextprotocol/server";
+import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
 import { z } from "zod";
 import { CLI_MCP_PARITY, LOCAL_ONLY_COMMANDS } from "./mcp-parity.js";
 import { buildExport, type Api } from "./commands.js";
@@ -9,7 +10,7 @@ const result = (data: unknown): CallToolResult => ({
   content: [{ type: "text", text: JSON.stringify(data ?? null, null, 2) }],
 });
 
-export function registerWorkspaceFeatures(server: McpServer, api: Api, options: { oauth?: boolean }) {
+export function registerWorkspaceFeatures(server: McpServer, api: Api, options: McpAuthOptions) {
   const scope = (name: string) => options.oauth ? requireScopes(name) : undefined;
   const entities = ["clients", "projects", "tasks", "expenses", "invoices", "all"] as const;
   const chooseExport = z.object({ entity: z.enum(entities) });
@@ -17,9 +18,10 @@ export function registerWorkspaceFeatures(server: McpServer, api: Api, options: 
     title: "Export workspace data", description: "Export the same JSON or CSV as tally export. Returns content, never writes files on the server. The client may save it locally. Omit entity to ask the user which data to export through MCP elicitation.",
     inputSchema: z.object({ entity: z.enum(entities).optional(), format: z.enum(["json", "csv"]).default("json") }),
     outputSchema: z.object({ data: z.unknown() }),
-    scopeChallenge: scope("tally:read"),
+    ...toolAuthPolicy(options, "tally:read"),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, ctx) => {
+    const denied = toolAuthError(options, "tally:read", ctx); if (denied) return denied;
     let entity = args.entity;
     if (!entity) {
       const response = ctx.mcpReq.inputResponses?.exportSelection;
@@ -34,17 +36,18 @@ export function registerWorkspaceFeatures(server: McpServer, api: Api, options: 
   });
   server.registerTool("export_workspace_backup", {
     description: "Export an atomic tallyhand.v1 cloud backup and its revision. Save the bundle before import or reset. Includes business data and settings, excludes API keys and login credentials.",
-    inputSchema: z.object({}), outputSchema: z.object({ data: z.unknown() }), scopeChallenge: scope("tally:read"),
+    inputSchema: z.object({}), outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, "tally:read"),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async () => { if (!api.backup) throw new Error("Cloud backups unavailable on this backend"); return result(await api.backup()); });
+  }, async (_args, ctx) => { const denied = toolAuthError(options, "tally:read", ctx); if (denied) return denied; if (!api.backup) throw new Error("Cloud backups unavailable on this backend"); return result(await api.backup()); });
   for (const action of ["import", "reset"] as const) {
     const phrase = action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA";
     server.registerTool(`${action}_workspace`, {
       description: `${action === "import" ? "Replace workspace with a tallyhand.v1 backup" : "Clear workspace business data and settings"}. Requires explicit user confirmation and the revision from export_workspace_backup. Save the exported bundle before calling. Revokes share links; preserves login and API keys. Revision mismatch changes nothing.`,
       inputSchema: z.object({ expectedRevision: z.number().int().nonnegative(), confirmation: z.literal(phrase), backupSaved: z.literal(true), ...(action === "import" ? { bundle: z.record(z.string(), z.unknown()) } : {}) }),
-      outputSchema: z.object({ data: z.unknown() }), scopeChallenge: scope("tally:manage"),
+      outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, "tally:manage"),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-    }, async (args) => {
+    }, async (args, ctx) => {
+      const denied = toolAuthError(options, "tally:manage", ctx); if (denied) return denied;
       if (!api.replaceData) throw new Error("Cloud import/reset unavailable on this backend");
       return result(await api.replaceData({ action, expectedRevision: args.expectedRevision, confirmation: args.confirmation, ...(action === "import" ? { bundle: args.bundle } : {}) }));
     });

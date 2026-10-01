@@ -8,7 +8,7 @@
  * IMPORTANT: nothing in this module may write to stdout — the stdio transport
  * owns it. All results flow through tool return values.
  */
-import { McpServer, ResourceTemplate, completable, type CallToolResult, type ServerContext, requireScopes } from "@modelcontextprotocol/server";
+import { McpServer, ResourceTemplate, completable, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { ApiError } from "./client.js";
@@ -24,6 +24,7 @@ import {
 } from "./billing.js";
 import { findOpenTimers, type Api } from "./commands.js";
 import { registerWorkspaceFeatures } from "./mcp-features.js";
+import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
 import { GUIDE } from "./guide.js";
 
 export const MCP_VERSION = "0.2.0";
@@ -58,7 +59,7 @@ const dateArg = (desc: string) =>
 const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
-export function createMcpServer(api: Api, options: { oauth?: boolean } = {}): McpServer {
+export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServer {
   const server = new McpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
     instructions: "Contractor finance workspace. Read tally://guide. Amounts are dollars, timestamps milliseconds. Draft invoices before sending. Obtain explicit user consent for financial status changes, deletes, reset and import. Never request credentials through tools or prompts.",
     cacheHints: {
@@ -71,14 +72,17 @@ export function createMcpServer(api: Api, options: { oauth?: boolean } = {}): Mc
   });
   const tool = (name: string, description: string, schema: z.ZodRawShape, handler: (args: any, ctx?: ServerContext) => Promise<CallToolResult>) => {
     const readOnlyHint = /^(health_|list_|get_|timer_status$|revenue_|export_)/.test(name);
+    const requiredScope = readOnlyHint ? "tally:read" : /^(delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name) ? "tally:manage" : "tally:write";
     server.registerTool(name, {
       title: name.split("_").map(word => word[0].toUpperCase() + word.slice(1)).join(" "),
       description,
       inputSchema: z.object(schema),
       outputSchema: z.object({ data: z.unknown() }),
-      scopeChallenge: options.oauth ? requireScopes(readOnlyHint ? "tally:read" : /^(delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name) ? "tally:manage" : "tally:write") : undefined,
+      ...toolAuthPolicy(options, requiredScope),
       annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: false },
     }, async (args, ctx) => {
+      const denied = toolAuthError(options, requiredScope, ctx);
+      if (denied) return denied;
       ctx.mcpReq.signal.throwIfAborted();
       const progressToken = ctx.mcpReq._meta?.progressToken;
       if (progressToken !== undefined) await ctx.mcpReq.notify({ method: "notifications/progress", params: { progressToken, progress: 0, total: 1 } });

@@ -30,7 +30,7 @@ const handler = createMcpHandler(ctx => {
   // Never derive the credential forwarding destination from Host/Origin input.
   const base = oauthConfig().origin;
   const api = new TallyhandClient({ baseUrl: base, token: ctx.authInfo?.token, signal: ctx.requestInfo?.signal });
-  return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth" });
+  return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth", legacyOAuth: ctx.era === "legacy" });
 }, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: 4 * 1024 * 1024 + 32768, maxSubscriptions: 32 });
 
 async function handle(req: Request): Promise<Response> {

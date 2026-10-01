@@ -81,3 +81,9 @@ Reset/import tools require an exported backup revision, an exact confirmation ph
 - https://ts.sdk.modelcontextprotocol.io/v2/
 - https://clerk.com/docs/guides/configure/auth-strategies/oauth/how-clerk-implements-oauth
 - https://clerk.com/docs/guides/configure/auth-strategies/oauth/verify-oauth-tokens
+
+### Permission upgrades in ChatGPT
+
+Every tool publishes its OAuth scopes in `_meta.securitySchemes`. Write/manage requests include the base `tally:read` scope so reauthorization does not lose read access. Modern MCP clients receive HTTP `403 insufficient_scope`; legacy clients receive an error tool result with `_meta["mcp/www_authenticate"]` so ChatGPT can show a consent prompt rather than treating a valid read-only connection as expired. Neither response executes the action.
+
+The Clerk application's allowed scopes must also permit the client to request the additional permissions. An existing read-only client record may need its allowed scopes updated by the instance administrator; the user must then approve the new grant. Do not bypass these checks or broaden defaults to hide a connection problem.

@@ -59,7 +59,7 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
       if (!identity) return oauthChallenge();
       const required = requiredRestScope(req);
       if (!required) return jsonError(403, "forbidden", "OAuth access is limited to workspace API operations");
-      return identity.scopes.includes(required) ? null : oauthChallenge(403, [required]);
+      return identity.scopes.includes(required) ? null : oauthChallenge(403, [...new Set(["tally:read", required])]);
     }
   }
 
