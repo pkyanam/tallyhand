@@ -2,7 +2,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDbSingletonForTests, getDB } from "@/lib/db/schema";
-import { clientRepo } from "@/lib/db/repos";
+import { clientRepo, settingsRepo } from "@/lib/db/repos";
 import {
   exportTallyhandBundleV1,
   importTallyhandBundleV1,
@@ -24,6 +24,7 @@ describe("tallyhand.v1 bundle", () => {
       name: "Roundtrip LLC",
       archived: false,
     });
+    await settingsRepo.update({ business: { email: "primary@example.com", billingEmails: ["billing@example.com"] } });
     const before = await exportTallyhandBundleV1();
     const raw = JSON.stringify(before);
     await resetAllLocalData();

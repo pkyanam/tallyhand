@@ -217,6 +217,7 @@ export const DEFAULT_SETTINGS: Settings = {
     name: "",
     ownerName: "",
     email: "",
+    billingEmails: [],
     address: "",
     taxId: "",
     paymentInstructions: "",
