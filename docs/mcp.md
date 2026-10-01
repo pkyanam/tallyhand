@@ -63,6 +63,8 @@ OAuth remains disabled until the explicit environment switch and issuer are conf
 
 ## Verification through the CLI
 
+Install/update: `curl -fsSL https://tallyhand.xyz/setup.sh | bash`. The script preserves saved CLI configuration. See [the setup guide](https://tallyhand.xyz/docs). `tally setup-check` verifies public documentation and OAuth discovery. `tally mcp oauth-check` starts a real, read-only consent flow with a loopback callback and runs authenticated MCP checks; its tokens stay in memory.
+
 - `tally mcp check --transport stdio --protocol modern --workspace`
 - `tally mcp check --transport stdio --protocol legacy --workspace`
 - `tally mcp check --transport http --protocol modern --workspace`

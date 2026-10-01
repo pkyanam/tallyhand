@@ -20,8 +20,8 @@
 
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -60,12 +60,14 @@ export function readFileConfig(path = CONFIG_PATH): FileConfig {
 
 export function writeFileConfig(patch: FileConfig, path = CONFIG_PATH): void {
   const cur = readFileConfig(path);
-  mkdirSync(join(homedir(), ".tallyhand"), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.${randomUUID()}.tmp`;
   writeFileSync(
-    path,
+    temp,
     JSON.stringify({ ...cur, ...patch }, null, 2) + "\n",
-    { mode: 0o600 },
+    { mode: 0o600, flag: "wx" },
   );
+  renameSync(temp, path);
 }
 
 export interface ResolvedConfig {

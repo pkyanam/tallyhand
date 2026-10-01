@@ -117,6 +117,7 @@ export function LandingChoiceScreen() {
         </Button>
       </header>
 
+      <div className="mx-auto w-full max-w-5xl px-6 text-sm"><Link className="underline underline-offset-4" href="/docs">Setup guide, CLI & AI connections</Link></div>
       <main className="mx-auto flex w-full max-w-5xl flex-1 items-center px-6">
         <div className="max-w-xl py-16">
           <h1 className="font-display text-balance text-5xl font-semibold tracking-tight md:text-6xl">

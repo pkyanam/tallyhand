@@ -56,6 +56,9 @@ jobs:
         working-directory: cli
         run: npm test
 
+      - name: Verify installer reruns and preservation
+        run: bash scripts/test-installer.sh
+
       - name: Build CLI bundle
         working-directory: cli
         run: npm run build

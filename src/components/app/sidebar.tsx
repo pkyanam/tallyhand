@@ -51,6 +51,7 @@ export function Sidebar({ authMode = "none" }: { authMode?: TallyAuth }) {
           );
         })}
       </nav>
+      <Link href="/docs" className="mx-8 mb-3 text-xs text-muted-foreground underline underline-offset-4">Help & setup</Link>
       <div className="mx-5 shrink-0 border-t py-3">
         {dataMode === "cloud" && authMode === "clerk" ? <ClerkUserPill /> : <UserPill name={settings?.business.ownerName || settings?.business.name || (dataMode === "cloud" ? "My workspace" : "Local workspace")} cloud={dataMode === "cloud"} />}
       </div>

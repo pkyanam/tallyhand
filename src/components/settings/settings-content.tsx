@@ -231,6 +231,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
       />
 
       <div className="space-y-6">
+        <Card><CardHeader><CardTitle>Quick help & connections</CardTitle><CardDescription>Set up the CLI, connect an AI assistant, or move your data safely.</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-3"><Button asChild variant="outline"><Link href="/docs">Setup & user guide</Link></Button><Button asChild variant="outline"><Link href="/settings/connect">API keys & connections</Link></Button><Button asChild variant="outline"><a href="/setup.sh">Download CLI installer</a></Button></CardContent></Card>
         {authMode === "clerk" && <ClerkAccountCard />}
         {authMode === "builtin" && (
           <Card>

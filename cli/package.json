@@ -1,1 +1,35 @@
-{"bin":{"tally":"./dist/cli.js"},"dependencies":{"@modelcontextprotocol/client":"2.2.0","@modelcontextprotocol/sdk":"^1.30.1","@modelcontextprotocol/server":"2.2.0","commander":"^14.0.0","zod":"^4.3.6"},"description":"CLI + MCP server for Tallyhand — drive time tracking and invoicing from the terminal or an AI agent.","devDependencies":{"@types/node":"^20","tsup":"^8.5.0","typescript":"^5","vitest":"^4.1.5"},"engines":{"node":">=22"},"files":["dist","README.md"],"license":"MIT","name":"tallyhand-cli","scripts":{"build":"tsup","test":"vitest run","typecheck":"tsc --noEmit"},"type":"module","version":"0.1.0"}
+{
+  "bin": {
+    "tally": "./dist/cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@modelcontextprotocol/server": "2.2.0",
+    "commander": "^14.0.0",
+    "zod": "^4.3.6"
+  },
+  "description": "CLI + MCP server for Tallyhand \u2014 drive time tracking and invoicing from the terminal or an AI agent.",
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsup": "^8.5.0",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "name": "tallyhand-cli",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "version": "0.2.0"
+}

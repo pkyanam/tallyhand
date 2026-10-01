@@ -3,30 +3,24 @@
 Drive your Tallyhand time tracking and invoicing from the terminal, from scripts,
 or from an AI agent. Talks to a Tallyhand server over REST (`/api/v1`).
 
-> Requires a **server-backed** Tallyhand deployment (local SQLite now, Postgres
-> later). The pure browser-PWA IndexedDB mode is not HTTP-reachable — bridging
-> that is the sync story, not this package.
-
-## Install
+## Install or update
 
 ```bash
-cd cli
-npm install
-npm run build
-
-# link locally
-npm link
-# or install globally from a tarball
-npm pack && npm i -g tallyhand-cli-0.1.0.tgz
+curl -fsSL https://tallyhand.xyz/setup.sh | bash
 ```
 
-Needs Node ≥ 22.
+Inspect the script first if desired. The installer verifies the release checksum, smoke-checks the new binary, and atomically updates `~/.local/bin/tally`. Repeating it preserves `~/.tallyhand/config.json` and all workspace data. It prints a PATH instruction if needed. `TALLY_BIN_DIR` selects another directory; `TALLY_VERSION=v0.2.0` pins a release. macOS and Linux binaries are supported; Windows executables are available from GitHub Releases.
+
+[Simple setup guide](https://tallyhand.xyz/docs) · [Agent-readable guide](https://tallyhand.xyz/llms.txt)
+
+For source installation (Node 22+): `cd cli && npm ci && npm run build && npm link`.
+A server-backed deployment (Convex, SQLite, or Postgres) is required for API access. Browser-only offline data must first be imported into your cloud account.
 
 ## Config
 
 ```bash
-tally config set api-url http://localhost:3000
-tally config set token <your-api-token>
+tally config set api-url https://tallyhand.xyz
+tally login
 ```
 
 Resolution order: `--api-url` / `--token` flags → `TALLYHAND_API_URL` /
@@ -91,7 +85,7 @@ stderr with a hint and exit 1.
 
 ## For AI agents
 
-`tally mcp` launches an MCP server over stdio with 23 tools
+`tally mcp` launches an MCP server over stdio with 53 tools
 (`health_check`, `timer_start`, `timer_stop`, `timer_status`, `log_time`,
 `list_unbilled`, `create_invoice_draft`, `send_invoice`, `mark_invoice_paid`,
 `list_recurring_schedules`, `create_recurring_schedule`,
@@ -135,3 +129,7 @@ Source layout: `src/client.ts` (API client + config), `src/commands.ts`
 (command handlers), `src/cli.ts` (commander wiring), `src/mcp.ts` (MCP server),
 `src/billing.ts` (unbilled math, line items), `src/format.ts` (tables),
 `src/guide.ts` (agent playbook).
+
+## OAuth verification
+
+`tally mcp oauth-check` opens a read-only Clerk consent flow through a loopback callback on port 43819. Open the displayed URL in a browser on the same computer as the CLI. The check uses tokens only in memory and leaves your existing API-key configuration intact. Revoke the verification grant from your account when finished.

@@ -6,6 +6,7 @@ const withPWA = require("next-pwa")({
   register: true,
   skipWaiting: true,
   runtimeCaching: [
+    { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
     // Authenticated data must never come from a previous session's SW cache.
     { urlPattern: /\/api\//, handler: "NetworkOnly", method: "GET" },
     ...require("next-pwa/cache"),
@@ -16,6 +17,7 @@ const withPWA = require("next-pwa")({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async headers() { return ["/setup.sh", "/installer/setup.sh", "/llms.txt"].map(source => ({ source, headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }, { key: "Cache-Control", value: "public, max-age=0, must-revalidate" }, { key: "X-Content-Type-Options", value: "nosniff" }] })); },
   // Avoid EMFILE: too many open files on some macOS setups (watchers exhaust
   // `ulimit -n`). Polling is slightly slower but far fewer file descriptors.
   // Raise limits if you prefer fast native watch: `ulimit -n 10240` in the shell.

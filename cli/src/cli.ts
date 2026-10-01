@@ -655,6 +655,12 @@ export function buildProgram(): Command {
       emit(out.json, result, () => console.log("Cloud reset complete; previous data saved in " + opts.backupOut));
     }));
 
+  program.command("login").description("Save a personal API key using hidden terminal input")
+    .action(wrap(async () => { const { login } = await import("./login.js"); await login(); }));
+
+  program.command("setup-check").description("Verify public setup docs, installer, and OAuth discovery")
+    .action(wrap(async (cmd) => { const { checkSetup } = await import("./setup-check.js"); await checkSetup(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl); }));
+
   const config = program.command("config").description("Manage CLI config");
   config
     .command("set")
@@ -713,6 +719,11 @@ export function buildProgram(): Command {
       const { checkMcp } = await import("./mcp-check.js");
       const g = cmd.optsWithGlobals();
       await checkMcp(resolveConfig({ apiUrl: g.apiUrl, token: g.token }), opts);
+    }));
+  mcp.command("oauth-check").description("Verify read-only OAuth consent without saving tokens")
+    .action(wrap(async (cmd) => {
+      const { checkOAuth } = await import("./oauth-check.js");
+      await checkOAuth(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl);
     }));
   return program;
 }

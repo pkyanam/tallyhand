@@ -82,7 +82,7 @@ export function ConnectClient() {
     name: string;
   } | null>(null);
   const [revoking, setRevoking] = React.useState<string | null>(null);
-  const [baseUrl, setBaseUrl] = React.useState("https://tallyhand.vercel.app");
+  const [baseUrl, setBaseUrl] = React.useState("https://tallyhand.xyz");
 
   React.useEffect(() => {
     setBaseUrl(window.location.origin);
@@ -145,11 +145,14 @@ export function ConnectClient() {
   };
 
   const cliSetup = [
+    "# Install or update (preserves your configuration)",
+    "curl -fsSL https://tallyhand.xyz/setup.sh | bash",
+    "",
     "# Point the CLI at this deployment",
     `tally config set api-url ${baseUrl}`,
     "",
     "# Store your personal token (shown once, above)",
-    "tally config set token <your-token>",
+    "tally login",
     "",
     "# Verify reachability + auth",
     "tally doctor",
@@ -321,10 +324,11 @@ export function ConnectClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <p className="text-sm text-muted-foreground">New here? <a className="underline" href="/docs#cli">Follow the setup guide</a> or <a className="underline" href="/setup.sh">inspect the installer</a>. Run the same installer to update. Saved credentials stay in place.</p>
             <CodeBlock code={cliSetup} copyLabel="Copy CLI setup commands" />
             <CodeBlock code={cliEnv} copyLabel="Copy env var setup" />
             <p className="text-xs text-muted-foreground">
-              <code className="font-mono">tally config set token</code> warns
+              <code className="font-mono">tally login</code> uses a hidden prompt and warns
               that the token is stored in plaintext at{" "}
               <code className="font-mono">~/.tallyhand/config.json</code> —
               that’s expected; treat the file like a password.
@@ -343,6 +347,7 @@ export function ConnectClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <p className="text-sm">For OAuth-capable clients, add <code>{baseUrl}/api/mcp</code>, select OAuth, and review Clerk’s consent screen. Read, write, and consequential actions use separate permissions. <a className="underline" href="/docs#mcp">Connection guide</a></p>
             <CodeBlock code={mcpJson} copyLabel="Copy MCP JSON config" />
             <CodeBlock code={mcpClaude} copyLabel="Copy Claude Code command" />
           </CardContent>

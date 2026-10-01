@@ -14,7 +14,18 @@
 
 Tallyhand is a time tracker and invoicing app built for contractors who bill by the hour. Track your time with a simple timer, turn the hours into professional invoices, and share them with clients — without handing your business data to someone else's cloud.
 
-## Install
+## CLI quick start
+
+```bash
+curl -fsSL https://tallyhand.xyz/setup.sh | bash
+tally config set api-url https://tallyhand.xyz
+tally login
+tally doctor
+```
+
+Rerun the installer to update without changing saved configuration. [Setup guide](https://tallyhand.xyz/docs) · [Agent guide](https://tallyhand.xyz/llms.txt).
+
+## Full app install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pkyanam/tallyhand/main/install.sh | bash
