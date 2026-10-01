@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { buildProgram } from "../src/cli.js";
 import {
+  handleDoctor,
   handleTimerStart,
   handleTimerStop,
   handleTimerStatus,
@@ -776,5 +777,21 @@ describe("update handlers leave archived alone unless the flag is passed", () =>
     expect("archived" in patch).toBe(false);
     await handleProjectUpdate(api, { id: "p1", archived: false }, { json: true });
     expect(patch).toEqual({ archived: false });
+  });
+});
+
+
+describe("doctor benchmark", () => {
+  it("makes exactly five read-only settings requests when requested", async () => {
+    const getSettings = vi.fn().mockResolvedValue({});
+    const api = fakeApi({ getSettings });
+    await handleDoctor(api, { benchmark: true });
+    expect(getSettings).toHaveBeenCalledTimes(5);
+    expect(api.calls).toEqual([]);
+  });
+  it("does not benchmark during the default health check", async () => {
+    const getSettings = vi.fn().mockResolvedValue({});
+    await handleDoctor(fakeApi({ getSettings }));
+    expect(getSettings).not.toHaveBeenCalled();
   });
 });

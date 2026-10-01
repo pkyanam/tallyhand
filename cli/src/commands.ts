@@ -1298,7 +1298,7 @@ export async function handleExport(
   }
 }
 
-export async function handleDoctor(api: TallyhandClient): Promise<void> {
+export async function handleDoctor(api: Pick<TallyhandClient, "health" | "hasToken" | "listClients" | "getSettings">, opts: { benchmark?: boolean } = {}): Promise<void> {
   let reachOk = false;
   try {
     await api.health();
@@ -1325,6 +1325,18 @@ export async function handleDoctor(api: TallyhandClient): Promise<void> {
       `  ${err.message}\n  Hint: ${err.status === 401 ? "token rejected — regenerate it in the Tallyhand server settings." : "run with --json for details."}`,
     );
     process.exit(1);
+  }
+  if (opts.benchmark) {
+    const durations: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const started = performance.now();
+      await api.getSettings();
+      const elapsed = Math.round(performance.now() - started);
+      durations.push(elapsed);
+      console.log(`settings read ${i + 1}: ${elapsed} ms`);
+    }
+    const sorted = [...durations].sort((a, b) => a - b);
+    console.log(`settings median: ${sorted[2]} ms (5 read-only requests; includes network/platform time)`);
   }
 }
 

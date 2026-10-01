@@ -690,9 +690,10 @@ export function buildProgram(): Command {
   program
     .command("doctor")
     .description("Check server reachability and auth")
-    .action(wrap(async (cmd) => {
+    .option("--benchmark", "time five read-only settings requests")
+    .action(wrap(async (cmd, opts) => {
       const { api } = ctx(cmd);
-      await handleDoctor(api);
+      await handleDoctor(api, opts);
     }));
 
   program
