@@ -94,7 +94,7 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
   const importRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    void settingsRepo.get();
+    void settingsRepo.get().catch(() => { /* Live query surfaces the retry notice. */ });
   }, []);
 
   if (!settings) {

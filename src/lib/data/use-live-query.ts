@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useLiveQuery as useDexieLiveQuery } from "dexie-react-hooks";
 import { getStorageProvider } from "@/lib/db/repos";
-import { onDataChanged } from "./data-events";
+import { notifyDataLoadFailed, onDataChanged } from "./data-events";
 
 export function useLiveQuery<T>(querier: () => Promise<T> | T, deps?: unknown[]): T | undefined;
 export function useLiveQuery<T, D>(querier: () => Promise<T> | T, deps: unknown[], defaultValue: D): T | D;
@@ -29,7 +29,10 @@ export function useLiveQuery<T>(querier: () => Promise<T> | T, deps: unknown[] =
       void Promise.resolve().then(querier).then((next: T) => {
         if (active && version === requestVersion) setValue(next);
       }).catch((error: unknown) => {
-        if (active && version === requestVersion) console.error("Live query failed", error);
+        if (active && version === requestVersion) {
+          console.error("Live query failed", error);
+          notifyDataLoadFailed();
+        }
       });
     };
     run();

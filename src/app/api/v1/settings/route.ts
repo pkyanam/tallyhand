@@ -1,6 +1,6 @@
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../_lib/sync-auth";
-import { badRequest, ok } from "@/server/http";
+import { badRequest, ok, json } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { settingsPatchSchema } from "@/server/validation";
 
@@ -10,8 +10,16 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const authErr = await requireApiOrSession(req);
   if (authErr) return authErr;
-  const settings = await getServerProvider().getSettings();
-  return ok(settings);
+  try {
+    const settings = await getServerProvider().getSettings();
+    const response = ok(settings);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    return json({ error: { code: "settings_unavailable", message: "Could not load settings. Please try again." } },
+      status && status >= 400 && status <= 599 ? status : 503);
+  }
 }
 
 /** Partially update settings. Nested objects merge key-wise. */

@@ -39,4 +39,28 @@ describe("RestStorageProvider", () => {
       date: Date.now(), miles: 1, purpose: "mock", rate: 0.67,
     })).rejects.toBeInstanceOf(NotSupportedError);
   });
+  it("shares concurrent settings requests and does not cache settled data", async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { finish = resolve; }));
+    const provider = new RestStorageProvider();
+    const first = provider.readSettings();
+    const second = provider.readSettings();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ data: { id: "singleton" } })));
+    await Promise.all([first, second]);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: "singleton" } })));
+    await provider.readSettings();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: "no-store" });
+  });
+
+  it("releases a failed read so Retry can make a fresh request", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 503 }));
+    const provider = new RestStorageProvider();
+    await expect(provider.readSettings()).rejects.toMatchObject({ status: 503 });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: "singleton" } })));
+    await expect(provider.readSettings()).resolves.toMatchObject({ id: "singleton" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
 });

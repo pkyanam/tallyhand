@@ -5,6 +5,11 @@ const withPWA = require("next-pwa")({
   dest: "public",
   register: true,
   skipWaiting: true,
+  runtimeCaching: [
+    // Authenticated data must never come from a previous session's SW cache.
+    { urlPattern: /\/api\//, handler: "NetworkOnly", method: "GET" },
+    ...require("next-pwa/cache"),
+  ],
   disable: process.env.NODE_ENV === "development",
 });
 

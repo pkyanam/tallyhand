@@ -15,7 +15,7 @@ export function SettingsThemeSync() {
       if (cancelled) return;
       const t = s.appearance.theme;
       setTheme(t === "dark" ? "dark" : "light");
-    })();
+    })().catch(() => { /* Data queries show a retry notice; preserve the current theme. */ });
     return () => {
       cancelled = true;
     };

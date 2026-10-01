@@ -184,3 +184,22 @@ describe("cleanArgs", () => {
     expect(cleanArgs({ tags: ["a", undefined] })).toEqual({ tags: ["a", undefined] });
   });
 });
+
+describe("Convex settings reads", () => {
+  it("returns defaults without issuing a mutation for an empty workspace", async () => {
+    const calls: string[] = [];
+    const provider = new ConvexStorageProvider({
+      query: async (path) => { calls.push(path); return null; },
+      mutation: async () => { throw new Error("Reading settings must not mutate or invalidate subscriptions"); },
+    }, USER_A);
+    expect((await provider.getSettings()).invoice.nextNumber).toBe(1001);
+    expect(calls).toEqual(["tally:settingsRead"]);
+  });
+  it("preserves saved settings without advancing the workspace revision", async () => {
+    const provider = new ConvexStorageProvider({
+      query: async () => ({ business: { name: "Saved business" } }),
+      mutation: async () => { throw new Error("Unexpected write"); },
+    }, USER_A);
+    expect((await provider.getSettings()).business.name).toBe("Saved business");
+  });
+});

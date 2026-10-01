@@ -7,7 +7,7 @@ import type { Contract, ContractCreateInput } from "@/core/contracts";
 import type { TaxPayment, TaxPaymentCreateInput } from "@/core/tax";
 import type { RateCard, RateCardCreateInput } from "@/core/rate-cards";
 import type { ClientCreateInput, ExpenseCreateInput, InvoiceCreateInput, ProjectCreateInput, SettingsPatch, StorageProvider, TaskCreateInput } from "@/core/storage";
-import { notifyDataChanged } from "./data-events";
+import { getDataRevision, notifyDataChanged } from "./data-events";
 
 type Envelope<T> = { data?: T; meta?: { nextCursor: string | null } };
 
@@ -28,8 +28,26 @@ export class RestStorageProvider implements StorageProvider {
   readonly providerName = "rest";
   private readonly base = "/api/v1";
 
-  private async request<T>(method: string, path: string, body?: unknown, allow404 = false): Promise<T | undefined> {
+  // Share concurrent reads across the sidebar, timer, settings and page.
+  // No settled response cache: account changes cannot reuse old user data.
+  private readonly reads = new Map<string, Promise<unknown>>();
+
+  private request<T>(method: string, path: string, body?: unknown, allow404 = false): Promise<T | undefined> {
+    if (method !== "GET") return this.fetchRequest<T>(method, path, body, allow404);
+    const key = `${getDataRevision()}:${path}:${allow404}`;
+    const existing = this.reads.get(key);
+    if (existing) return existing as Promise<T | undefined>;
+    const pending = this.fetchRequest<T>(method, path, body, allow404).finally(() => {
+      if (this.reads.get(key) === pending) this.reads.delete(key);
+    });
+    this.reads.set(key, pending);
+    return pending;
+  }
+
+  private async fetchRequest<T>(method: string, path: string, body?: unknown, allow404 = false): Promise<T | undefined> {
     const response = await fetch(`${this.base}${path}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
       method,
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "x-tallyhand-sync": "1" },

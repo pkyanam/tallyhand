@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { notifyDataChanged } from "@/lib/data/data-events";
 import { cn } from "@/lib/utils";
 import type { AppDataMode } from "@/components/app/data-mode-copy";
 
@@ -20,6 +21,12 @@ export function AppChromeProvider({
   children: React.ReactNode;
   dataMode: AppDataMode;
 }) {
+  const [loadFailed, setLoadFailed] = React.useState(false);
+  React.useEffect(() => {
+    const failed = () => setLoadFailed(true);
+    window.addEventListener("tallyhand:data-load-failed", failed);
+    return () => window.removeEventListener("tallyhand:data-load-failed", failed);
+  }, []);
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const noticeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -54,6 +61,10 @@ export function AppChromeProvider({
 
   return (
     <ChromeContext.Provider value={value}>
+      {loadFailed && <div role="alert" className="sticky top-0 z-[100] flex items-center justify-center gap-4 border-b bg-background p-3 text-sm">
+        <span>Some data couldn’t load. Check your connection and try again.</span>
+        <button className="shrink-0 rounded-md border px-3 py-1 font-medium hover:bg-muted" onClick={() => { setLoadFailed(false); notifyDataChanged(); }}>Retry loading</button>
+      </div>}
       {children}
       {notice ? (
         <div

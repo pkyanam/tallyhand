@@ -19,6 +19,8 @@
  * Convex rejects `undefined` in args, so every payload is stripped of
  * undefined values before sending (`cleanArgs`).
  */
+import { DEFAULT_SETTINGS } from "@/core/entities";
+import { normalizeSettings } from "@/core/settings";
 import { newId } from "@/core/id";
 import type { MileageEntry, MileageEntryCreateInput } from "@/core/mileage";
 import type { Contract, ContractCreateInput } from "@/core/contracts";
@@ -365,7 +367,10 @@ export class ConvexStorageProvider implements StorageProvider {
     return d ?? undefined;
   }
   async getSettings(): Promise<Settings> {
-    return (await this.m("settingsGet")) as unknown as Settings;
+    // Reading must never advance workspaceRevisions: subscribers would read
+    // settings again and create a self-sustaining invalidation loop. Persist
+    // defaults only when a user actually updates their settings.
+    return normalizeSettings((await this.readSettings()) ?? DEFAULT_SETTINGS);
   }
   async updateSettings(patch: SettingsPatch): Promise<Settings> {
     return (await this.m("settingsUpdate", { patch })) as unknown as Settings;

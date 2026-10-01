@@ -48,7 +48,7 @@ export function ReckoningContent() {
   const settings = useLiveQuery(() => settingsRepo.read(), []);
 
   React.useEffect(() => {
-    void settingsRepo.get();
+    void settingsRepo.get().catch(() => { /* Live query surfaces the retry notice. */ });
   }, []);
 
   const now = React.useMemo(() => new Date(), []);
