@@ -1,7 +1,7 @@
 /** One API client and tool catalog serve modern and legacy MCP clients. */
 import { withRequestAuthCache } from "@/lib/auth/request-cache";
 import { dispatchWorkspaceApi } from "@/server/internal-api";
-import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
+import { createMcpHandler, isLegacyRequest, WebStandardStreamableHTTPServerTransport, type McpServerFactory, type AuthInfo } from "@modelcontextprotocol/server";
 import { requireApiToken } from "@/server/auth";
 import { isOAuthToken, oauthChallenge, oauthConfig, verifyTallyOAuth, oauthUnavailableResponse, TALLY_SCOPES } from "@/lib/auth/oauth";
 import { createMcpServer } from "../../../../cli/src/mcp.js";
@@ -25,15 +25,16 @@ function cors(req: Request, res: Response): Response {
     res.headers.append("Vary", "Origin");
   }
   res.headers.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Protocol-Version");
-  res.headers.set("Cache-Control", "private, no-store");
+  res.headers.set("Cache-Control", "private, no-store, no-transform");
   return res;
 }
-const handler = createMcpHandler(ctx => {
+const factory: McpServerFactory = ctx => {
   // Never derive the credential forwarding destination from Host/Origin input.
   const base = oauthConfig().origin;
   const api = new TallyhandClient({ baseUrl: base, token: ctx.authInfo?.token, signal: ctx.requestInfo?.signal, fetcher: dispatchWorkspaceApi });
   return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth", legacyOAuth: ctx.era === "legacy" });
-}, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: 4 * 1024 * 1024 + 32768, maxSubscriptions: 32 });
+};
+const handler = createMcpHandler(factory, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: 4 * 1024 * 1024 + 32768, maxSubscriptions: 32 });
 
 function handle(req: Request): Promise<Response> { return withRequestAuthCache(() => handleRequest(req)); }
 async function handleRequest(req: Request): Promise<Response> {
@@ -55,7 +56,22 @@ async function handleRequest(req: Request): Promise<Response> {
     authInfo = { token, clientId: "tallyhand-api-key", scopes: [...TALLY_SCOPES], extra: { kind: "api-key" } };
   }
   const authenticated = performance.now();
-  const response = await handler.fetch(req, { authInfo });
+  // Short legacy calls do not need SSE. Keep streaming when progress or
+  // server-initiated elicitation is requested; modern auto mode is unchanged.
+  let response: Response;
+  if (req.method === "POST" && await isLegacyRequest(req, undefined, { maxRequestBodySize: 4 * 1024 * 1024 + 32768 })) {
+    const body = await req.clone().json().catch(() => null);
+    const needsStream = body?.params?._meta?.progressToken !== undefined ||
+      (body?.method === "tools/call" && body?.params?.name === "export_data" && !body?.params?.arguments?.entity);
+    if (body && !Array.isArray(body) && !needsStream) {
+      const server = await factory({ era: "legacy", authInfo, requestInfo: req });
+      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true, maxRequestBodySize: 4 * 1024 * 1024 + 32768 });
+      try {
+        await server.connect(transport);
+        response = await transport.handleRequest(req, { authInfo, parsedBody: body });
+      } finally { await transport.close(); await server.close(); }
+    } else response = await handler.fetch(req, { authInfo });
+  } else response = await handler.fetch(req, { authInfo });
   response.headers.set("Server-Timing", `auth;dur=${(authenticated - started).toFixed(1)}, mcp;dur=${(performance.now() - authenticated).toFixed(1)}`);
   return cors(req, response);
 }

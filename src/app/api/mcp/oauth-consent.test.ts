@@ -39,3 +39,10 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "reset_workspace")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:manage"]);
   });
 });
+
+it("serves short legacy calls as JSON and preserves no-transform", async () => {
+  const response = await POST(request("tools/list", {}));
+  expect(response.headers.get("content-type")).toContain("application/json");
+  expect(response.headers.get("cache-control")).toContain("no-transform");
+  expect((await payload(response)).result.tools).toHaveLength(86);
+});

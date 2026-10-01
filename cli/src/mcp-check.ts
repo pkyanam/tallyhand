@@ -63,6 +63,7 @@ export async function checkMcp(config: ResolvedConfig, opts: { transport?: strin
       started = performance.now();
       const profile = await client.callTool({ name: "get_profile", arguments: {} });
       if (profile.isError || typeof (profile.structuredContent as { id?: unknown } | undefined)?.id !== "string") throw new Error("Stable account profile unavailable");
+      started = performance.now();
       const settings = await client.callTool({ name: "get_settings", arguments: {} });
       timings.settingsMs = Math.round(performance.now() - started);
       if (settings.isError) throw new Error("Authenticated MCP settings read failed");
