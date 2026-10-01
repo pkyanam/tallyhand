@@ -3,7 +3,13 @@ from pathlib import Path
 import hashlib, io, sys, zipfile, json
 root = Path(__file__).resolve().parents[1]
 source = root / 'plugins/tallyhand'
-version = json.loads((source / 'plugin.json').read_text())['version']
+manifest = json.loads((source / 'plugin.json').read_text())
+version = manifest['version']
+interface = manifest['extensions']['com.openai']['interface']
+if len(interface['shortDescription']) > 30: raise ValueError('Listing subtitle exceeds 30 characters')
+if len(interface['displayName']) > 30: raise ValueError('Listing name exceeds 30 characters')
+if len(interface['longDescription']) > 4000: raise ValueError('Listing description exceeds 4000 characters')
+if 'apps' in manifest or 'apps' in manifest['extensions']['com.openai']: raise ValueError('Public upload cannot contain app bindings')
 if version != json.loads((source / '.codex-plugin/plugin.json').read_text())['version']: raise ValueError('Manifest version mismatch')
 out = root / f'public/plugins/tallyhand-{version}.zip'
 data = io.BytesIO()

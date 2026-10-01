@@ -1,6 +1,6 @@
 {
   "name": "tallyhand",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Contractor time tracking, invoicing and financial records with guided agent workflows.",
   "author": {
     "name": "Preetham Kyanam"
@@ -18,7 +18,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Tallyhand",
-    "shortDescription": "Time tracking and invoicing for independent contractors",
+    "shortDescription": "Contractor time and invoices",
     "longDescription": "Manage contractor work, clients, projects, invoices and financial records through Tallyhand. Includes guided workflows and account-scoped tools.",
     "developerName": "Preetham Kyanam",
     "category": "Productivity",

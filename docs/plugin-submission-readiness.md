@@ -27,6 +27,8 @@ Current missing `update_settings` report is unresolved in the uploaded host. Dep
 
 - Confirm publisher verification and authorized portal access
 - Complete the portal-issued domain challenge without disturbing another plugin's challenge
+- Confirm supported countries and commerce declarations; keep unknown manifest fields absent
+- Verify all four listing pages (website, support, privacy policy and terms) are public and accurate
 - Choose a support contact and publish an accurate privacy policy; document retention, subprocessors, logging and deletion behavior
 - Provision a synthetic reviewer workspace and usable review login through secure setup
 - Exercise consent, scope changes, refresh, revocation and account switching in the actual host; reconnect success is insufficient
@@ -55,3 +57,5 @@ For each, capture the precise user prompt, expected tools, expected result and C
 ## Current product gaps relevant to review
 
 OAuth lifecycle reliability remains under investigation. Initial cloud latency still exceeds warm-request latency. Client-specific invoice defaults and previous-calendar-month recurring cutoffs remain pending. Recurring schedules currently reserve source entries at draft creation. The browser checks schedules on startup and periodically; saving a schedule does not provision an always-on server job. Keep all skill, guide and tool descriptions consistent with these limitations.
+
+The development archive is not submission-ready: legal/support URLs, targeting, review metadata and the recorded demonstration remain incomplete. Version 0.3.3 corrects the listing subtitle to the documented 30-character limit. The bundled CLI/server version remains 0.3.2.

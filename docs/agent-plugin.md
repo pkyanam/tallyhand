@@ -2,7 +2,7 @@
 
 ## Install
 
-Upload the ZIP from `https://tallyhand.xyz/plugins/tallyhand-0.3.2.zip` using ChatGPT's Plugins → Upload plugin flow. Connect Tallyhand with OAuth when prompted. For Codex, install the `plugins/tallyhand` directory using its plugin installation workflow. Both use the same hosted MCP URL, `https://tallyhand.xyz/api/mcp`.
+Upload the ZIP from `https://tallyhand.xyz/plugins/tallyhand-0.3.3.zip` using ChatGPT's Plugins → Upload plugin flow. Connect Tallyhand with OAuth when prompted. For Codex, install the `plugins/tallyhand` directory using its plugin installation workflow. Both use the same hosted MCP URL, `https://tallyhand.xyz/api/mcp`.
 
 The portable `plugin.json` and `mcp.json` are canonical. `.codex-plugin/plugin.json` and `.mcp.json` provide compatibility with older local plugin tooling. No credentials, private app IDs, hooks or executable installation scripts are included in the ZIP.
 
