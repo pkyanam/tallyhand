@@ -1,67 +1,65 @@
-/**
- * Remote MCP endpoint — Streamable HTTP (stateless).
- *
- *   POST /api/mcp   JSON-RPC over HTTP (MCP "Streamable HTTP" transport)
- *
- * Single-deployment design: the web app, the REST API (/api/v1), and MCP
- * (/api/mcp) are all served by this one Next.js deployment — e.g.
- * tallyhand.io, tallyhand.io/api, tallyhand.io/api/mcp. Auth is the same
- * `Authorization: Bearer <TALLYHAND_API_TOKEN>` the REST API uses.
- *
- * The MCP tools are defined exactly once, in cli/src/mcp.ts
- * (`createMcpServer`), and shared by both transports:
- *   - stdio: `tally mcp`            (local clients: Claude Code, Claude Desktop)
- *   - HTTP:  this route             (remote clients: any MCP client with a URL + token)
- *
- * Stateless mode (no session IDs): every POST is independent, so the route
- * is safe behind any number of instances or serverless functions. The
- * per-request Api client talks to this deployment's own /api/v1 over HTTP
- * with the caller's Bearer token, so all auth, validation, rate limiting,
- * and business logic is reused — never duplicated.
- */
+/** One API client and tool catalog serve modern and legacy MCP clients. */
+import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import { requireApiToken } from "@/server/auth";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { isOAuthToken, oauthChallenge, oauthConfig, verifyTallyOAuth, TALLY_SCOPES } from "@/lib/auth/oauth";
 import { createMcpServer } from "../../../../cli/src/mcp.js";
 import { TallyhandClient } from "../../../../cli/src/client.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-function bearerToken(req: Request): string {
-  return (req.headers.get("authorization") ?? "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
+function allowedOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true; // Native MCP clients do not send browser Origin.
+  const allowed = [oauthConfig().origin, ...(process.env.TALLY_MCP_ALLOWED_ORIGINS ?? "").split(",").filter(Boolean)];
+  if (process.env.NODE_ENV !== "production") allowed.push(new URL(req.url).origin);
+  return allowed.includes(origin);
 }
-
-async function handleMcp(req: Request): Promise<Response> {
-  const authErr = await requireApiToken(req);
-  if (authErr) return authErr;
-
-  // Loop back to this deployment's own REST API. `req.url`'s origin is the
-  // address the request arrived on, so this works behind proxies without
-  // any extra configuration.
-  const origin = new URL(req.url).origin;
-  const api = new TallyhandClient({ baseUrl: origin, token: bearerToken(req) });
-
-  const server = createMcpServer(api);
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless: no sessions, every request stands alone
-  });
-  await server.connect(transport);
-  // The web-standard transport speaks Request/Response natively — no adapter needed.
-  return transport.handleRequest(req);
+function cors(req: Request, res: Response): Response {
+  const origin = req.headers.get("origin");
+  if (origin && allowedOrigin(req)) {
+    res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.append("Vary", "Origin");
+  }
+  res.headers.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Protocol-Version");
+  res.headers.set("Cache-Control", "private, no-store");
+  return res;
 }
+const handler = createMcpHandler(ctx => {
+  // Never derive the credential forwarding destination from Host/Origin input.
+  const base = oauthConfig().origin;
+  const api = new TallyhandClient({ baseUrl: base, token: ctx.authInfo?.token, signal: ctx.requestInfo?.signal });
+  return createMcpServer(api, { oauth: ctx.authInfo?.extra?.kind === "oauth" });
+}, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: 4 * 1024 * 1024 + 32768, maxSubscriptions: 32 });
 
-export async function POST(req: Request): Promise<Response> {
-  return handleMcp(req);
+async function handle(req: Request): Promise<Response> {
+  if (!allowedOrigin(req)) return new Response("Origin not allowed", { status: 403 });
+  const token = /^Bearer\s+(.+)$/i.exec(req.headers.get("authorization") ?? "")?.[1]?.trim();
+  if (!token) return cors(req, oauthChallenge());
+  let authInfo: AuthInfo;
+  if (isOAuthToken(token)) {
+    const identity = await verifyTallyOAuth(token);
+    if (!identity) return cors(req, oauthChallenge());
+    if (!identity.scopes.includes("tally:read")) return cors(req, oauthChallenge(403));
+    authInfo = { token, clientId: identity.clientId, scopes: identity.scopes, expiresAt: identity.expiresAt,
+      resource: new URL(oauthConfig().resource), resourceMetadataUrl: oauthConfig().metadataUrl, extra: { kind: "oauth", userId: identity.userId } };
+  } else {
+    const denied = await requireApiToken(req);
+    if (denied) return cors(req, oauthChallenge());
+    authInfo = { token, clientId: "tallyhand-api-key", scopes: [...TALLY_SCOPES], extra: { kind: "api-key" } };
+  }
+  return cors(req, await handler.fetch(req, { authInfo }));
 }
-
-// GET/DELETE reach the transport too: in stateless mode it answers them
-// with the appropriate MCP error (no SSE streams / sessions to manage).
-export async function GET(req: Request): Promise<Response> {
-  return handleMcp(req);
-}
-
-export async function DELETE(req: Request): Promise<Response> {
-  return handleMcp(req);
+export const POST = handle;
+export const GET = handle;
+export const DELETE = handle;
+export async function OPTIONS(req: Request): Promise<Response> {
+  if (!allowedOrigin(req)) return new Response("Origin not allowed", { status: 403 });
+  const res = new Response(null, { status: 204, headers: {
+    "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name",
+    "Access-Control-Max-Age": "600",
+  } });
+  return cors(req, res);
 }

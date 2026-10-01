@@ -109,14 +109,11 @@ describe("POST /api/mcp", () => {
 });
 
 describe("GET /api/mcp", () => {
-  it("opens an SSE stream without erroring in stateless mode", async () => {
+  it("returns 405 for the removed standalone GET stream", async () => {
     const res = await GET(
       new Request("http://localhost:3000/api/mcp", { headers: HEADERS }),
     );
-    // Stateless mode: no session to validate, so the transport opens the
-    // standalone SSE stream (server-initiated messages would flow here).
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(res.status).toBe(405);
     await res.body?.cancel();
   });
 });

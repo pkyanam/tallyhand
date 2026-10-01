@@ -52,6 +52,17 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
   const provided = bearerValue(req);
   if (sharedTokenMatches(provided)) return null;
 
+  if (provided) {
+    const { isOAuthToken, verifyTallyOAuth, requiredRestScope, oauthChallenge } = await import("@/lib/auth/oauth");
+    if (isOAuthToken(provided)) {
+      const identity = await verifyTallyOAuth(provided);
+      if (!identity) return oauthChallenge();
+      const required = requiredRestScope(req);
+      if (!required) return jsonError(403, "forbidden", "OAuth access is limited to workspace API operations");
+      return identity.scopes.includes(required) ? null : oauthChallenge(403, [required]);
+    }
+  }
+
   // Personal token (Settings → Connect). Lazy import keeps the token store
   // (pg/convex/node:sqlite) out of the module graph until it's needed.
   if (provided) {

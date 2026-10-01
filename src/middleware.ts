@@ -64,6 +64,12 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   const { pathname } = req.nextUrl;
 
   if (isPublic(pathname)) return NextResponse.next();
+  // OAuth grants cover workspace APIs/MCP, never admin or browser sessions.
+  const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if ((bearer.startsWith("oat_") || /^ey[^.]+\.[^.]+\.[^.]+$/.test(bearer)) &&
+      !pathname.startsWith("/api/v1/") && pathname !== "/api/mcp") {
+    return NextResponse.json({ error: { code: "forbidden", message: "OAuth tokens authorize workspace API requests only" } }, { status: 403 });
+  }
 
   if (authMode === "clerk") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

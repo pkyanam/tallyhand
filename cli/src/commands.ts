@@ -83,6 +83,8 @@ export interface Api {
   deleteRetainer(id: string, opts?: { dryRun?: boolean }): Promise<any>;
   getSettings(): Promise<any>;
   updateSettings(p: any): Promise<any>;
+  backup?(): Promise<{ bundle: Record<string, unknown>; revision: number }>;
+  replaceData?(input: { action: "import" | "reset"; expectedRevision: number; confirmation: string; bundle?: unknown }): Promise<any>;
 }
 
 export interface Out {
@@ -244,7 +246,7 @@ export async function handleClientsList(
   out: Out,
 ): Promise<void> {
   needAuth(api);
-  let clients = (await api.listClients({ all: true })) as any[];
+  let clients = (await api.listClients({ all: true, includeArchived: !!opts.archived })) as any[];
   if (!opts.archived) clients = clients.filter((c) => !c.archived);
   emit(out.json, clients, () => {
     if (clients.length === 0) {
@@ -1244,11 +1246,7 @@ export async function handleReportRevenue(
   });
 }
 
-export async function handleExport(
-  api: Api,
-  opts: { entity: string; format?: string; out?: string },
-  _out: Out,
-): Promise<void> {
+export async function buildExport(api: Api, opts: { entity: string; format?: string }): Promise<string> {
   needAuth(api);
   const format = opts.format ?? "json";
   if (!["json", "csv"].includes(format))
@@ -1289,6 +1287,11 @@ export async function handleExport(
         : toCsv(data[opts.entity])
       : JSON.stringify(data, null, 2);
 
+  return text;
+}
+
+export async function handleExport(api: Api, opts: { entity: string; format?: string; out?: string }, _out: Out): Promise<void> {
+  const text = await buildExport(api, opts);
   if (opts.out) {
     const { writeFileSync } = await import("node:fs");
     writeFileSync(opts.out, text + "\n");

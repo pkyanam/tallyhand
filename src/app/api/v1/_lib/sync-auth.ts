@@ -68,6 +68,8 @@ export async function requireSyncAuth(
 export async function requireApiOrSession(
   req: Request,
 ): Promise<Response | null> {
+  // Explicit machine credentials must not inherit a cookie's broader access.
+  if (/^Bearer\s/i.test(req.headers.get("authorization") ?? "")) return requireApiToken(req);
   const sessionUser = await tryResolveSessionUserId();
   if (sessionUser) {
     if (req.method !== "GET" && req.method !== "HEAD") return requireSyncHeader(req);

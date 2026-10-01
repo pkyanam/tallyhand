@@ -56,6 +56,8 @@ async function personalTokenUserId(): Promise<string | null> {
   const headerList = await headers();
   const presented = bearerTokenFromHeaders(headerList.get("authorization"));
   if (!presented) return null;
+  const { isOAuthToken, verifyTallyOAuth } = await import("./oauth");
+  if (isOAuthToken(presented)) return (await verifyTallyOAuth(presented))?.userId ?? null;
   const { findApiToken } = await import("./api-tokens");
   const verified = await findApiToken(presented);
   return verified ? verified.userId : null;

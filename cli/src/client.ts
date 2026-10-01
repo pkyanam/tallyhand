@@ -102,15 +102,22 @@ function normalizeBaseUrl(raw: string): string {
   return /\/api\/v1$/.test(stripped) ? stripped : `${stripped}/api/v1`;
 }
 
+function pathId(id: string): string {
+  if (!id || id === "." || id === "..") throw new Error("Invalid record id");
+  return encodeURIComponent(id);
+}
+
 export class TallyhandClient {
   readonly baseUrl: string;
   private readonly token?: string;
   private readonly timing: boolean;
+  private readonly signal?: AbortSignal;
 
-  constructor(opts: { baseUrl: string; token?: string; timing?: boolean }) {
+  constructor(opts: { baseUrl: string; token?: string; timing?: boolean; signal?: AbortSignal }) {
     this.baseUrl = normalizeBaseUrl(opts.baseUrl);
     this.token = opts.token;
     this.timing = opts.timing ?? false;
+    this.signal = opts.signal;
   }
 
   get hasToken(): boolean {
@@ -149,6 +156,7 @@ export class TallyhandClient {
     try {
       res = await fetch(url, {
         method,
+        signal: this.signal,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
@@ -209,7 +217,7 @@ export class TallyhandClient {
       const started = performance.now();
       let res: Response;
       try {
-        res = await fetch(url, { headers });
+        res = await fetch(url, { headers, signal: this.signal });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new ApiError(
@@ -263,13 +271,13 @@ export class TallyhandClient {
     return this.request("POST", "/clients", input);
   }
   getClient(id: string): Promise<any> {
-    return this.request("GET", `/clients/${id}`);
+    return this.request("GET", `/clients/${pathId(id)}`);
   }
   updateClient(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/clients/${id}`, patch);
+    return this.request("PATCH", `/clients/${pathId(id)}`, patch);
   }
   deleteClient(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/clients/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/clients/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- projects -------------------------------------------------------- */
@@ -280,13 +288,13 @@ export class TallyhandClient {
     return this.request("POST", "/projects", input);
   }
   getProject(id: string): Promise<any> {
-    return this.request("GET", `/projects/${id}`);
+    return this.request("GET", `/projects/${pathId(id)}`);
   }
   updateProject(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/projects/${id}`, patch);
+    return this.request("PATCH", `/projects/${pathId(id)}`, patch);
   }
   deleteProject(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/projects/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/projects/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- tasks ----------------------------------------------------------- */
@@ -297,13 +305,13 @@ export class TallyhandClient {
     return this.request("POST", "/tasks", input);
   }
   getTask(id: string): Promise<any> {
-    return this.request("GET", `/tasks/${id}`);
+    return this.request("GET", `/tasks/${pathId(id)}`);
   }
   updateTask(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/tasks/${id}`, patch);
+    return this.request("PATCH", `/tasks/${pathId(id)}`, patch);
   }
   deleteTask(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/tasks/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/tasks/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
   bulkCreateTasks(items: Record<string, unknown>[]): Promise<any> {
     return this.request("POST", "/tasks/bulk", { items });
@@ -317,13 +325,13 @@ export class TallyhandClient {
     return this.request("POST", "/expenses", input);
   }
   getExpense(id: string): Promise<any> {
-    return this.request("GET", `/expenses/${id}`);
+    return this.request("GET", `/expenses/${pathId(id)}`);
   }
   updateExpense(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/expenses/${id}`, patch);
+    return this.request("PATCH", `/expenses/${pathId(id)}`, patch);
   }
   deleteExpense(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/expenses/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/expenses/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
   bulkCreateExpenses(items: Record<string, unknown>[]): Promise<any> {
     return this.request("POST", "/expenses/bulk", { items });
@@ -337,19 +345,19 @@ export class TallyhandClient {
     return this.request("POST", "/invoices", input);
   }
   getInvoice(id: string): Promise<any> {
-    return this.request("GET", `/invoices/${id}`);
+    return this.request("GET", `/invoices/${pathId(id)}`);
   }
   updateInvoice(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/invoices/${id}`, patch);
+    return this.request("PATCH", `/invoices/${pathId(id)}`, patch);
   }
   deleteInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/invoices/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/invoices/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
   sendInvoice(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("POST", `/invoices/${id}/send`, undefined, this.dryRunQuery(opts));
+    return this.request("POST", `/invoices/${pathId(id)}/send`, undefined, this.dryRunQuery(opts));
   }
   markInvoicePaid(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("POST", `/invoices/${id}/paid`, undefined, this.dryRunQuery(opts));
+    return this.request("POST", `/invoices/${pathId(id)}/paid`, undefined, this.dryRunQuery(opts));
   }
 
   /* -- recurring schedules --------------------------------------------- */
@@ -360,16 +368,16 @@ export class TallyhandClient {
     return this.request("POST", "/recurring-schedules", input);
   }
   getSchedule(id: string): Promise<any> {
-    return this.request("GET", `/recurring-schedules/${id}`);
+    return this.request("GET", `/recurring-schedules/${pathId(id)}`);
   }
   updateSchedule(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/recurring-schedules/${id}`, patch);
+    return this.request("PATCH", `/recurring-schedules/${pathId(id)}`, patch);
   }
   deleteSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/recurring-schedules/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/recurring-schedules/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
   runSchedule(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("POST", `/recurring-schedules/${id}/run`, undefined, this.dryRunQuery(opts));
+    return this.request("POST", `/recurring-schedules/${pathId(id)}/run`, undefined, this.dryRunQuery(opts));
   }
   runScheduler(opts?: { dryRun?: boolean }): Promise<any> {
     return this.request("POST", "/scheduler/run", undefined, this.dryRunQuery(opts));
@@ -383,13 +391,13 @@ export class TallyhandClient {
     return this.request("POST", "/retainers", input);
   }
   getRetainer(id: string): Promise<any> {
-    return this.request("GET", `/retainers/${id}`);
+    return this.request("GET", `/retainers/${pathId(id)}`);
   }
   updateRetainer(id: string, patch: Record<string, unknown>): Promise<any> {
-    return this.request("PATCH", `/retainers/${id}`, patch);
+    return this.request("PATCH", `/retainers/${pathId(id)}`, patch);
   }
   deleteRetainer(id: string, opts?: { dryRun?: boolean }): Promise<any> {
-    return this.request("DELETE", `/retainers/${id}`, undefined, this.dryRunQuery(opts));
+    return this.request("DELETE", `/retainers/${pathId(id)}`, undefined, this.dryRunQuery(opts));
   }
 
   /** Atomic, owner-scoped cloud backup and restore (Convex). */

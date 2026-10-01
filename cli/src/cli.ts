@@ -696,7 +696,7 @@ export function buildProgram(): Command {
       await handleDoctor(api, opts);
     }));
 
-  program
+  const mcp = program
     .command("mcp")
     .description("Start the MCP server over stdio (for AI agents)")
     .action(wrap(async (cmd) => {
@@ -704,6 +704,16 @@ export function buildProgram(): Command {
       await runMcpServer(api);
     }));
 
+  mcp.command("check").description("Read-only MCP protocol and feature verification")
+    .option("--transport <http|stdio>", "transport to verify", "http")
+    .option("--protocol <modern|legacy>", "wire protocol era", "modern")
+    .option("--workspace", "also verify authenticated workspace resources and prompts")
+    .action(wrap(async (cmd, opts) => {
+      if (!["http", "stdio"].includes(opts.transport) || !["modern", "legacy"].includes(opts.protocol)) throw new Error("Invalid transport or protocol");
+      const { checkMcp } = await import("./mcp-check.js");
+      const g = cmd.optsWithGlobals();
+      await checkMcp(resolveConfig({ apiUrl: g.apiUrl, token: g.token }), opts);
+    }));
   return program;
 }
 

@@ -5,6 +5,7 @@ import { createMcpServer } from "../src/mcp.js";
 import { ApiError } from "../src/client.js";
 
 const EXPECTED_TOOLS = [
+  "export_data", "export_workspace_backup", "import_workspace", "reset_workspace",
   "health_check",
   "list_clients",
   "create_client",
@@ -118,7 +119,7 @@ async function connectedClient(api: any) {
 }
 
 describe("MCP server", () => {
-  it("registers all 49 expected tools", async () => {
+  it("registers every expected workspace tool", async () => {
     const client = await connectedClient(fakeApi());
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);

@@ -8,8 +8,8 @@
  * IMPORTANT: nothing in this module may write to stdout — the stdio transport
  * owns it. All results flow through tool return values.
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer, ResourceTemplate, completable, type CallToolResult, type ServerContext, requireScopes } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { ApiError } from "./client.js";
 import {
@@ -23,11 +23,13 @@ import {
   computeLineAmount,
 } from "./billing.js";
 import { findOpenTimers, type Api } from "./commands.js";
+import { registerWorkspaceFeatures } from "./mcp-features.js";
 import { GUIDE } from "./guide.js";
 
-export const MCP_VERSION = "0.1.0";
+export const MCP_VERSION = "0.2.0";
 
-const ok = (data: unknown) => ({
+const ok = (data: unknown): CallToolResult => ({
+  structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
 });
 
@@ -56,30 +58,58 @@ const dateArg = (desc: string) =>
 const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
-export function createMcpServer(api: Api): McpServer {
-  const server = new McpServer({ name: "tallyhand", version: MCP_VERSION });
+export function createMcpServer(api: Api, options: { oauth?: boolean } = {}): McpServer {
+  const server = new McpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
+    instructions: "Contractor finance workspace. Read tally://guide. Amounts are dollars, timestamps milliseconds. Draft invoices before sending. Obtain explicit user consent for financial status changes, deletes, reset and import. Never request credentials through tools or prompts.",
+    cacheHints: {
+      "tools/list": { ttlMs: 300000, cacheScope: "private" },
+      "resources/list": { ttlMs: 300000, cacheScope: "private" },
+      "resources/templates/list": { ttlMs: 300000, cacheScope: "private" },
+      "prompts/list": { ttlMs: 300000, cacheScope: "private" },
+      "resources/read": { ttlMs: 0, cacheScope: "private" },
+    },
+  });
+  const tool = (name: string, description: string, schema: z.ZodRawShape, handler: (args: any, ctx?: ServerContext) => Promise<CallToolResult>) => {
+    const readOnlyHint = /^(health_|list_|get_|timer_status$|revenue_|export_)/.test(name);
+    server.registerTool(name, {
+      title: name.split("_").map(word => word[0].toUpperCase() + word.slice(1)).join(" "),
+      description,
+      inputSchema: z.object(schema),
+      outputSchema: z.object({ data: z.unknown() }),
+      scopeChallenge: options.oauth ? requireScopes(readOnlyHint ? "tally:read" : /^(delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name) ? "tally:manage" : "tally:write") : undefined,
+      annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: false },
+    }, async (args, ctx) => {
+      ctx.mcpReq.signal.throwIfAborted();
+      const progressToken = ctx.mcpReq._meta?.progressToken;
+      if (progressToken !== undefined) await ctx.mcpReq.notify({ method: "notifications/progress", params: { progressToken, progress: 0, total: 1 } });
+      const response = await handler(args, ctx);
+      ctx.mcpReq.signal.throwIfAborted();
+      if (progressToken !== undefined) await ctx.mcpReq.notify({ method: "notifications/progress", params: { progressToken, progress: 1, total: 1 } });
+      return response;
+    });
+  };
 
-  server.tool(
+  tool(
     "health_check",
     "Check that the Tallyhand server is reachable. No auth required. Run this first when anything else fails — it distinguishes 'server down' from 'bad token'.",
     {},
     safe(async () => api.health()),
   );
 
-  server.tool(
+  tool(
     "list_clients",
     "List clients. Use before anything client-scoped to resolve names to ids. Archived clients are hidden unless includeArchived is true.",
     {
       includeArchived: z.boolean().optional().describe("Include archived clients."),
     },
     safe(async ({ includeArchived }) => {
-      let clients = (await api.listClients({ all: true })) as any[];
+      let clients = (await api.listClients({ all: true, includeArchived: !!includeArchived })) as any[];
       if (!includeArchived) clients = clients.filter((c) => !c.archived);
       return clients;
     }),
   );
 
-  server.tool(
+  tool(
     "create_client",
     "Create a client. defaultRate is the hourly rate in DOLLARS used for unbilled-amount math when a project has no override.",
     {
@@ -90,14 +120,14 @@ export function createMcpServer(api: Api): McpServer {
     safe(async (a) => api.createClient(a)),
   );
 
-  server.tool(
+  tool(
     "get_client",
     "Fetch one client by id.",
     { id: z.string().describe("Client id.") },
     safe(async ({ id }) => api.getClient(id)),
   );
 
-  server.tool(
+  tool(
     "list_projects",
     "List projects, optionally filtered by client. Resolve project names to ids here before starting timers or logging time.",
     { clientId: z.string().optional().describe("Filter to one client.") },
@@ -108,7 +138,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "create_project",
     "Create a project under a client. rateOverride (dollars/hour) beats the client's defaultRate for this project.",
     {
@@ -119,7 +149,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async (a) => api.createProject(a)),
   );
 
-  server.tool(
+  tool(
     "timer_start",
     "Start a live timer on a project. Creates an open task (endAt = 0 means 'running'). GOTCHA: starting a second timer does not stop the first — check timer_status first if you only want one running.",
     {
@@ -141,7 +171,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "timer_stop",
     "Stop the running timer, stamping endAt and durationMinutes. Errors if zero timers run ('no running timer') or several run — then pass id. Use timer_status to disambiguate.",
     {
@@ -173,7 +203,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "timer_status",
     "Show currently running timers with elapsed time. Empty array = nothing running.",
     {},
@@ -188,7 +218,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "log_time",
     "Log a completed time entry directly (no live timer). minutes must be positive. date is YYYY-MM-DD; omit for today. Creates startAt/endAt from date + minutes.",
     {
@@ -213,7 +243,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "list_unbilled",
     "Unbilled work grouped by client/project with hours and dollar amounts. Amounts use project.rateOverride ?? client.defaultRate. Review this before drafting an invoice.",
     {
@@ -223,7 +253,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async (a) => collectUnbilled(api, a)),
   );
 
-  server.tool(
+  tool(
     "log_expense",
     `Log an expense. ${moneyNote}`,
     {
@@ -255,7 +285,7 @@ export function createMcpServer(api: Api): McpServer {
     tags: z.array(z.string()).optional(),
   });
 
-  server.tool(
+  tool(
     "bulk_log_time",
     `Log many time entries at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any entry is invalid, so a 400 means nothing was created. ${moneyNote}`,
     { items: z.array(timeItem).min(1).max(200).describe("Time entries to log.") },
@@ -277,7 +307,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "bulk_log_expenses",
     `Log many expenses at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any expense is invalid, so a 400 means nothing was created. ${moneyNote}`,
     {
@@ -310,7 +340,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "list_invoices",
     "List invoices, optionally filtered by status and/or client.",
     {
@@ -320,14 +350,14 @@ export function createMcpServer(api: Api): McpServer {
     safe(async (a) => api.listInvoices({ all: true, ...a })),
   );
 
-  server.tool(
+  tool(
     "get_invoice",
     "Fetch one invoice with its line items, totals, and public-link token.",
     { id: z.string().describe("Invoice id.") },
     safe(async ({ id }) => api.getInvoice(id)),
   );
 
-  server.tool(
+  tool(
     "create_invoice_draft",
     "Create a DRAFT invoice — safe, nothing is billed until send_invoice. Either pass explicit items (array of {description, quantity, rate} in dollars) or omit items to auto-build from the client's unbilled tasks + expenses.",
     {
@@ -412,7 +442,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "send_invoice",
     "Mark an invoice SENT. This is the point of no return for billing state — source tasks/expenses get marked billed. Only send after the client has reviewed the draft. dryRun previews the billed-marking without mutating.",
     {
@@ -422,7 +452,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.sendInvoice(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "mark_invoice_paid",
     "Mark an invoice PAID. Only call when payment is confirmed. dryRun previews without mutating.",
     {
@@ -432,7 +462,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.markInvoicePaid(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "list_recurring_schedules",
     "List recurring invoice schedules (auto-billing templates).",
     { status: z.string().optional().describe("Filter: active|paused|ended.") },
@@ -443,7 +473,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "create_recurring_schedule",
     "Create an auto-billing schedule. mode 'fixed' invoices the same lineItems every period; mode 'unbilled' sweeps the client's unbilled work each run. nextRunAt starts at startDate.",
     {
@@ -489,7 +519,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "run_recurring_schedules",
     "Force-run due schedules now (or one schedule by id). The server scheduler also runs these automatically; use this to bill immediately. dryRun previews what would be generated without creating invoices.",
     {
@@ -503,7 +533,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "list_retainers",
     "List client retainers (prepaid hour blocks / monthly fees).",
     { clientId: z.string().optional() },
@@ -512,7 +542,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "create_retainer",
     "Create a retainer. amountCents is integer CENTS (600000 = $6,000) — the one money field that is not dollars. totalHours for prepaid-hours blocks.",
     {
@@ -536,7 +566,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "update_client",
     "Update a client (name, email, defaultRate, notes, archived). Pass only the fields to change.",
     {
@@ -550,7 +580,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, ...patch }) => api.updateClient(id, patch)),
   );
 
-  server.tool(
+  tool(
     "delete_client",
     "Delete a client. Refused (409) while it still has projects or invoices — delete those first or archive it (update_client with archived: true). dryRun previews without deleting.",
     {
@@ -560,14 +590,14 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteClient(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "get_project",
     "Fetch one project by id.",
     { id: z.string().describe("Project id.") },
     safe(async ({ id }) => api.getProject(id)),
   );
 
-  server.tool(
+  tool(
     "update_project",
     "Update a project (name, clientId, rateOverride, archived). Pass only the fields to change.",
     {
@@ -580,7 +610,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, ...patch }) => api.updateProject(id, patch)),
   );
 
-  server.tool(
+  tool(
     "delete_project",
     "Delete a project. Refused (409) while it still has tasks or expenses — archive it instead. dryRun previews without deleting.",
     {
@@ -590,7 +620,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteProject(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "list_tasks",
     "List time entries with filters. Use this to inspect/correct entries (e.g. find last week's entries to fix), or to feed bulk analysis. Sort with e.g. '-startAt'.",
     {
@@ -614,14 +644,14 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "get_task",
     "Fetch one time entry by id.",
     { id: z.string().describe("Task id.") },
     safe(async ({ id }) => api.getTask(id)),
   );
 
-  server.tool(
+  tool(
     "update_task",
     "Fix a time entry: minutes rewrites duration (and endAt from startAt), date moves it to another day keeping duration. Pass only the fields to change.",
     {
@@ -654,7 +684,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "delete_task",
     "Delete a time entry. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
     {
@@ -664,7 +694,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteTask(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "list_expenses",
     "List expenses with filters. Sort with e.g. '-date' or '-amount'.",
     {
@@ -690,14 +720,14 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "get_expense",
     "Fetch one expense by id.",
     { id: z.string().describe("Expense id.") },
     safe(async ({ id }) => api.getExpense(id)),
   );
 
-  server.tool(
+  tool(
     "update_expense",
     "Update an expense (amount, category, note, date, clientId, projectId). Pass only the fields to change.",
     {
@@ -720,7 +750,7 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "delete_expense",
     "Delete an expense. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
     {
@@ -730,7 +760,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteExpense(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "update_invoice",
     "Update a draft invoice's notes, due date, or invoice number. STATUS cannot change here — use send_invoice / mark_invoice_paid for the lifecycle.",
     {
@@ -747,7 +777,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "delete_invoice",
     "Delete a DRAFT invoice. Refused (409) once sent or paid — the money trail is kept. dryRun previews without deleting.",
     {
@@ -757,14 +787,14 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteInvoice(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "get_recurring_schedule",
     "Fetch one recurring schedule by id.",
     { id: z.string().describe("Schedule id.") },
     safe(async ({ id }) => api.getSchedule(id)),
   );
 
-  server.tool(
+  tool(
     "update_recurring_schedule",
     "Update a schedule (name, status, notes). Use status 'paused' to temporarily stop billing without deleting.",
     {
@@ -776,7 +806,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, ...patch }) => api.updateSchedule(id, patch)),
   );
 
-  server.tool(
+  tool(
     "delete_recurring_schedule",
     "Delete a recurring schedule. dryRun previews without deleting.",
     {
@@ -786,14 +816,14 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteSchedule(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "get_retainer",
     "Fetch one retainer by id.",
     { id: z.string().describe("Retainer id.") },
     safe(async ({ id }) => api.getRetainer(id)),
   );
 
-  server.tool(
+  tool(
     "update_retainer",
     "Update a retainer (name, status, notes).",
     {
@@ -805,7 +835,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, ...patch }) => api.updateRetainer(id, patch)),
   );
 
-  server.tool(
+  tool(
     "delete_retainer",
     "Delete a retainer. dryRun previews without deleting.",
     {
@@ -815,7 +845,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ id, dryRun }) => api.deleteRetainer(id, { dryRun })),
   );
 
-  server.tool(
+  tool(
     "list_overdue_invoices",
     "Invoices that are SENT but past their due date — the follow-up list. Optionally scoped to one client.",
     {
@@ -826,7 +856,7 @@ export function createMcpServer(api: Api): McpServer {
     ),
   );
 
-  server.tool(
+  tool(
     "revenue_summary",
     "Monthly revenue summary: paid invoices issued in YYYY-MM, with totals and per-client breakdown. Dollars.",
     {
@@ -862,14 +892,14 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
-  server.tool(
+  tool(
     "get_settings",
     "Read server settings (business profile, invoice numbering, payment terms). Useful for due-date math and invoice prefixes.",
     {},
     safe(async () => api.getSettings()),
   );
 
-  server.tool(
+  tool(
     "update_settings",
     "Patch server settings, e.g. { invoice: { paymentTermsDays: 30 } } or { business: { name: 'Acme Consulting' } }. Nested objects merge key-wise.",
     {
@@ -878,7 +908,7 @@ export function createMcpServer(api: Api): McpServer {
     safe(async ({ patch }) => api.updateSettings(patch)),
   );
 
-  server.resource(
+  server.registerResource(
     "guide",
     "tally://guide",
     {
@@ -893,13 +923,12 @@ export function createMcpServer(api: Api): McpServer {
     }),
   );
 
+  registerWorkspaceFeatures(server, api, options);
   return server;
 }
 
 export async function runMcpServer(api: Api): Promise<void> {
-  const server = createMcpServer(api);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  serveStdio(() => createMcpServer(api), { legacy: "serve" });
 }
 
 const entry = process.argv[1] ?? "";
