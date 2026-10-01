@@ -1,5 +1,6 @@
 "use client";
 
+import { parseBillingEmailsInput } from "@/core/billing-emails";
 import * as React from "react";
 import { useLiveQuery } from "@/lib/data/use-live-query";
 import { useTheme } from "next-themes";
@@ -270,12 +271,25 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
               placeholder="Your name"
             />
             <FieldInput
-              label="Email"
+              label="Primary billing email"
               type="email"
               defaultValue={settings.business.email}
               onCommit={(v) => updateBusiness({ email: v })}
               placeholder="billing@your-domain.com"
             />
+            <FieldTextarea
+              label="Additional billing emails (shown on invoices)"
+              defaultValue={(settings.business.billingEmails ?? []).join("\n")}
+              onCommit={async value => {
+                let billingEmails: string[];
+                try { billingEmails = parseBillingEmailsInput(value); }
+                catch { showNotice("Enter up to 10 valid email addresses, one per line or separated by commas."); return; }
+                try { await updateBusiness({ billingEmails }); }
+                catch (error) { showNotice(error instanceof Error ? error.message : "Could not save billing emails. Try again."); }
+              }}
+              placeholder="accounts@example.com, billing@example.com"
+            />
+            <p className="text-xs text-muted-foreground">These are contact addresses printed on invoices. They do not automatically receive invoice emails or reminders.</p>
             <FieldInput
               label="Tax ID"
               defaultValue={settings.business.taxId}

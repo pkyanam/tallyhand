@@ -713,6 +713,12 @@ export function buildProgram(): Command {
       await runMcpServer(api);
     }));
 
+  mcp.command("catalog").description("Inspect bundled MCP tool definitions without network or account access")
+    .option("--tool <name>", "show one exact tool definition")
+    .action(wrap(async (_cmd, opts) => {
+      const { inspectMcpCatalog } = await import("./mcp-catalog.js");
+      console.log(JSON.stringify(await inspectMcpCatalog(opts.tool), null, 2));
+    }));
   mcp.command("check").description("Read-only MCP protocol and feature verification")
     .option("--transport <http|stdio>", "transport to verify", "http")
     .option("--protocol <modern|legacy>", "wire protocol era", "modern")

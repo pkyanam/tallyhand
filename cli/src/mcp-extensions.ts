@@ -9,7 +9,7 @@ const result = (data: unknown): CallToolResult => ({ structuredContent: { data }
 export function registerExtendedTools(server: McpServer, api: Api, options: McpAuthOptions) {
   function register(name: string, description: string, shape: z.ZodRawShape, scope: string, run: (args: any) => Promise<unknown>, openWorld = false) {
     const read = scope === "tally:read";
-    server.registerTool(name, { description, inputSchema: z.object(shape), outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, scope), annotations: { readOnlyHint: read, destructiveHint: !read, idempotentHint: read, openWorldHint: openWorld } }, async (args: any, ctx: ServerContext) => {
+    server.registerTool(name, { description, inputSchema: z.object(shape), outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, scope), annotations: { readOnlyHint: read, destructiveHint: !read && (name === "create_share_link" || !/^(create_|bulk_create_)/.test(name)), idempotentHint: read, openWorldHint: openWorld } }, async (args: any, ctx: ServerContext) => {
       const denied = toolAuthError(options, scope, ctx); if (denied) return denied;
       ctx.mcpReq.signal.throwIfAborted();
       try { return result(await run(args)); }

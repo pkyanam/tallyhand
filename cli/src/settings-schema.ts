@@ -28,7 +28,8 @@ export const settingsPatchSchema = z
       .object({
         name: z.string().optional(),
         ownerName: z.string().optional(),
-        email: z.string().optional(),
+        email: z.union([z.string().email(), z.literal("")]).optional().describe("One primary business contact address; use billingEmails for additional invoice-display contacts"),
+        billingEmails: z.array(z.string().email()).max(10).optional().describe("Additional email addresses displayed on invoices. Does not add message recipients."),
         address: z.string().optional(),
         taxId: z.string().optional(),
         paymentInstructions: z.string().optional(),
@@ -88,3 +89,5 @@ export const settingsPatchSchema = z
   })
   .strict();
 
+
+export const settingsPatchJsonSchema = z.toJSONSchema(settingsPatchSchema);

@@ -8,7 +8,7 @@ export function normalizeSettings(raw: Settings): Settings {
     ...DEFAULT_SETTINGS,
     ...raw,
     id: "singleton",
-    business: { ...DEFAULT_SETTINGS.business, ...raw.business },
+    business: { ...DEFAULT_SETTINGS.business, ...raw.business, billingEmails: Array.isArray(raw.business?.billingEmails) ? raw.business.billingEmails : [] },
     invoice: { ...DEFAULT_SETTINGS.invoice, ...raw.invoice },
     reckoning: {
       ...DEFAULT_SETTINGS.reckoning,

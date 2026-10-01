@@ -12,7 +12,7 @@ export const CLI_MCP_PARITY: Record<string, string> = {
   "settings show": "get_settings", "settings set": "update_settings", "report revenue": "revenue_summary", export: "export_data",
   "data export": "export_workspace_backup", "data import": "import_workspace", "data reset": "reset_workspace",
 };
-export const LOCAL_ONLY_COMMANDS = ["setup-check", "login", "config set", "config show", "doctor", "mcp", "mcp check", "mcp oauth-check"];
+export const LOCAL_ONLY_COMMANDS = ["setup-check", "login", "config set", "config show", "doctor", "mcp", "mcp check", "mcp catalog", "mcp oauth-check"];
 
 for (const entity of extensionEntityNames) {
   const model = extensionModels[entity];

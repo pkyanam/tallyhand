@@ -1,5 +1,6 @@
 "use client";
 
+import { billingEmailDisplay } from "@/core/billing-emails";
 import * as React from "react";
 import type { Client, Invoice, Settings } from "@/lib/db/types";
 import { formatCurrency } from "@/lib/utils";
@@ -59,9 +60,9 @@ export function InvoicePreview({
               {settings.business.address}
             </div>
           ) : null}
-          {settings.business.email && model.showSellerEmail ? (
+          {billingEmailDisplay(settings.business) && model.showSellerEmail ? (
             <div className="text-xs text-muted-foreground">
-              {settings.business.email}
+              {billingEmailDisplay(settings.business)}
             </div>
           ) : null}
           {model.sellerTaxId ? (

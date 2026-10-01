@@ -1,15 +1,17 @@
 """Deterministic public plugin ZIP; only reviewed plugin sources are included."""
 from pathlib import Path
-import hashlib, io, sys, zipfile
+import hashlib, io, sys, zipfile, json
 root = Path(__file__).resolve().parents[1]
 source = root / 'plugins/tallyhand'
-out = root / 'public/plugins/tallyhand-0.3.0.zip'
+version = json.loads((source / 'plugin.json').read_text())['version']
+if version != json.loads((source / '.codex-plugin/plugin.json').read_text())['version']: raise ValueError('Manifest version mismatch')
+out = root / f'public/plugins/tallyhand-{version}.zip'
 data = io.BytesIO()
 with zipfile.ZipFile(data, 'w', zipfile.ZIP_DEFLATED) as z:
     for p in sorted(source.rglob('*')):
         if not p.is_file(): continue
         rel = p.relative_to(source).as_posix()
-        if rel not in ('plugin.json','mcp.json','.mcp.json','.codex-plugin/plugin.json','assets/logo.png') and not (rel.startswith('skills/') and rel.endswith('/SKILL.md')):
+        if rel not in ('plugin.json','mcp.json','.mcp.json','.codex-plugin/plugin.json','assets/logo.png') and not (rel.startswith('skills/') and (rel.endswith('/SKILL.md') or rel.endswith('/agents/openai.yaml'))):
             raise ValueError(f'Unreviewed plugin file: {rel}')
         info = zipfile.ZipInfo(rel, (2026,10,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED
         info.external_attr=0o100644 << 16

@@ -29,7 +29,7 @@ import { registerExtendedTools } from "./mcp-extensions.js";
 import { registerAgentSkills } from "./mcp-skills.js";
 import { GUIDE } from "./guide.js";
 
-export const MCP_VERSION = "0.3.1";
+export const MCP_VERSION = "0.3.2";
 
 const ok = (data: unknown): CallToolResult => ({
   structuredContent: { data: JSON.parse(JSON.stringify(data ?? null)) },
@@ -82,7 +82,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
       inputSchema: z.object(schema),
       outputSchema: z.object({ data: z.unknown() }),
       ...toolAuthPolicy(options, requiredScope),
-      annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: false },
+      annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$|timer_stop$|run_recurring_schedules$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: name === "send_invoice" },
     }, async (args, ctx) => {
       const denied = toolAuthError(options, requiredScope, ctx);
       if (denied) return denied;
@@ -478,7 +478,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
 
   tool(
     "create_recurring_schedule",
-    "Create a recurring draft-invoice schedule. It never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults lineItems to an empty array. nextRunAt starts at startDate. A runner must invoke due schedules; creating a schedule does not provision a background job.",
+    "Create a recurring draft-invoice schedule. It never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults lineItems to an empty array. nextRunAt starts at startDate. The open web app checks due schedules; creating a schedule does not provision always-on server cron. Use an external authenticated runner for unattended execution while the app is closed.",
     {
       clientId: z.string(),
       name: z.string().describe("Schedule name, e.g. 'Monthly retainer'."),
@@ -523,7 +523,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}): McpServ
 
   tool(
     "run_recurring_schedules",
-    "Force-run due schedules now (or one schedule by id). The server scheduler also runs these automatically; use this to bill immediately. dryRun previews what would be generated without creating invoices.",
+    "Force-run due schedules now (or one schedule by id). Creating a schedule does not provision server cron. The open web app periodically checks due schedules; an external authenticated runner is required for unattended execution while it is closed. This creates drafts only, never sends them. dryRun previews what would be generated without creating invoices.",
     {
       scheduleId: z.string().optional().describe("Run one schedule only."),
       dryRun: z.boolean().optional().describe("Preview only; nothing is created."),

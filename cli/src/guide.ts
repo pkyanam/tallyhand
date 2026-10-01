@@ -55,8 +55,7 @@ Every route except GET /health and GET /openapi.json needs
 
 **Recurring billing:** \`recurring create --client <id> --name "Monthly retainer"
 --frequency monthly --mode fixed --line-items '[{"description":"Retainer","quantity":1,"rate":2000}]'\`
-then \`recurring run\` (or \`--id\`) to force a run; the server scheduler also
-runs due schedules.
+then \`recurring run\` (or \`--id\`) for an explicit run. The open web app checks due schedules on startup and every 15 minutes, throttled to at most one automatic run per hour per browser. There is no always-on server cron provisioned by creating a schedule. For unattended execution while the app is closed, configure an external authenticated runner. Runs create drafts only; sending is separate.
 
 **Retainers:** \`retainer create --client <id> --name "Q3 block" --type
 prepaid-hours --hours 40 --amount-cents 600000\` (cents here: $6,000).

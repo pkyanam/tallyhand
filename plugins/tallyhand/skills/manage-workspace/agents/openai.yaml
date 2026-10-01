@@ -1,0 +1,7 @@
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "tallyhand"
+      description: "Tallyhand workspace tools, including settings reads and updates"
+      transport: "streamable_http"
+      url: "https://tallyhand.xyz/api/mcp"

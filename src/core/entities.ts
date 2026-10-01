@@ -158,6 +158,8 @@ export interface Settings {
     name: string;
     ownerName: string;
     email: string;
+    /** Additional addresses displayed on invoices; never automatic message recipients. */
+    billingEmails?: string[];
     address: string;
     taxId: string;
     paymentInstructions: string;

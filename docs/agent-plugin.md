@@ -2,7 +2,7 @@
 
 ## Install
 
-Upload the ZIP from `https://tallyhand.xyz/plugins/tallyhand-0.3.0.zip` using ChatGPT's Plugins → Upload plugin flow. Connect Tallyhand with OAuth when prompted. For Codex, install the `plugins/tallyhand` directory using its plugin installation workflow. Both use the same hosted MCP URL, `https://tallyhand.xyz/api/mcp`.
+Upload the ZIP from `https://tallyhand.xyz/plugins/tallyhand-0.3.2.zip` using ChatGPT's Plugins → Upload plugin flow. Connect Tallyhand with OAuth when prompted. For Codex, install the `plugins/tallyhand` directory using its plugin installation workflow. Both use the same hosted MCP URL, `https://tallyhand.xyz/api/mcp`.
 
 The portable `plugin.json` and `mcp.json` are canonical. `.codex-plugin/plugin.json` and `.mcp.json` provide compatibility with older local plugin tooling. No credentials, private app IDs, hooks or executable installation scripts are included in the ZIP.
 
@@ -53,3 +53,9 @@ Official references checked October 1, 2026:
 - https://developers.openai.com/plugins/build/mcp-server
 - https://developers.openai.com/plugins/build/auth
 - https://developers.openai.com/plugins/deploy/submission
+
+## Imported tool troubleshooting
+
+Each skill declares its Tallyhand MCP dependency in `agents/openai.yaml`. Use `tally mcp catalog --tool update_settings` to inspect the bundled schema without network or account access. Use the authenticated CLI MCP check for deployed coverage. Neither proves that the host has imported or approved a tool: inspect its tool list and scan findings, refresh the connection and start a new conversation. See [submission readiness](plugin-submission-readiness.md) for the public review checklist.
+
+`business.email` is a single primary address; `business.billingEmails` contains up to ten additional invoice-display contacts. Neither field silently adds invoice-email recipients.

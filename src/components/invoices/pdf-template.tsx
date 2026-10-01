@@ -1,5 +1,6 @@
 "use client";
 
+import { billingEmailDisplay } from "@/core/billing-emails";
 import * as React from "react";
 import {
   Document,
@@ -235,8 +236,8 @@ function DefaultInvoicePage({
           {settings.business.address ? (
             <Text style={styles.muted}>{settings.business.address}</Text>
           ) : null}
-          {settings.business.email && model.showSellerEmail ? (
-            <Text style={styles.muted}>{settings.business.email}</Text>
+          {billingEmailDisplay(settings.business) && model.showSellerEmail ? (
+            <Text style={styles.muted}>{billingEmailDisplay(settings.business)}</Text>
           ) : null}
           {model.sellerTaxId ? (
             <Text style={styles.muted}>
@@ -485,8 +486,8 @@ function StripeInvoicePage({
           {settings.business.address ? (
             <Text style={stripeStyles.muted}>{settings.business.address}</Text>
           ) : null}
-          {settings.business.email && model.showSellerEmail ? (
-            <Text style={stripeStyles.muted}>{settings.business.email}</Text>
+          {billingEmailDisplay(settings.business) && model.showSellerEmail ? (
+            <Text style={stripeStyles.muted}>{billingEmailDisplay(settings.business)}</Text>
           ) : null}
           {model.sellerTaxId ? (
             <Text style={stripeStyles.muted}>

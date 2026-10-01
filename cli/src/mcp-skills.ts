@@ -14,5 +14,5 @@ export function registerAgentSkills(server: McpServer) {
     const skill = catalog.find(item => item.uri === uri); if (!skill) throw new Error("Unknown skill");
     return { skill };
   });
-  for (const skill of AGENT_SKILLS) server.registerResource(`skill-${skill.frontmatter.name}`, skill.uri, { mimeType: "text/markdown", description: skill.frontmatter.description }, async uri => ({ contents: [{ uri: uri.href, mimeType: "text/markdown", text: skill.text }] }));
+  for (const skill of AGENT_SKILLS) for (const file of skill.files) server.registerResource(`skill-${skill.frontmatter.name}-${file.uri.split("/").pop()}`, file.uri, { mimeType: file.mimeType, description: skill.frontmatter.description }, async uri => ({ contents: [{ uri: uri.href, mimeType: file.mimeType, text: file.text }] }));
 }

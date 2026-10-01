@@ -1,3 +1,4 @@
+import { settingsPatchJsonSchema } from "../../../../../cli/src/settings-schema";
 /**
  * Embedded OpenAPI 3.1 document for Tallyhand API v1.
  *
@@ -1649,31 +1650,7 @@ export const OPENAPI_V1 = {
           notes: { type: "string" },
         },
       },
-      SettingsPatch: {
-        type: "object",
-        description: "Partial settings update; see GET /settings for the full shape.",
-        properties: {
-          business: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              ownerName: { type: "string" },
-              email: { type: "string" },
-              phone: { type: "string" },
-              address: { type: "string" },
-              taxId: { type: "string" },
-            },
-          },
-          invoiceDefaults: {
-            type: "object",
-            properties: {
-              paymentTermsDays: { type: "number" },
-              notes: { type: "string" },
-              footer: { type: "string" },
-            },
-          },
-        },
-      },
+      SettingsPatch: settingsPatchJsonSchema,
     },
   },
 } as const;
