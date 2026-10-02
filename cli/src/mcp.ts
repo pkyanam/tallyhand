@@ -62,7 +62,7 @@ const dateArg = (desc: string) =>
   z.string().optional().describe(desc + " YYYY-MM-DD (local midnight).");
 
 const moneyNote =
-  "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
+  "Amounts: dollars (e.g. 42.50).";
 
 export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeCatalog?: (tools: ReadonlyArray<Record<string, unknown>>) => void): McpServer {
   api = withMcpPrivacy(api);
@@ -121,7 +121,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "create_client",
-    "Create a client. defaultRate is the hourly rate in DOLLARS used for unbilled-amount math when a project has no override.",
+    "Create a client. defaultRate: dollars/hour; applies unless a project overrides it.",
     {
       name: z.string().describe("Client name."),
       email: z.string().optional().describe("Contact email."),
@@ -150,7 +150,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "create_project",
-    "Create a project under a client. rateOverride (dollars/hour) beats the client's defaultRate for this project.",
+    "Create a client project. rateOverride: dollars/hour, overriding client defaultRate.",
     {
       clientId: z.string().describe("Owning client id."),
       name: z.string().describe("Project name."),
@@ -297,7 +297,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "bulk_log_time",
-    `Log many time entries at once (up to 200). Validated first: the API rejects the whole batch if any entry is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    `Log up to 200 time entries. Invalid input rejects the whole batch; 400 creates nothing. ${moneyNote}`,
     { items: z.array(timeItem).min(1).max(200).describe("Time entries to log.") },
     safe(async ({ items }) =>
       api.bulkCreateTasks(
@@ -319,7 +319,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "bulk_log_expenses",
-    `Log many expenses at once (up to 200). Validated first: the API rejects the whole batch if any expense is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    `Log up to 200 expenses. Invalid input rejects the whole batch; 400 creates nothing. ${moneyNote}`,
     {
       items: z
         .array(
@@ -769,7 +769,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "update_invoice",
-    "Edit draft contents; returns shareUrl/pdfUrl. cloudLinkEnabled toggles public access. Sending requires send_invoice.",
+    "Edit invoice fields; may overwrite content. cloudLinkEnabled controls public links; returns shareUrl/pdfUrl. No status changes or money transfers.",
     {
       id: z.string().describe("Invoice id."),
       notes: z.string().optional(),
