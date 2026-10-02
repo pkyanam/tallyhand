@@ -31,6 +31,7 @@ import { LOCAL_CHOICE_COOKIE } from "@/lib/landing";
 const PUBLIC_PATHS: RegExp[] = [
   /^\/$/,
   /^\/docs(\/.*)?$/,
+  /^\/(privacy|terms|support)\/?$/,
   /^\/(?:installer\/)?setup\.sh$/,
   /^\/llms\.txt$/,
   /^\/\.well-known\//,

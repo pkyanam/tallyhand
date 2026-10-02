@@ -160,3 +160,16 @@ it("avoids browser-session processing for machine workspace requests", async () 
   expect((await invoke(fakeReq("/api/v1/settings"))).status).toBe(401);
   expect(clerkState.middlewareCalls).toBe(1);
 });
+
+
+describe("public policy and support pages", () => {
+  it.each(["/privacy", "/terms", "/support", "/privacy/", "/terms/", "/support/"])("does not require sign-in for %s", async path => {
+    for (const authMode of ["clerk", "builtin", "none"] as const) {
+      modeState.authMode = authMode;
+      const response = await invoke(fakeReq(path));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    }
+    expect(clerkState.middlewareCalls).toBe(0);
+  });
+});

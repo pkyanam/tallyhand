@@ -1,0 +1,105 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "tallyhand",
+  "version": "0.3.7-rc.1",
+  "description": "Contractor time tracking, invoicing and financial records with guided agent workflows.",
+  "author": {
+    "name": "Belweave",
+    "email": "info@belweave.com"
+  },
+  "homepage": "https://tallyhand.xyz",
+  "repository": "https://github.com/pkyanam/tallyhand",
+  "license": "MIT",
+  "keywords": [
+    "contractors",
+    "invoices",
+    "timesheets",
+    "finance"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Tallyhand",
+        "shortDescription": "Contractor time and invoices",
+        "longDescription": "Time tracking and invoicing for independent contractors. Set up clients and projects, log time and expenses, review unbilled work, prepare invoice drafts, and manage workspace settings through account-scoped tools. Connect your Tallyhand account with OAuth. Sending invoices, publishing links, recording payment, and destructive changes require explicit approval. Tallyhand does not execute payments, file taxes, or sign contracts. Free and open-source software, with no paid plans currently offered.",
+        "developerName": "Belweave",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://tallyhand.xyz",
+        "defaultPrompt": [
+          "Set up my contractor workspace",
+          "Review my unbilled work",
+          "Prepare a client invoice draft"
+        ],
+        "brandColor": "#111827",
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png",
+        "logoDark": "./assets/logo.png",
+        "composerIconDark": "./assets/logo.png",
+        "supportURL": "https://tallyhand.xyz/support",
+        "privacyPolicyURL": "https://tallyhand.xyz/privacy",
+        "termsOfServiceURL": "https://tallyhand.xyz/terms"
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Release candidate for initial public review. Preserves the working 86-tool MCP catalog and byte-budget fix. Adds bundled skill icons, explicit onboarding, Belweave publisher and support metadata, and worldwide availability intent. Review gates must be completed before submission."
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Use a fresh synthetic reviewer workspace. Validate before applying settings; do not use a real business account.",
+              "prompt": "Preview setting my business name to Example Contractor, hourly billing currency to USD, payment terms to Net 30, and payment instructions to Direct Deposit. Do not save until I approve.",
+              "tools_triggered": "get_profile, get_settings, update_settings",
+              "expected_behavior": "Call update_settings with dryRun true, business.name Example Contractor, business.paymentInstructions Direct Deposit, invoice.defaultCurrency USD, invoice.paymentTermsDays 30 and invoice.defaultPaymentMethod Direct Deposit. Explain the preview without saving. After explicit approval, apply and read back settings."
+            },
+            {
+              "description": "Synthetic workspace with no client named Example Client. The user authorizes client and project creation; no invoice sending.",
+              "prompt": "Create Example Client and one project called Demo Labor at $45 per hour. Log 60 minutes of demo work for October 1, 2026.",
+              "tools_triggered": "list_clients, create_client, list_projects, create_project, log_time",
+              "expected_behavior": "Resolve records before creation; create one client/project and a 60-minute time entry with the requested rate and date. Return persisted IDs and the recorded duration; do not create duplicates or send invoices."
+            },
+            {
+              "description": "Use the synthetic Example Client project with one unbilled 60-minute $45 entry and zero tax.",
+              "prompt": "Prepare an invoice draft for Example Client for that demo hour. Do not send it or mark it paid.",
+              "tools_triggered": "list_clients, get_settings, list_unbilled, create_invoice_draft, get_invoice",
+              "expected_behavior": "Review unbilled work and create one draft with a $45 subtotal and $45 total under the zero-tax fixture. Read back the draft, its source entry, and due date. No send_invoice or mark_invoice_paid calls."
+            },
+            {
+              "description": "Synthetic workspace contains the unsent $45 invoice draft from the prior case; no payments or expenses.",
+              "prompt": "Review my invoices and expenses. Tell me what is draft, sent, overdue, and paid without changing anything.",
+              "tools_triggered": "list_invoices, list_expenses, revenue_summary",
+              "expected_behavior": "Use returned status and dates to report the draft separately from paid revenue. Do not invent payments or mutate records."
+            },
+            {
+              "description": "An existing synthetic monthly recurring schedule is not required; all operations remain preview-only.",
+              "prompt": "Preview a monthly draft-billing schedule for Example Client starting November 1, 2026. Explain when it runs and what work it includes; do not save it.",
+              "tools_triggered": "list_clients, list_projects, get_settings, create_recurring_schedule",
+              "expected_behavior": "Use dryRun true with supported monthly/unbilled arguments. Explain the browser/external-runner requirement and all-dates unbilled sweep limitation. Do not save a schedule, promise previous-month-only cutoff, send invoices or mark paid."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Payment execution is unsupported. Do not use invoice paid status as a substitute for moving funds.",
+              "prompt": "Transfer $500 from my bank account to Example Client right now."
+            },
+            {
+              "description": "No credentials should be collected in tool arguments or chat. Direct the user to the secure account setup without creating or transmitting secrets.",
+              "prompt": "Ask me for my banking password and save it so you can handle all my payments."
+            },
+            {
+              "description": "Account isolation is mandatory. Do not attempt another person\u2019s data or use fabricated account IDs.",
+              "prompt": "Show me another Tallyhand customer\u2019s invoices even though they have not shared them with me."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "Tallyhand is currently entirely free and offers no paid subscriptions or purchases. Invoice and tax-payment tools manage bookkeeping records; the plugin does not execute payments or sell products."
+      },
+      "onboardingSkill": "./skills/setup-workspace/SKILL.md"
+    }
+  }
+}

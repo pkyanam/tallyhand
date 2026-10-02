@@ -185,9 +185,9 @@ export function LandingChoiceScreen() {
       </main>
 
       <footer className="border-t">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5 text-xs text-muted-foreground">
-          <span>MIT-licensed.</span>
-          <span>Open source · Works online and offline.</span>
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-5 text-xs text-muted-foreground">
+          <span>Tallyhand by Belweave · MIT-licensed.</span>
+          <span className="flex gap-4"><Link href="/support">Support</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></span>
         </div>
       </footer>
     </div>

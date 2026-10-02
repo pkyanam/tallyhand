@@ -1,0 +1,43 @@
+{
+  "name": "tallyhand",
+  "version": "0.3.7-rc.1",
+  "description": "Contractor time tracking, invoicing and financial records with guided agent workflows.",
+  "author": {
+    "name": "Belweave",
+    "email": "info@belweave.com"
+  },
+  "homepage": "https://tallyhand.xyz",
+  "repository": "https://github.com/pkyanam/tallyhand",
+  "license": "MIT",
+  "keywords": [
+    "contractors",
+    "invoices",
+    "timesheets",
+    "finance"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Tallyhand",
+    "shortDescription": "Contractor time and invoices",
+    "longDescription": "Time tracking and invoicing for independent contractors. Set up clients and projects, log time and expenses, review unbilled work, prepare invoice drafts, and manage workspace settings through account-scoped tools. Connect your Tallyhand account with OAuth. Sending invoices, publishing links, recording payment, and destructive changes require explicit approval. Tallyhand does not execute payments, file taxes, or sign contracts. Free and open-source software, with no paid plans currently offered.",
+    "developerName": "Belweave",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://tallyhand.xyz",
+    "defaultPrompt": [
+      "Set up my contractor workspace",
+      "Review my unbilled work",
+      "Prepare a client invoice draft"
+    ],
+    "brandColor": "#111827",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo.png",
+    "privacyPolicyURL": "https://tallyhand.xyz/privacy",
+    "termsOfServiceURL": "https://tallyhand.xyz/terms"
+  }
+}

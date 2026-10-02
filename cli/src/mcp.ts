@@ -24,7 +24,7 @@ import {
 import { findOpenTimers, type Api } from "./commands.js";
 import { registerWorkspaceFeatures } from "./mcp-features.js";
 import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
-import { settingsPatchSchema } from "./settings-schema.js";
+import { mcpSettingsPatchSchema as settingsPatchSchema, withMcpPrivacy } from "./mcp-privacy.js";
 import { registerExtendedTools } from "./mcp-extensions.js";
 import { registerAgentSkills } from "./mcp-skills.js";
 import { GUIDE } from "./guide.js";
@@ -65,6 +65,7 @@ const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
 export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeCatalog?: (tools: ReadonlyArray<Record<string, unknown>>) => void): McpServer {
+  api = withMcpPrivacy(api);
   const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
     instructions: "Read tally://guide. Explicit consent for financial changes, deletes, reset, import. Never request credentials.",
     cacheHints: {
@@ -946,3 +947,4 @@ if (entry.endsWith("/dist/mcp.js") || entry.endsWith("dist\\mcp.js") || entry.en
   const cfg = resolveConfig({});
   await runMcpServer(new TallyhandClient(cfg));
 }
+
