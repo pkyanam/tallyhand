@@ -1,4 +1,4 @@
-# Tallyhand 0.3.7-rc.3 public-review preparation
+# Tallyhand 0.3.7-rc.4 public-review preparation
 
 Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support: **info@belweave.com**. Currently free, no paid plans. Country targeting: no country restrictions requested, subject to platform availability and applicable law.
 
@@ -7,14 +7,14 @@ Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support
 - Same stable `tallyhand` package identity and remote MCP endpoint; no replacement private plugin or account binding
 - Root portable manifest plus a conservative Codex compatibility overlay
 - Original 512-pixel PNG listing/composer logo and skill-local 192-pixel PNG icons in all five skills
-- Explicit onboarding skill, six positive and three negative review scenarios
+- Explicit onboarding skill, five positive and three negative review scenarios
 - Website, support, privacy and terms URL declarations
 - Worldwide targeting intent, release notes and truthful no-commerce declaration
 - Skills prohibit credential/government-ID collection and explain draft, send, sharing and deletion boundaries
 
 Canonical review metadata is in root `plugin.json` under `extensions.com.openai`. Some older local Codex validators reject newer portal fields in the compatibility overlay; those declarations remain in the canonical root, which takes precedence in current OpenAI import behavior.
 
-The development distribution is the 0.3.7-rc.3 candidate. Versioned 0.3.6 and 0.3.7-rc.1 archives remain available. The candidate ZIP is `public/plugins/tallyhand-0.3.7-rc.3.zip`; its sources are in `releases/plugin-0.3.7-rc.3/`. Do not install or update a user's private entry without their request.
+The development distribution is the 0.3.7-rc.4 candidate. Versioned 0.3.6 and 0.3.7-rc.1 archives remain available. The candidate ZIP is `public/plugins/tallyhand-0.3.7-rc.4.zip`; its sources are in `releases/plugin-0.3.7-rc.4/`. Do not install or update a user's private entry without their request.
 
 ## Working discovery fix is preserved
 
@@ -38,7 +38,7 @@ MCP uses a data-minimization facade; the ordinary app, REST and direct CLI keep 
 1. Verify the deployed public pages and candidate ZIP after CI/deployment
 2. Owner supplied the combined walkthrough at https://youtu.be/XuLA3XNqe8s, embedded as review.demo_recording_url. Verify playback and coverage against the submitted version; newer invoice/PDF behavior still needs post-deploy validation
 3. Provide a dedicated reviewer account in the portal's secure access fields; never add credentials to source, ZIP or public issue
-4. Run the six positive and three negative cases in the actual host. They are drafted, not certified as run. Existing unit tests are not a substitute
+4. Run the five positive and three negative cases in the actual host. They are drafted, not certified as run. Existing unit tests are not a substitute
 5. In the intended verified Belweave publisher organization: upload the candidate as a draft, complete the domain challenge, connect OAuth, finish tool/skill scans and inspect all imported metadata
 6. Have the authorized publisher complete attestations and request review. Public publication is a later, separate step after approval
 

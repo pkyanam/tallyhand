@@ -1,0 +1,14 @@
+interface:
+  display_name: "Review finances"
+  short_description: "Review revenue and expenses"
+  icon_small: "./assets/icon.png"
+  icon_large: "./assets/icon.png"
+  brand_color: "#111827"
+  default_prompt: "Review my unbilled work and expenses"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "tallyhand"
+      description: "Tallyhand workspace tools, including settings reads and updates"
+      transport: "streamable_http"
+      url: "https://tallyhand.xyz/api/mcp"

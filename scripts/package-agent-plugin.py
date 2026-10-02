@@ -6,6 +6,8 @@ source = root / 'plugins/tallyhand'
 manifest = json.loads((source / 'plugin.json').read_text())
 version = manifest['version']
 interface = manifest['extensions']['com.openai']['interface']
+cases = manifest['extensions']['com.openai']['review']['test_cases']
+if len(cases['positive']) != 5 or len(cases['negative']) != 3: raise ValueError('OpenAI review requires exactly 5 positive and 3 negative cases')
 if len(interface['shortDescription']) > 30: raise ValueError('Listing subtitle exceeds 30 characters')
 if len(interface['displayName']) > 30: raise ValueError('Listing name exceeds 30 characters')
 if len(interface['longDescription']) > 4000: raise ValueError('Listing description exceeds 4000 characters')
