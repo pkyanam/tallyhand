@@ -107,6 +107,7 @@ export default defineSchema({
     total: v.number(),
     notes: v.optional(v.string()),
     publicToken: v.optional(v.string()),
+    cloudLinkEnabled: v.optional(v.boolean()),
     // invoice localization / payment (all optional; absent = legacy)
     currency: v.optional(v.string()),
     taxRegion: v.optional(v.string()),
