@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { notifyDataChanged } from "@/lib/data/data-events";
 import {
   Share2,
   Link2,
@@ -59,10 +60,13 @@ export function InvoiceSharePanel({
   /** True when this page request belongs to a signed-in account. */
   cloudSharingEnabled: boolean;
 }) {
+  const currentInvoiceId = React.useRef(invoice.id);
+  currentInvoiceId.current = invoice.id;
   const [copied, setCopied] = React.useState(false);
   // Cloud share state (signed-in only): a hosted /share/[token] link backed
   // by a server-stored snapshot, so it opens in any browser.
   const [cloudUrl, setCloudUrl] = React.useState<string | null>(null);
+  const [cloudDisabled, setCloudDisabled] = React.useState(false);
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudError, setCloudError] = React.useState<string | null>(null);
   const copy_ = LOCAL_LINK_COPY;
@@ -82,41 +86,44 @@ export function InvoiceSharePanel({
     }
   };
 
-  const createCloudLink = async () => {
-    const source = exportSource;
-    if (!source?.id) return;
-    setCloudBusy(true);
-    setCloudError(null);
+  const setCloudSharing = React.useCallback(async (enabled: boolean) => {
+    if (!invoice.id) return;
+    setCloudBusy(true); setCloudError(null);
     try {
-      const res = await fetch("/api/share/links", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          type: "invoice",
-          target: {
-            invoiceId: source.id,
-            snapshot: {
-              invoice: source,
-              client: client ?? null,
-            },
-          },
-          expiresInDays: 30,
-        }),
+      const res = await fetch(`/api/v1/invoices/${encodeURIComponent(invoice.id)}/share`, {
+        method: "POST", credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-tallyhand-sync": "1" },
+        body: JSON.stringify({ enabled }),
       });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        throw new Error(data.error ?? "Couldn't create the share link.");
-      }
-      // The API deliberately supports relative URLs when APP_BASE_URL is not
-      // configured. Always present/copy an absolute hosted URL in the UI.
-      setCloudUrl(new URL(data.url, window.location.origin).toString());
-    } catch (e) {
-      setCloudError(e instanceof Error ? e.message : "Couldn't create the share link.");
-    } finally {
-      setCloudBusy(false);
-    }
-  };
+      const result = await res.json();
+      if (currentInvoiceId.current !== invoice.id) return;
+      if (!res.ok) throw new Error(result.error?.message ?? "Could not update cloud sharing.");
+      setCloudDisabled(!enabled);
+      notifyDataChanged();
+      setCloudUrl(result.data.shareUrl ? new URL(result.data.shareUrl, window.location.origin).toString() : null);
+    } catch (error) { if (currentInvoiceId.current === invoice.id) setCloudError(error instanceof Error ? error.message : "Could not update cloud sharing."); }
+    finally { if (currentInvoiceId.current === invoice.id) setCloudBusy(false); }
+  }, [invoice.id]);
+
+  React.useEffect(() => {
+    if (!cloudSharingEnabled || !invoice.id) return;
+    let cancelled = false;
+    setCloudUrl(null); setCloudBusy(true); setCloudError(null);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/invoices/${encodeURIComponent(invoice.id)}`);
+        const result = await res.json();
+        if (!res.ok) throw new Error("Save this invoice to your cloud workspace before sharing.");
+        if (cancelled) return;
+        const disabled = result.data.cloudLinkEnabled === false;
+        setCloudDisabled(disabled);
+        if (result.data.shareUrl) setCloudUrl(new URL(result.data.shareUrl, window.location.origin).toString());
+        else if (!disabled) await setCloudSharing(true);
+      } catch (error) { if (!cancelled) setCloudError(error instanceof Error ? error.message : "Could not load cloud sharing."); }
+      finally { if (!cancelled) setCloudBusy(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [cloudSharingEnabled, invoice.id, invoice.cloudLinkEnabled, setCloudSharing]);
 
   const downloadFile = () => {
     if (!exportSource) return;
@@ -157,11 +164,12 @@ export function InvoiceSharePanel({
               </Badge>
             </div>
             <p className="text-muted-foreground">
-              Hosted by Tallyhand — opens in any browser, on any device.
+              Cloud invoices have a link by default. Anyone with the link can view the saved invoice and download its PDF. Disable it to make the invoice private.
               {dirty
-                ? " The link captures the last saved version."
+                ? " Unsaved edits are not visible until saved."
                 : ""}
             </p>
+            {!cloudDisabled ? <Button type="button" variant="ghost" size="sm" disabled={cloudBusy} onClick={() => void setCloudSharing(false)}>Disable cloud link</Button> : <p className="text-muted-foreground">Cloud link disabled. Previous links no longer work.</p>}
             {!cloudUrl ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -169,9 +177,9 @@ export function InvoiceSharePanel({
                   variant="outline"
                   size="sm"
                   disabled={cloudBusy || !exportSource?.id}
-                  onClick={() => void createCloudLink()}
+                  onClick={() => void setCloudSharing(true)}
                 >
-                  {cloudBusy ? "Creating…" : "Create cloud link"}
+                  {cloudBusy ? "Loading…" : cloudDisabled ? "Enable cloud link" : "Retry cloud link"}
                 </Button>
                 {cloudError ? (
                   <p className="text-xs text-destructive">{cloudError}</p>

@@ -218,6 +218,7 @@ export function NewInvoiceContent() {
         total: draft.total,
         notes: draft.notes,
         publicToken: draft.publicToken ?? newInvoicePublicToken(),
+        cloudLinkEnabled: draft.cloudLinkEnabled ?? true,
         currency: draft.currency,
         taxRegion: draft.taxRegion,
         sellerTaxId: draft.sellerTaxId,

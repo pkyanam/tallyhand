@@ -173,3 +173,22 @@ describe("MCP server", () => {
     expect(JSON.parse(res.content[0].text)).toMatchObject({ name: "Acme", defaultRate: 150 });
   });
 });
+
+
+describe("invoice editing contract", () => {
+  it("passes full draft lines, dates and sharing preference through MCP", async () => {
+    const client = await connectedClient(fakeApi());
+    const lineItems = [{ description: "Development", quantity: 8, rate: 60, sourceType: "task", sourceId: "task-fixture" }];
+    const response: any = await client.callTool({ name: "update_invoice", arguments: { id: "inv1", clientId: "c1", lineItems, issueDate: "2026-10-02", cloudLinkEnabled: false } });
+    expect(response.isError).toBeFalsy();
+    expect(JSON.parse(response.content[0].text)).toMatchObject({ id: "inv1", lineItems, cloudLinkEnabled: false, issueDate: expect.any(Number) });
+    await client.close();
+  });
+  it("allows an explicitly private draft", async () => {
+    const client = await connectedClient(fakeApi());
+    const response: any = await client.callTool({ name: "create_invoice_draft", arguments: { clientId: "c1", cloudLinkEnabled: false, items: [{ description: "Development", quantity: 8, rate: 60 }] } });
+    expect(response.isError).toBeFalsy();
+    expect(JSON.parse(response.content[0].text).invoice.cloudLinkEnabled).toBe(false);
+    await client.close();
+  });
+});

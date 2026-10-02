@@ -21,7 +21,7 @@ import {
   verifyShareToken,
   type ShareLinkType,
 } from "@/core/share";
-import type { Client, Invoice, Project, Task } from "@/core/entities";
+import type { Client, Invoice, Project, Task, Settings } from "@/core/entities";
 import type {
   HostedStorageProvider,
   ShareLinkCreateInput,
@@ -105,6 +105,8 @@ export async function createShareLink(
   // client-supplied snapshot (local-first browser data); the snapshot is
   // validated for shape and the invoiceId must match it.
   if (input.type === "invoice") {
+    const current = await ownerProvider.getInvoice(input.target.invoiceId);
+    if (current?.cloudLinkEnabled === false) throw new Error("Cloud sharing is disabled for this invoice");
     const snap = input.target.snapshot;
     if (snap) {
       const snapInvoice = snap.invoice as { id?: unknown };
@@ -150,6 +152,7 @@ export interface EstimateSnapshot {
 export interface ResolvedShare {
   link: ShareLinkRow;
   invoice?: Invoice & { client: Client | null };
+  settings?: Settings;
   timesheet?: {
     client: Client | null;
     weekStartMs: number;
@@ -185,6 +188,8 @@ export async function resolveShareToken(
   const target = link.target as Record<string, unknown>;
 
   if (link.type === "invoice" && typeof target.invoiceId === "string") {
+    const current = await owner.getInvoice(target.invoiceId);
+    if (current?.cloudLinkEnabled === false) throw Object.assign(new Error("Invoice sharing disabled"), { status: 410 });
     // Snapshot shares (local-first browser data): the public page renders
     // the client-supplied snapshot — no server-side invoice needed.
     const snap = target.snapshot as
@@ -202,7 +207,7 @@ export async function resolveShareToken(
     const invoice = await owner.getInvoice(target.invoiceId);
     if (!invoice) throw Object.assign(new Error("Invoice not found"), { status: 404 });
     const client = await owner.getClient(invoice.clientId);
-    return { link, invoice: { ...invoice, client: client ?? null } };
+    return { link, invoice: { ...invoice, client: client ?? null }, settings: await owner.getSettings() };
   }
 
   if (

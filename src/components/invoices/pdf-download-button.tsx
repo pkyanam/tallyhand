@@ -12,11 +12,13 @@ export function PdfDownloadButton({
   settings,
   client,
   disabled,
+  cloud = false,
 }: {
   invoice: Invoice;
   settings: Settings;
   client?: Client;
   disabled?: boolean;
+  cloud?: boolean;
 }) {
   const [pending, setPending] = React.useState(false);
   const { showNotice } = useAppChrome();
@@ -25,6 +27,16 @@ export function PdfDownloadButton({
     if (pending) return;
     setPending(true);
     try {
+      if (cloud) {
+        const response = await fetch(`/api/v1/invoices/${encodeURIComponent(invoice.id)}/pdf`);
+        if (!response.ok) throw new Error(`PDF export failed (${response.status})`);
+        const url = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement("a");
+        anchor.href = url; anchor.download = `${invoice.invoiceNumber || "invoice"}.pdf`;
+        document.body.appendChild(anchor); anchor.click(); anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
       // Generate the payment QR code (when enabled) before rendering, so
       // InvoicePdf stays synchronous. Failures render a QR-less PDF rather
       // than breaking the download.
@@ -60,8 +72,10 @@ export function PdfDownloadButton({
       const a = document.createElement("a");
       a.href = url;
       a.download = `${invoice.invoiceNumber || "invoice"}.pdf`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       console.error(err);
       showNotice("PDF export failed. Check the console.");

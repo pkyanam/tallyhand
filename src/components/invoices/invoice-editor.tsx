@@ -215,6 +215,10 @@ export function InvoiceEditor({
             </Select>
           </div>
 
+          {invoice.createdAt === 0 ? <label className="flex items-start gap-2 text-sm">
+            <Checkbox checked={invoice.cloudLinkEnabled !== false} onCheckedChange={value => setField("cloudLinkEnabled", value === true)} disabled={readOnly} />
+            <span>Enable cloud invoice link when stored online. Anyone with the link can view the saved invoice and download its PDF.</span>
+          </label> : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="grid gap-1.5">
               <Label htmlFor="invoice-number">Invoice #</Label>

@@ -85,6 +85,7 @@ export function InvoiceShareView({
         </tfoot>
       </table>
       {invoice.notes && <p className="text-sm text-muted-foreground">{invoice.notes}</p>}
+      <a className="inline-flex rounded border px-4 py-2 text-sm font-medium" href={`/share/${encodeURIComponent(token)}/pdf`}>Download PDF</a>
       <PayButton token={token} paymentsConfigured={paymentsConfigured} />
     </div>
   );

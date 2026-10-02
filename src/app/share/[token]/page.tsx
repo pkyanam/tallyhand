@@ -9,6 +9,8 @@ import { resolveShareToken } from "@/lib/share/service";
 import { hasSharePaymentHandler } from "@/lib/share/payment-slot";
 import { EstimateShareView, InvoiceShareView, TimesheetShareView } from "./share-views";
 
+export const dynamic = "force-dynamic";
+
 function ShareError({ title, detail }: { title: string; detail: string }) {
   return (
     <main className="min-h-screen flex items-center justify-center p-6">

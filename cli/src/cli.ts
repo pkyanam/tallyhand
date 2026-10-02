@@ -305,7 +305,8 @@ export function buildProgram(): Command {
   const invoice = program.command("invoice").description("Draft and manage invoices");
   invoice
     .command("draft")
-    .description("Create a draft invoice (nothing is billed until send)")
+    .description("Create draft with cloud link by default; nothing billed until send")
+    .option("--private", "disable public cloud link for this invoice")
     .option("--client <id>", "client id (builds from unbilled work)")
     .option("--project <id>", "scope unbilled work to a project")
     .option("--items <json>", 'explicit line items, e.g. \'[{"description":"X","quantity":1,"rate":100}]\'')
@@ -343,11 +344,12 @@ export function buildProgram(): Command {
     }));
   invoice
     .command("update")
-    .description("Update a draft invoice (notes, due date, number, localization, payment)")
+    .description("Update draft contents or cloud sharing; returns links with --json")
     .argument("<id>", "invoice id")
     .option("--notes <text>", "notes")
     .option("--due-date <YYYY-MM-DD>", "due date")
     .option("--number <n>", "invoice number")
+    .option("--patch <json>", "invoice patch, including lineItems or cloudLinkEnabled")
     .option("--currency <code>", "ISO currency code, e.g. USD")
     .option("--tax-region <US|EU>", "tax-jurisdiction behavior")
     .option("--payment-method <text>", "payment method text")

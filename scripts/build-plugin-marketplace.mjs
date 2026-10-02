@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const root = new URL('../', import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL('plugins/tallyhand/plugin.json', root), 'utf8'));
-if (manifest.name !== 'tallyhand' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('Invalid plugin identity/version');
+if (manifest.name !== 'tallyhand' || !/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(manifest.version)) throw new Error('Invalid plugin identity/version');
 const archivePath = `public/plugins/tallyhand-${manifest.version}.zip`;
 const sha256 = createHash('sha256').update(readFileSync(new URL(archivePath, root))).digest('hex');
 const marketplace = {

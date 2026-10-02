@@ -160,6 +160,7 @@ export const invoiceCreateSchema = z
     total: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
+    cloudLinkEnabled: z.boolean().optional(),
     ...invoiceLocalizationFields,
     // -- dunning records (mirror writes adopt the browser's history) --
     reminderLog: z
@@ -192,6 +193,7 @@ export const invoicePatchSchema = z
     total: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     publicToken: z.string().min(1).optional(),
+    cloudLinkEnabled: z.boolean().optional(),
     ...invoiceLocalizationFields,
     // Mirror PATCH writes carry client timestamps; providers honor
     // `updatedAt` and never rewrite `createdAt`.

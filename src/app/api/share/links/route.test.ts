@@ -59,7 +59,7 @@ describe("/api/share/links", () => {
     }));
     listShareLinks.mockResolvedValue([]);
     mockGetShareDeps.mockReturnValue({
-      ownerProvider: { createShareLink, listShareLinks },
+      ownerProvider: { createShareLink, listShareLinks, getInvoice: async () => undefined },
       providerForUser: vi.fn(),
       shareSecret: SECRET,
       baseUrl: "https://tally.example.com",

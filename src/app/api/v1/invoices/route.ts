@@ -4,6 +4,7 @@ import { requireApiOrSession } from "../_lib/sync-auth";
 import { badRequest, conflict, created, notFound, paginated, parsePagination } from "@/server/http";
 import { withIdempotency } from "../_lib/idempotency";
 import { invoiceCreateSchema, type InvoiceCreate } from "@/server/validation";
+import { withInvoiceLinks } from "@/server/invoice-links";
 import { newId, newInvoicePublicToken } from "@/core/id";
 import { computeLineAmount, computeDueDate, invoiceTotals } from "@/core/invoice";
 import type { InvoiceCreateInput, StorageProvider } from "@/core/storage";
@@ -61,6 +62,7 @@ async function buildInvoiceInput(
     total: input.total ?? total,
     ...(input.notes ? { notes: input.notes } : {}),
     publicToken: input.publicToken ?? newInvoicePublicToken(),
+    cloudLinkEnabled: input.cloudLinkEnabled ?? true,
     // -- localization / payment fields (fall back to settings defaults) --
     currency: input.currency ?? settings.invoice.defaultCurrency,
     taxRegion: input.taxRegion ?? settings.invoice.defaultTaxRegion,
@@ -157,7 +159,7 @@ async function POSTHandler(req: Request) {
     const invoice = await provider.createInvoice(
       await buildInvoiceInput(provider, parsed.data),
     );
-    return created(invoice);
+    return created(await withInvoiceLinks(invoice, true));
   });
 }
 

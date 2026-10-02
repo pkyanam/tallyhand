@@ -124,6 +124,7 @@ export const invoices = pgTable(
     total: doublePrecision("total").notNull(),
     notes: text("notes"),
     publicToken: text("public_token"),
+    cloudLinkEnabled: boolean("cloud_link_enabled"),
     // -- invoice localization / payment (all nullable; absent = legacy) --
     currency: text("currency"),
     taxRegion: text("tax_region"),

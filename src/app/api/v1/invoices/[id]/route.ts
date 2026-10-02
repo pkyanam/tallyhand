@@ -4,7 +4,8 @@ import { requireApiOrSession } from "../../_lib/sync-auth";
 import { badRequest, noContent, notFound, ok } from "@/server/http";
 import { withIdempotency } from "../../_lib/idempotency";
 import { invoicePatchSchema } from "@/server/validation";
-import { invoiceTotals } from "@/core/invoice";
+import { withInvoiceLinks } from "@/server/invoice-links";
+import { computeExpenseLineAmount, computeLineAmount, invoiceTotals } from "@/core/invoice";
 import { newId } from "@/core/id";
 import type { InvoiceLineItem } from "@/core/entities";
 import { conflict } from "../../_lib/errors";
@@ -20,7 +21,7 @@ async function GETHandler(
   if (authErr) return authErr;
   const invoice = await getServerProvider().getInvoice(params.id);
   if (!invoice) return notFound("invoice");
-  return ok(invoice);
+  return ok(await withInvoiceLinks(invoice));
 }
 
 async function PATCHHandler(
@@ -49,6 +50,12 @@ async function PATCHHandler(
         "Change status via POST /invoices/{id}/send and /invoices/{id}/paid, not PATCH",
       );
     }
+    if ((parsed.data.dueDate ?? existing.dueDate) < (parsed.data.issueDate ?? existing.issueDate)) return badRequest("dueDate must be >= issueDate");
+    if (existing.cloudLinkEnabled === false && parsed.data.cloudLinkEnabled === true) {
+      const { getShareDeps } = await import("@/lib/share/server-deps");
+      const { disableInvoiceLinks } = await import("@/lib/share/invoice-links");
+      await disableInvoiceLinks(getShareDeps(), existing.id);
+    }
     const { lineItems, ...rest } = parsed.data;
     if (lineItems) {
       // Normalize partial line items into full InvoiceLineItems and keep
@@ -58,7 +65,7 @@ async function PATCHHandler(
         description: li.description,
         quantity: li.quantity,
         rate: li.rate,
-        amount: li.amount ?? li.quantity * li.rate,
+        amount: li.amount ?? (li.sourceType === "expense" ? computeExpenseLineAmount(li.rate, li.quantity, li.markupPercent) : computeLineAmount(li.quantity, li.rate)),
         ...(li.markupPercent != null ? { markupPercent: li.markupPercent } : {}),
         sourceType: li.sourceType ?? "manual",
         ...(li.sourceId ? { sourceId: li.sourceId } : {}),
@@ -77,7 +84,7 @@ async function PATCHHandler(
       await provider.updateInvoice(params.id, rest);
     }
     const updated = await provider.getInvoice(params.id);
-    return ok(updated);
+    return updated ? ok(await withInvoiceLinks(updated, parsed.data.cloudLinkEnabled !== undefined)) : notFound("invoice");
   });
 }
 

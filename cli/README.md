@@ -171,3 +171,15 @@ Source layout: `src/client.ts` (API client + config), `src/commands.ts`
 ## OAuth verification
 
 `tally mcp oauth-check` opens a read-only Clerk consent flow through a loopback callback on port 43819. Open the displayed URL in a browser on the same computer as the CLI. The check uses tokens only in memory and leaves your existing API-key configuration intact. Revoke the verification grant from your account when finished.
+
+## Invoice sharing and PDF delivery
+
+Cloud drafts return `shareUrl` and `pdfUrl` by default. Anyone with the link can
+view the saved invoice and download its PDF. Get sharing approval; use
+`tally invoice draft --client <id> --private` to keep a draft private.
+`tally invoice show <id> --json` returns the current canonical links.
+`tally invoice update <id> --patch '{"cloudLinkEnabled":false}'` disables and
+revokes links; use `true` to enable a fresh link. `--patch` also accepts
+`lineItems` (whole-list replacement; preserve source IDs), client, dates and
+payment fields. The authenticated API offers `GET /invoices/{id}/pdf` for
+private invoices. PDF export does not send the invoice or mark work billed.

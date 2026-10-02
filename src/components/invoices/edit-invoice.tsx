@@ -280,6 +280,7 @@ export function EditInvoiceContent({
               settings={settings}
               client={client}
               disabled={dirty}
+              cloud={cloudSharingEnabled}
             />
             {invoice.status === "draft" ? (
               <Button

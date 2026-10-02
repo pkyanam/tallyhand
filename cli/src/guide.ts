@@ -44,6 +44,21 @@ Every route except GET /health and GET /openapi.json needs
   unknown id, 409 = valid request but forbidden by current state (e.g.
   deleting a client that still has projects — details explain why).
 
+## Invoice links and PDFs
+
+Cloud invoice creation returns shareUrl and pdfUrl by default. Anyone with the
+link can view its saved contents. Get sharing approval or set cloudLinkEnabled
+false when creating a private draft. update_invoice supports replacing lineItems
+(preserve sourceType/sourceId), client, dates, currency, notes and payment method.
+get_invoice returns the current saved invoice and links. Do not invent URLs or
+build a substitute PDF. Downloading the PDF does not send the invoice.
+CLI: invoice update <id> --patch '{"cloudLinkEnabled":false}' disables all links.
+Re-enable with true; old revoked links stay invalid. invoice show <id> --json
+returns the canonical links. The authenticated API also serves GET
+/invoices/{id}/pdf for private invoices. New automatic links expire after 365 days;
+explicit create_share_link supports 1–365 days. An expired link is never silently
+revived by a read; explicitly enable sharing to create a replacement.
+
 ## Typical flows
 
 **Track then bill:**

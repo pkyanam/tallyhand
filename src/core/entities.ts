@@ -93,6 +93,8 @@ export interface Invoice extends Timestamped {
   total: number;
   notes?: string;
   publicToken?: string;
+  /** Cloud sharing preference; false disables every public invoice link. */
+  cloudLinkEnabled?: boolean;
   /** Dunning: reminder history, one entry per schedule day already sent. */
   reminderLog?: DunningReminderRecord[];
   /** Dunning: automatic late-fee applications, in order. */

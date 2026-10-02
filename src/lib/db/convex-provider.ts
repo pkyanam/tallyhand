@@ -129,6 +129,7 @@ function toInvoice(d: DbRow): Invoice {
     lineItems: dbJsonArr(d, "lineItems") as Invoice["lineItems"],
     subtotal: dbNum(d, "subtotal"), total: dbNum(d, "total"),
     notes: dbOptStr(d, "notes"), publicToken: dbOptStr(d, "publicToken"),
+    cloudLinkEnabled: typeof d.cloudLinkEnabled === "boolean" ? d.cloudLinkEnabled : undefined,
     currency: dbOptStr(d, "currency"),
     taxRegion: dbOptStr(d, "taxRegion") as Invoice["taxRegion"],
     sellerTaxId: dbOptStr(d, "sellerTaxId"),

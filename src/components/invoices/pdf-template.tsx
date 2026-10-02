@@ -1,5 +1,3 @@
-"use client";
-
 import { billingEmailDisplay } from "@/core/billing-emails";
 import * as React from "react";
 import {
@@ -250,6 +248,7 @@ function DefaultInvoicePage({
             {model.documentType}
           </Text>
           <Text style={styles.metaNumber}>{invoice.invoiceNumber}</Text>
+          <Text style={styles.muted}>{invoice.status.toUpperCase()}</Text>
           <Text style={[styles.muted, { marginTop: 10 }]}>
             Issued {formatDate(invoice.issueDate)}
           </Text>
@@ -498,6 +497,7 @@ function StripeInvoicePage({
         <View style={stripeStyles.meta}>
           <Text style={stripeStyles.docType}>{model.documentType}</Text>
           <Text style={stripeStyles.docNumber}>{invoice.invoiceNumber}</Text>
+          <Text>{invoice.status.toUpperCase()}</Text>
           <View style={[stripeStyles.metaRow, { marginTop: 10 }]}>
             <Text style={stripeStyles.metaKey}>Issued</Text>
             <Text style={stripeStyles.metaValue}>

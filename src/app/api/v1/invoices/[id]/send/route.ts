@@ -1,3 +1,4 @@
+import { withInvoiceLinks } from "@/server/invoice-links";
 import { withApiRequestCache } from "@/lib/auth/request-cache";
 import { getServerProvider } from "@/server/provider";
 import { requireApiOrSession } from "../../../_lib/sync-auth";
@@ -48,7 +49,7 @@ async function POSTHandler(
   return withIdempotency(req, async () => {
     await provider.markInvoiceSent(invoice);
     const updated = await provider.getInvoice(params.id);
-    return ok(updated);
+    return ok(updated ? await withInvoiceLinks(updated) : updated);
   });
 }
 

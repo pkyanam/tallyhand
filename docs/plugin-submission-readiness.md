@@ -1,4 +1,4 @@
-# Tallyhand 0.3.7-rc.1 public-review preparation
+# Tallyhand 0.3.7-rc.3 public-review preparation
 
 Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support: **info@belweave.com**. Currently free, no paid plans. Country targeting: no country restrictions requested, subject to platform availability and applicable law.
 
@@ -7,14 +7,14 @@ Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support
 - Same stable `tallyhand` package identity and remote MCP endpoint; no replacement private plugin or account binding
 - Root portable manifest plus a conservative Codex compatibility overlay
 - Original 512-pixel PNG listing/composer logo and skill-local 192-pixel PNG icons in all five skills
-- Explicit onboarding skill, five positive and three negative review scenarios
+- Explicit onboarding skill, six positive and three negative review scenarios
 - Website, support, privacy and terms URL declarations
 - Worldwide targeting intent, release notes and truthful no-commerce declaration
 - Skills prohibit credential/government-ID collection and explain draft, send, sharing and deletion boundaries
 
 Canonical review metadata is in root `plugin.json` under `extensions.com.openai`. Some older local Codex validators reject newer portal fields in the compatibility overlay; those declarations remain in the canonical root, which takes precedence in current OpenAI import behavior.
 
-The existing stable distribution remains 0.3.6. The separate candidate ZIP is `public/plugins/tallyhand-0.3.7-rc.1.zip`; its sources are in `releases/plugin-0.3.7-rc.1/`. Do not install or update a user's private entry without their request.
+The development distribution is the 0.3.7-rc.3 candidate. Versioned 0.3.6 and 0.3.7-rc.1 archives remain available. The candidate ZIP is `public/plugins/tallyhand-0.3.7-rc.3.zip`; its sources are in `releases/plugin-0.3.7-rc.3/`. Do not install or update a user's private entry without their request.
 
 ## Working discovery fix is preserved
 
@@ -36,9 +36,9 @@ MCP uses a data-minimization facade; the ordinary app, REST and direct CLI keep 
 ## Remaining submission gates — do not claim approved or fully ready
 
 1. Verify the deployed public pages and candidate ZIP after CI/deployment
-2. Make and verify a real host walkthrough of this version using synthetic data; the promotional launch film is illustrated and is NOT review evidence
+2. Owner supplied the combined walkthrough at https://youtu.be/XuLA3XNqe8s, embedded as review.demo_recording_url. Verify playback and coverage against the submitted version; newer invoice/PDF behavior still needs post-deploy validation
 3. Provide a dedicated reviewer account in the portal's secure access fields; never add credentials to source, ZIP or public issue
-4. Run the five positive and three negative cases in the actual host. They are drafted, not certified as run. Existing unit tests are not a substitute
+4. Run the six positive and three negative cases in the actual host. They are drafted, not certified as run. Existing unit tests are not a substitute
 5. In the intended verified Belweave publisher organization: upload the candidate as a draft, complete the domain challenge, connect OAuth, finish tool/skill scans and inspect all imported metadata
 6. Have the authorized publisher complete attestations and request review. Public publication is a later, separate step after approval
 
@@ -48,10 +48,20 @@ The hosted privacy/terms text is owner-approved product policy, not an independe
 
 Use a dedicated synthetic account, not an actual contractor workspace. Show the package version and OAuth connection without displaying secrets. Preview a business profile and Net 30 settings; verify no change before approval. Apply only after explicit approval. Create Example Client and Demo Labor at $45/hour, log 60 minutes, then prepare an unsent $45 draft with zero tax. Read the draft and show consistent totals. Ask for a money transfer and demonstrate that the plugin does not execute it. Show successful read access after reconnecting. Include readable prompts and actual tool results. Do not simulate or narrate a success that was not observed.
 
-Host the recording at an owner-approved reviewer-accessible URL, verify playback, add `review.demo_recording_url`, then rebuild the final ZIP. Do not use a private video link that reviewers cannot open.
+Owner supplied https://youtu.be/XuLA3XNqe8s and confirmed it is the combined walkthrough demo. The signed-out YouTube page identifies it as "Tallyhand Demo (Oct 1st 2026)", unlisted, 6:39 long. The URL is embedded in the rebuilt ZIP. Playback in the cloud browser has not been verified (player remained buffering); do not claim full content or secret-exposure review. Reviewers must be able to play it, and newly added invoice/PDF paths need post-deploy validation.
 
 ## Official references checked
 
 - https://developers.openai.com/plugins/build/plugins
 - https://developers.openai.com/plugins/deploy/submission
 - https://developers.openai.com/plugins/plugin-guidelines
+
+## Invoice delivery follow-up
+
+This candidate adds live default cloud invoice links with per-invoice opt-out,
+full draft line editing through MCP, and authoritative server-rendered PDF URLs.
+The invoice skill returns the actual `shareUrl`/`pdfUrl`, explains public-link
+visibility, and separates export from sending. The catalog still contains 86
+tools and is checked against the existing byte-budget regression guard.
+Production rollout requires the optional Convex invoice field to be deployed
+before the web/API version. The owner-supplied review video URL is embedded in the manifest. Production validation remains pending.

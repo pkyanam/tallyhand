@@ -85,7 +85,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
       inputSchema: z.object(schema),
       outputSchema: z.object({ data: z.unknown() }),
       ...toolAuthPolicy(options, requiredScope),
-      annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$|timer_stop$|run_recurring_schedules$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: name === "send_invoice" },
+      annotations: { readOnlyHint, destructiveHint: /^(update_|delete_|reset_|import_|send_invoice$|mark_invoice_paid$|timer_stop$|run_recurring_schedules$)/.test(name), idempotentHint: readOnlyHint, openWorldHint: ["send_invoice", "create_invoice_draft", "update_invoice"].includes(name) },
     }, async (args, ctx) => {
       const denied = toolAuthError(options, requiredScope, ctx);
       if (denied) return denied;
@@ -362,17 +362,18 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "get_invoice",
-    "Fetch one invoice with its line items, totals, and public-link token.",
+    "Read invoice, shareUrl and pdfUrl. Disabled/unavailable links are null.",
     { id: z.string().describe("Invoice id.") },
     safe(async ({ id }) => api.getInvoice(id)),
   );
 
   tool(
     "create_invoice_draft",
-    "Create a DRAFT invoice — safe, nothing is billed until send_invoice. Pass explicit items ({description, quantity, rate} in dollars) or omit items to auto-build from unbilled tasks + expenses.",
+    "Create draft with cloud shareUrl/pdfUrl by default; anyone with link can view. Set cloudLinkEnabled:false for private. Nothing billed until send_invoice. Omit items for unbilled work.",
     {
       clientId: z.string().describe("Client id."),
       projectId: z.string().optional().describe("Scope auto-build to one project."),
+      cloudLinkEnabled: z.boolean().optional(),
       items: z
         .array(
           z.object({
@@ -384,24 +385,24 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
           }),
         )
         .optional()
-        .describe("Explicit line items (dollars). Omit to build from unbilled work."),
-      currency: z.string().optional().describe("ISO 4217 currency code, e.g. USD. Falls back to settings."),
+        .describe("Items in dollars; omit for unbilled work."),
+      currency: z.string().optional().describe("Currency, e.g. USD."),
       taxRegion: z.enum(["US", "EU"]).optional().describe("Tax-jurisdiction behavior. Falls back to settings."),
       taxRate: z
         .number()
         .min(0)
         .max(100)
         .optional()
-        .describe("Default tax rate percent applied to lines that don't set one."),
+        .describe("Default line tax %."),
       paymentMethod: z.string().optional().describe('Payment method text, e.g. "Bank transfer".'),
       paymentUrl: z.string().optional().describe("URL the client can pay at."),
       qrEnabled: z.boolean().optional().describe("Render a payment QR code on the PDF."),
       qrDescription: z.string().optional().describe("Text shown under the payment QR code."),
-      amountInWords: z.boolean().optional().describe("Print the total amount in words on the PDF."),
+      amountInWords: z.boolean().optional().describe("Amount in words."),
       template: z.enum(["default", "stripe"]).optional().describe("PDF template variant."),
       invoiceType: z.string().optional().describe('Document type label, e.g. "Proforma invoice".'),
     },
-    safe(async ({ clientId, projectId, items, currency, taxRegion, taxRate, paymentMethod, paymentUrl, qrEnabled, qrDescription, amountInWords, template, invoiceType }) => {
+    safe(async ({ clientId, projectId, cloudLinkEnabled, items, currency, taxRegion, taxRate, paymentMethod, paymentUrl, qrEnabled, qrDescription, amountInWords, template, invoiceType }) => {
       let lineItems: any[];
       let taskCount = 0;
       let expenseCount = 0;
@@ -434,6 +435,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
         lineItems,
         issueDate: now,
         status: "draft",
+        ...(cloudLinkEnabled !== undefined ? { cloudLinkEnabled } : {}),
         ...(currency ? { currency } : {}),
         ...(taxRegion ? { taxRegion } : {}),
         ...(paymentMethod ? { paymentMethod } : {}),
@@ -481,7 +483,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "create_recurring_schedule",
-    "Create a recurring draft-invoice schedule. Never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults to empty. nextRunAt starts at startDate. Creating a schedule does not provision server cron; unattended execution needs an external authenticated runner.",
+    "Create recurring drafts, never send/pay. Fixed mode needs lineItems. Starts at startDate. Unattended execution needs an external authenticated runner.",
     {
       clientId: z.string(),
       name: z.string().describe("Schedule name, e.g. 'Monthly retainer'."),
@@ -767,17 +769,29 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "update_invoice",
-    "Update a draft invoice's notes, due date, or invoice number. STATUS cannot change here — use send_invoice / mark_invoice_paid for the lifecycle.",
+    "Edit draft contents; returns shareUrl/pdfUrl. cloudLinkEnabled toggles public access. Sending requires send_invoice.",
     {
       id: z.string().describe("Invoice id."),
       notes: z.string().optional(),
       dueDate: dateArg("New due date."),
       invoiceNumber: z.string().optional(),
+      clientId: z.string().optional(),
+      issueDate: dateArg("Issue date."),
+      currency: z.string().optional(),
+      paymentMethod: z.string().optional(),
+      template: z.enum(["default", "stripe"]).optional(),
+      cloudLinkEnabled: z.boolean().optional(),
+      lineItems: z.array(z.object({
+        id: z.string().optional(), description: z.string(), quantity: z.number().nonnegative(), rate: z.number().nonnegative(),
+        sourceType: z.enum(["task", "expense", "manual"]).optional(), sourceId: z.string().optional(),
+        taxRate: z.number().min(0).max(100).optional(), taxLabel: z.string().optional(),
+      })).optional().describe("Replace all lines; retain sourceType/sourceId for tracked work."),
     },
-    safe(async ({ id, dueDate, ...rest }) =>
+    safe(async ({ id, dueDate, issueDate, ...rest }) =>
       api.updateInvoice(id, {
         ...rest,
         ...(dueDate !== undefined ? { dueDate: parseDate(dueDate) } : {}),
+        ...(issueDate !== undefined ? { issueDate: parseDate(issueDate) } : {}),
       }),
     ),
   );
@@ -947,4 +961,3 @@ if (entry.endsWith("/dist/mcp.js") || entry.endsWith("dist\\mcp.js") || entry.en
   const cfg = resolveConfig({});
   await runMcpServer(new TallyhandClient(cfg));
 }
-

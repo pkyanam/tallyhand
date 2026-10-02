@@ -769,6 +769,18 @@ export const OPENAPI_V1 = {
         },
       },
     },
+    "/invoices/{id}/pdf": {
+      get: { tags: ["invoices"], summary: "Download the saved invoice PDF without changing its status",
+        parameters: [{ $ref: "#/components/parameters/Id" }],
+        responses: { "200": { description: "Invoice PDF", content: { "application/pdf": { schema: { type: "string", format: "binary" } } } }, "404": { description: "Invoice not found" } } },
+    },
+    "/invoices/{id}/share": {
+      post: { tags: ["invoices"], summary: "Enable or disable the invoice's cloud link",
+        description: "Enabled links expose the saved invoice and PDF to anyone with the URL. Disable revokes previous links. Re-enable issues a fresh link.",
+        parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },
+        responses: { "200": { description: "Sharing state and shareUrl/pdfUrl" }, "404": { description: "Invoice not found" } } },
+    },
     "/invoices/{id}/send": {
       post: {
         tags: ["invoices"],
@@ -1431,6 +1443,9 @@ export const OPENAPI_V1 = {
       Invoice: {
         type: "object",
         properties: {
+          cloudLinkEnabled: { type: "boolean", description: "Cloud link enabled by default on create; false keeps the invoice private." },
+          shareUrl: { type: ["string", "null"], description: "Canonical public URL on create/get/update responses." },
+          pdfUrl: { type: ["string", "null"], description: "Direct public PDF URL; null when sharing is disabled or unavailable." },
           id: { type: "string" },
           clientId: { type: "string" },
           invoiceNumber: { type: "string" },
@@ -1469,6 +1484,7 @@ export const OPENAPI_V1 = {
         type: "object",
         required: ["clientId", "issueDate", "lineItems"],
         properties: {
+          cloudLinkEnabled: { type: "boolean", description: "Cloud link enabled by default on create; false keeps the invoice private." },
           id: { type: "string" },
           clientId: { type: "string" },
           invoiceNumber: { type: "string" },
@@ -1509,6 +1525,7 @@ export const OPENAPI_V1 = {
         type: "object",
         description: "status is not accepted here — use /send and /paid.",
         properties: {
+          cloudLinkEnabled: { type: "boolean", description: "Cloud link enabled by default on create; false keeps the invoice private." },
           clientId: { type: "string" },
           invoiceNumber: { type: "string" },
           issueDate: { type: "number" },

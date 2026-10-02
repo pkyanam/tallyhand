@@ -8,7 +8,7 @@ const withPWA = require("next-pwa")({
   runtimeCaching: [
     { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|plugins\/|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
     // Authenticated data must never come from a previous session's SW cache.
-    { urlPattern: /\/api\//, handler: "NetworkOnly", method: "GET" },
+    { urlPattern: /\/(?:api|share)\//, handler: "NetworkOnly", method: "GET" },
     ...require("next-pwa/cache"),
   ],
   disable: process.env.NODE_ENV === "development",

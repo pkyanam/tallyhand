@@ -1,0 +1,21 @@
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { setupApiEnv, teardownApiEnv, makeRequest } from "../_tests/helpers";
+import { getServerProvider } from "@/server/provider";
+import { PATCH, GET } from "./[id]/route";
+import { GET as pdf } from "./[id]/pdf/route";
+let dbPath: string;
+beforeEach(() => { dbPath = setupApiEnv(); });
+afterEach(() => teardownApiEnv(dbPath));
+it("edits draft contents and serves the authoritative PDF without changing status", async () => {
+  const p = getServerProvider(); const client = await p.createClient({ name: "Example" });
+  const inv = await p.createInvoice({ clientId: client.id, invoiceNumber: "FIXTURE-2", issueDate: 0, dueDate: 86400000, status: "draft", lineItems: [], subtotal: 0, total: 0 });
+  const path = `/api/v1/invoices/${inv.id}`; const params = { params: { id: inv.id } };
+  const edit = await PATCH(makeRequest(path, { method: "PATCH", body: JSON.stringify({ lineItems: [{ description: "Design", quantity: 8, rate: 60 }], paymentMethod: "Direct Deposit" }) }), params);
+  expect(edit.status).toBe(200); const data = (await edit.json()).data;
+  expect(data).toMatchObject({ subtotal: 480, total: 480, status: "draft", paymentMethod: "Direct Deposit" });
+  const response = await pdf(makeRequest(`${path}/pdf`), params);
+  expect(response.headers.get("content-type")).toBe("application/pdf");
+  expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
+  expect((await p.getInvoice(inv.id))?.status).toBe("draft");
+  expect((await GET(makeRequest(path), params)).status).toBe(200);
+});

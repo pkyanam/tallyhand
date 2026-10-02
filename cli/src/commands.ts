@@ -385,6 +385,7 @@ export async function handleInvoiceDraft(
   api: Api,
   opts: {
     client?: string;
+    private?: boolean;
     project?: string;
     items?: string;
     currency?: string;
@@ -448,6 +449,7 @@ export async function handleInvoiceDraft(
     clientId = opts.client;
     const built = await buildUnbilledLineItems(api, {
       clientId,
+    ...(opts.private ? { cloudLinkEnabled: false } : {}),
       projectId: opts.project,
     });
     if (built.lineItems.length === 0)
@@ -464,6 +466,7 @@ export async function handleInvoiceDraft(
   const now = Date.now();
   const invoice = await api.createInvoice({
     clientId,
+    ...(opts.private ? { cloudLinkEnabled: false } : {}),
     lineItems,
     issueDate: now,
     status: "draft",
@@ -481,6 +484,7 @@ export async function handleInvoiceDraft(
     console.log(
       `Draft invoice ${invoice.invoiceNumber ?? invoice.id} created — total ${fmtMoney(invoice.total ?? total)} (id: ${invoice.id})`,
     );
+    if (invoice.shareUrl) console.log(`Invoice: ${invoice.shareUrl}\nPDF: ${invoice.pdfUrl}`);
     console.log("Nothing is billed yet — review, then `tally invoice send <id>`.");
   });
 }
@@ -527,6 +531,7 @@ export async function handleInvoiceShow(
   const inv = await api.getInvoice(id);
   emit(out.json, inv, () => {
     console.log(`Invoice ${inv.invoiceNumber ?? inv.id} — ${inv.status}`);
+    if (inv.shareUrl) console.log(`Invoice: ${inv.shareUrl}\nPDF: ${inv.pdfUrl}`);
     console.log(`Client: ${inv.clientId}   Issued: ${fmtDay(inv.issueDate)}   Due: ${fmtDay(inv.dueDate)}`);
     if (inv.publicToken) console.log(`Public link token: ${inv.publicToken}`);
     console.log(
@@ -1038,6 +1043,7 @@ export async function handleInvoiceUpdate(
     notes?: string;
     dueDate?: string;
     number?: string;
+    patch?: string;
     currency?: string;
     taxRegion?: string;
     paymentMethod?: string;
@@ -1051,7 +1057,8 @@ export async function handleInvoiceUpdate(
   out: Out,
 ): Promise<void> {
   needAuth(api);
-  const patch: Record<string, unknown> = {};
+  const patch: Record<string, unknown> = opts.patch ? JSON.parse(opts.patch) : {};
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("--patch must be a JSON object");
   if (opts.notes !== undefined) patch.notes = opts.notes;
   if (opts.dueDate !== undefined) patch.dueDate = parseDate(opts.dueDate);
   if (opts.number !== undefined) patch.invoiceNumber = opts.number;

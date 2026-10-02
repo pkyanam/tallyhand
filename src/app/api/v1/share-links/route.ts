@@ -19,7 +19,7 @@ async function POSTHandler(req: Request) {
   // Cloud tools publish server-owned invoice data, never arbitrary invoice snapshots.
   if (parsed.data.type === "invoice" && parsed.data.target.snapshot) return badRequest("Cloud invoice shares must reference an existing invoice");
   return withIdempotency(req, async () => {
-    try { const share = await createShareLink(getShareDeps(), parsed.data); return created({ id: share.link.id, url: share.url, expiresAt: share.link.expiresAt, type: share.link.type }); }
+    try { const share = await createShareLink(getShareDeps(), parsed.data); return created({ id: share.link.id, url: share.url, pdfUrl: share.link.type === "invoice" ? `${share.url}/pdf` : null, expiresAt: share.link.expiresAt, type: share.link.type }); }
     catch (err) { const status = err && typeof err === "object" && "status" in err ? Number(err.status) : 400; return Response.json({ error: { code: status === 404 ? "not_found" : "sharing_unavailable", message: status === 404 ? "Share target not found" : "Could not create this share link" } }, { status: [400,403,404,409].includes(status) ? status : 503 }); }
   });
 }

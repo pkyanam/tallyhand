@@ -17,7 +17,7 @@ with zipfile.ZipFile(data, 'w', zipfile.ZIP_DEFLATED) as z:
     for p in sorted(source.rglob('*')):
         if not p.is_file(): continue
         rel = p.relative_to(source).as_posix()
-        if rel not in ('plugin.json','mcp.json','.mcp.json','.codex-plugin/plugin.json','assets/logo.png') and not (rel.startswith('skills/') and (rel.endswith('/SKILL.md') or rel.endswith('/agents/openai.yaml'))):
+        if rel not in ('plugin.json','mcp.json','.mcp.json','.codex-plugin/plugin.json','assets/logo.png') and not (rel.startswith('skills/') and (rel.endswith('/SKILL.md') or rel.endswith('/agents/openai.yaml') or rel.endswith('/assets/icon.png'))):
             raise ValueError(f'Unreviewed plugin file: {rel}')
         info = zipfile.ZipInfo(rel, (2026,10,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED
         info.external_attr=0o100644 << 16

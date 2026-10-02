@@ -18,6 +18,7 @@
  * otherwise the next run would re-bill the same entries. Drafts still need
  * a human/agent to review and send.
  */
+import { withInvoiceLinks } from "@/server/invoice-links";
 import { newId } from "@/core/id";
 import {
   computeDueDate,
@@ -169,6 +170,7 @@ export async function runSchedule(
       total,
       notes: `Auto-generated from recurring schedule "${schedule.name}". Review before sending.`,
       publicToken: newInvoicePublicToken(),
+      cloudLinkEnabled: true,
     });
     // Claim sources now: the scheduler is unattended, so reserving the
     // entries prevents the next run from billing them twice. (The UI flow
@@ -179,6 +181,7 @@ export async function runSchedule(
     for (const eid of expenseIds) {
       await provider.updateExpense(eid, { isBilled: true, invoiceId: invoice.id });
     }
+    await withInvoiceLinks(invoice, true);
     invoiceId = invoice.id;
   }
 
