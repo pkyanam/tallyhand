@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "tallyhand",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Contractor time tracking, invoicing and financial records with guided agent workflows.",
   "author": {
     "name": "Preetham Kyanam"
@@ -38,7 +38,7 @@
         "logo": "./assets/logo.png"
       },
       "publication": {
-        "release_notes": "Adds the official repository marketplace, portable distribution catalog, and complete Codex skill presentation metadata. MCP tool discovery remains under investigation; this packaging release does not claim to fix missing tools in ChatGPT."
+        "release_notes": "Pairs with the deployed MCP catalog byte-budget fix: all 86 tools fit the Codex 0.160.x plugin exposure budget. Includes a regression guard. ChatGPT cloud verification remains pending."
       },
       "review": {
         "test_cases": {

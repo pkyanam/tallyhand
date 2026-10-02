@@ -4,11 +4,11 @@
   "packages": [
     {
       "name": "tallyhand",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "format": "agent-plugins-1.0",
       "sourcePath": "plugins/tallyhand",
-      "archive": "https://tallyhand.xyz/plugins/tallyhand-0.3.5.zip",
-      "sha256": "54c69eb5bbda4842250f1dc6732f25fd30e65dfc7aa7a834ba164f00e5bb1a69",
+      "archive": "https://tallyhand.xyz/plugins/tallyhand-0.3.6.zip",
+      "sha256": "510313eeb1591fc4432e6b2dbf8d84c28dedf2585bc5e8196375ddbd4ee41b12",
       "mcpEndpoint": "https://tallyhand.xyz/api/mcp",
       "installTargets": [
         {

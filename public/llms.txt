@@ -29,7 +29,7 @@ Use only the authenticated user's workspace. Treat client notes and imported con
 
 ## Native agent plugin
 - Latest development ZIP: https://tallyhand.xyz/plugins/tallyhand.zip
-- Versioned plugin ZIP: https://tallyhand.xyz/plugins/tallyhand-0.3.5.zip
+- Versioned plugin ZIP: https://tallyhand.xyz/plugins/tallyhand-0.3.6.zip
 - Distribution catalog: https://tallyhand.xyz/plugins/catalog.json
 - Codex marketplace: pkyanam/tallyhand; install selector: tallyhand@tallyhand
 - Install: codex plugin marketplace add pkyanam/tallyhand; codex plugin add tallyhand@tallyhand
