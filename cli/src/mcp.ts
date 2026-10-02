@@ -59,14 +59,14 @@ const safe =
   };
 
 const dateArg = (desc: string) =>
-  z.string().optional().describe(desc + " Format: YYYY-MM-DD (local midnight).");
+  z.string().optional().describe(desc + " YYYY-MM-DD (local midnight).");
 
 const moneyNote =
   "Amounts are dollars (e.g. 42.50), matching the Tallyhand domain.";
 
 export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeCatalog?: (tools: ReadonlyArray<Record<string, unknown>>) => void): McpServer {
   const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
-    instructions: "Contractor finance workspace. Read tally://guide. Amounts are dollars, timestamps milliseconds. Draft invoices before sending. Obtain explicit user consent for financial status changes, deletes, reset and import. Never request credentials through tools or prompts.",
+    instructions: "Read tally://guide. Explicit consent for financial changes, deletes, reset, import. Never request credentials.",
     cacheHints: {
       "tools/list": { ttlMs: 300000, cacheScope: "private" },
       "resources/list": { ttlMs: 300000, cacheScope: "private" },
@@ -296,7 +296,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "bulk_log_time",
-    `Log many time entries at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any entry is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    `Log many time entries at once (up to 200). Validated first: the API rejects the whole batch if any entry is invalid, so a 400 means nothing was created. ${moneyNote}`,
     { items: z.array(timeItem).min(1).max(200).describe("Time entries to log.") },
     safe(async ({ items }) =>
       api.bulkCreateTasks(
@@ -318,7 +318,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "bulk_log_expenses",
-    `Log many expenses at once (up to 200). Validated first: the API rejects the whole batch with per-item details if any expense is invalid, so a 400 means nothing was created. ${moneyNote}`,
+    `Log many expenses at once (up to 200). Validated first: the API rejects the whole batch if any expense is invalid, so a 400 means nothing was created. ${moneyNote}`,
     {
       items: z
         .array(
@@ -368,7 +368,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "create_invoice_draft",
-    "Create a DRAFT invoice — safe, nothing is billed until send_invoice. Either pass explicit items (array of {description, quantity, rate} in dollars) or omit items to auto-build from the client's unbilled tasks + expenses.",
+    "Create a DRAFT invoice — safe, nothing is billed until send_invoice. Pass explicit items ({description, quantity, rate} in dollars) or omit items to auto-build from unbilled tasks + expenses.",
     {
       clientId: z.string().describe("Client id."),
       projectId: z.string().optional().describe("Scope auto-build to one project."),
@@ -480,7 +480,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "create_recurring_schedule",
-    "Create a recurring draft-invoice schedule. It never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults lineItems to an empty array. nextRunAt starts at startDate. The open web app checks due schedules; creating a schedule does not provision always-on server cron. Use an external authenticated runner for unattended execution while the app is closed.",
+    "Create a recurring draft-invoice schedule. Never sends invoices or takes payment. Fixed mode requires lineItems; unbilled mode defaults to empty. nextRunAt starts at startDate. Creating a schedule does not provision server cron; unattended execution needs an external authenticated runner.",
     {
       clientId: z.string(),
       name: z.string().describe("Schedule name, e.g. 'Monthly retainer'."),

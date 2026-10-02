@@ -1,155 +1,152 @@
 # MCP tool-discovery investigation
 
-Status: **unresolved**. This document records reproducible engineering evidence,
-not a confirmed host defect or a verified fix. It contains no customer data,
-credentials, raw account logs, or reviewer access information.
+Status: **root cause identified; app-side fix implemented, deploy pending.**
+The failure stage is host-side (Codex CLI/Desktop), not the Tallyhand server.
+This document contains no customer data, credentials, raw account logs, or
+reviewer access information.
 
-## Reported failure
+## Root cause
 
-- The remote endpoint is `https://tallyhand.xyz/api/mcp`.
-- The current package is 0.3.5, installable from the repository marketplace:
-  `codex plugin marketplace add pkyanam/tallyhand`, then
-  `codex plugin add tallyhand@tallyhand`.
-- A user reports Codex CLI **0.160.0** showing `tallyhand: connected (86 tools)`
-  in `/mcp`, but the agent cannot find `update_settings` in its available tool
-  registry. The installed setup skill references that operation.
-- `get_settings`, `get_profile`, `get_workspace_capabilities`, `list_clients`
-  and `list_projects` were callable in that CLI session.
-- A separate ChatGPT connection also omitted `update_settings`. A second
-  private package identity did not fix it. Do not create more private plugin
-  entries or assume reinstallation is a remedy.
-- A temporary disappearance of **all** settings access was separately explained
-  by an accidental uninstall. Reinstallation restored reads, but the specific
-  missing-write-tool report remained. Do not conflate these incidents.
+**Codex applies a serialized-model-spec byte budget to every MCP tool served by
+an agent plugin. Tools that overflow the budget are silently hidden from the
+model.** In codex-rs 0.160.x (`core/src/mcp_tool_exposure.rs`):
 
-## Verified application-side evidence
+- `MAX_AGENT_PLUGIN_MCP_SPEC_BYTES = 8_000` — per-tool cap on the serialized
+  spec that would be sent to the model.
+- `MAX_AGENT_PLUGIN_MCP_TOTAL_BYTES = 64_000` — cumulative cap across **all**
+  tools of one agent plugin.
+- Overflowing tools are registered with `ToolExposure::Hidden`: absent from the
+  model-facing registry and from tool search, while remaining listed in `/mcp`.
 
-The relevant baseline is commit
-`953f57116b5daa66be1e532f1254cd7349a69824`. Earlier diagnostic changes are in
-`d1c40f6fe9bde9a55e3dc95c37b2fde7b30014f5`.
+The budget accumulates in the host's **alphabetical tool order** and hides a
+contiguous tail. Tallyhand's 86 tool specs summed to ≈75.6 KB (pre-fix), so the
+host exposed the first 76 tools and hid the last 10 — all `update_*` tools:
 
-1. The application registers **86** tools, including **12** `update_*` tools.
-   It returns them in one `tools/list` result, without `nextCursor`. Source
-   registration order is not alphabetical; `update_settings` is not last.
-2. Production catalog instrumentation observed OAuth-authenticated legacy
-   discovery generating all 86 definitions, all 12 update definitions, and
-   `update_settings`, followed by HTTP 200 responses. This proves the server
-   handler's catalog, not the host's final imported/model-facing registry.
-3. Local HTTP endpoint tests cover protocol revisions 2025-03-26, 2025-06-18,
-   2025-11-25 and 2026-07-28, including JSON and progress/SSE paths. All return
-   the complete catalog. The settings dry-run dispatch reaches the real REST
-   handler successfully with synthetic business and invoice inputs.
-4. Read-only and read/write OAuth grants produce identical discovery catalogs.
-   `update_settings` and working client/project creation operations advertise
-   the same `tally:read` + `tally:write` scopes. Calls still enforce scopes;
-   discovery does not hide write operations.
-5. CLI checks against a locally running compiled Next.js production build
-   succeed over real HTTP in legacy and modern modes, with 86 tools. These use
-   a synthetic local API token and do **not** certify live Clerk OAuth.
-6. The production catalog's exact static JSON fingerprint was reproduced
-   locally using the web lockfile's Zod version. All 86 input schemas compile
-   with the SDK's AJV validator. The settings schema accepts a synthetic
-   Net-30/Direct-Deposit dry-run. Standards-valid JSON Schema is not proof that
-   a particular host accepts the same schema subset.
+`update_expense, update_invoice, update_mileage_entry, update_project,
+update_rate_card, update_recurring_schedule, update_retainer, update_settings,
+update_task, update_tax_payment`
 
-## Relevant implementation
+`update_settings` alone needs 3,313 bytes; the 76th tool already consumed
+63,722 bytes, so it never fit. The working tools (`get_settings`,
+`get_profile`, `list_clients`, `list_projects`, plus `update_client` and
+`update_contract` at positions 75–76) all fit.
 
-- `cli/src/mcp.ts`: core registration, scopes, settings tool and callbacks
-- `cli/src/mcp-server.ts`: complete catalog handler and top-level auth metadata
-- `cli/src/mcp-auth.ts`: scope policy and legacy consent challenges
-- `cli/src/mcp-extensions.ts`, `mcp-features.ts`: remaining operations/resources
-- `cli/src/settings-schema.ts`: shared typed settings patch validation
-- `src/app/api/mcp/route.ts`: middleware-independent auth gate and HTTP transport
-- `src/lib/auth/oauth.ts`: Clerk verification, audience and scope checks
-- `src/server/internal-api.ts`: in-process dispatch to the same REST handlers
-- `src/app/api/v1/settings/route.ts`: settings read/patch/dry-run implementation
-- `plugins/tallyhand/`: portable package, Codex overlay, skills and logo
-- `.agents/plugins/marketplace.json`: generated repository marketplace adapter
+Why the budget overflowed: the host repeats the MCP server's `instructions`
+string in **every** tool's serialized namespace spec. Tallyhand's 264-byte
+instructions × 86 tools = 22.7 KB (30% of the cap) before any per-tool content.
 
-## Known diagnostic and packaging corrections
+## Evidence
 
-- SDK descriptor parsing can strip unknown top-level `securitySchemes`.
-  The server explicitly publishes that field and its `_meta` mirror. The CLI
-  catalog diagnostic preserves descriptor extensions while validating standard
-  MCP fields. This is already fixed and was not sufficient to resolve the
-  reported host omission.
-- The root lockfile resolves Zod **4.3.6**, while the CLI lockfile resolves
-  **4.6.5**. Installing both dependency trees changes local schema serialization
-  (including union representation and email patterns) compared with root-only
-  CI builds. Account for this before comparing fingerprints. Both versions
-  returned all tools in local checks. No causal link to host exclusion is proven.
-- Package 0.3.5 adds missing skill `agents/openai.yaml` presentation metadata
-  required by the local Codex package validator and the repository marketplace.
-  It is a packaging/distribution release, not a verified missing-tool fix.
-- The private ChatGPT test entry and the repository marketplace are separate
-  distributions. Installing a repository package does not update that saved
-  private entry. Skills/package versions do not pin the hosted MCP server.
+1. **Host source** (codex-rs `rust-v0.160.0`): the budget constants and the
+   first-fit loop in `core/src/mcp_tool_exposure.rs`; per-tool spec building in
+   `core/src/tools/handlers/mcp.rs` and `tools/src/responses_api.rs`
+   (`model_spec_bytes()` = serialized namespace spec; description capped at
+   1,000 bytes; unknown JSON Schema keywords dropped; plugin provenance note
+   appended to every description in `codex-mcp/src/rmcp_client.rs`); tool
+   ordering by `raw_tool_identity` (alphabetical within a server) in
+   `codex-mcp/src/tools.rs`.
+2. **Failing-client registry scans** (archived local sessions, 2026-10-01):
+   `ALL_TOOLS.filter(x => x.name === "mcp__tallyhand__update_settings")` →
+   empty; `startsWith("mcp__tallyhand__").length` → **76**. A second session
+   shows `update_client`/`update_contract` present — the exact budget boundary.
+   `/mcp` reports the transport-level catalog (86) regardless of exposure,
+   which is why the counts disagreed.
+3. **Byte-exact replica**: a faithful port of the host pipeline (description
+   cap + provenance note, schema sanitize/JsonSchema-subset mapping, namespace
+   spec serialization, 8 KB per-tool degrade, 8 KB/64 KB first-fit budget)
+   reproduces the observed state exactly against the production catalog
+   (86 tools, root-lockfile Zod 4.3.6): **76 exposed / 10 hidden**, hidden set
+   identical, cumulative 63,722/64,000.
+4. **Minimal live reproduction**: fresh Codex CLI 0.160.0 in a throwaway
+   `CODEX_HOME`, with a local fixture plugin serving the exact production
+   catalog over stdio (agent-plugin attribution identical to the real
+   package). Result: `ALL_TOOLS` contains exactly **76** `mcp__tallyhand__*`
+   tools, `update_settings` absent, `get_settings` callable. After applying
+   the fix below to the fixture: **86** tools, all twelve `update_*` tools
+   present, `update_settings` dispatches (reaching the host approval gate, as
+   designed).
+5. ChatGPT's separate omission of `update_settings` is consistent with the
+   same OpenAI-side exposure logic family, but that path was not directly
+   instrumented (see uncertainties).
 
-## Unproven hypotheses
+## Fix (this repository)
 
-Host import/schema conversion, per-session exposure/filtering, tool search,
-catalog size limits, stale definitions, and local configuration remain possible.
-Do not declare any of them the cause without evidence from the failing client.
+The budget lives in the host; the app must fit its catalog inside it. The
+narrowly scoped change trims redundant serialized bytes without dropping tools,
+renaming anything, or weakening auth:
 
-An earlier agent reported 76 tools, while a later pasted list contained only 51
-and admitted truncation. Neither is a trustworthy complete inventory. Sorting
-the real catalog puts `timer_stop` at 74, `update_client` at 75,
-`update_contract` at 76, and `update_settings` at 84. This is a testable clue,
-not proof of an alphabetical cutoff. No numeric plugin tool-count cap was
-established from the official documentation reviewed.
+1. Server `instructions` (cli/src/mcp.ts) 264 → 110 bytes. The dollars/ms
+   conventions and draft-before-send guidance remain in tool descriptions and
+   the `tally://guide` playbook; the consent and no-credential rules are kept
+   verbatim in meaning.
+2. `dateArg` format hint loses the redundant `Format:` prefix (13 occurrences).
+3. Four verbose tool descriptions tightened (`create_recurring_schedule`,
+   `create_invoice_draft`, `bulk_log_time`, `bulk_log_expenses`).
 
-## Recommended local investigation
+Result (verified with the byte-exact replica and the live fixture): **62,084 /
+64,000 bytes — all 86 tools exposed**, ~1.9 KB headroom.
 
-1. Record the installed Codex version, plugin version/source, enabled state,
-   effective MCP configuration and actual transport. Redact credentials.
-   Check for multiple definitions named `tallyhand` before changing anything.
-2. Compare `/mcp verbose` with the **actual model-callable registry**, including
-   an exact search for `update_settings` and a complete `update_*` inventory.
-   Follow discovery pagination or deferred-tool loading where the client
-   supports it. Do not treat an agent's prose claim as a raw inventory.
-3. Capture the authenticated server catalog through the Tally CLI using an
-   existing authorized credential. Never publish the credential or account
-   output. Separate transport discovery, imported definitions, model exposure,
-   tool dispatch and API validation as distinct stages.
-4. Inspect permitted local Codex startup/diagnostic logs and official source
-   for skipped/rejected tools, schema conversion, tool budgets or permission
-   filtering. Honor access denials. Do not upload raw home-directory logs.
-5. If `update_settings` is actually exposed, run only a synthetic `dryRun: true`
-   preview after user approval. Distinguish permission challenge, validation
-   error, and absent tool. Do not save settings, create records, send invoices,
-   or run recurring schedules as part of diagnosis.
-6. Demonstrate a minimal causal reproduction before changing names, schemas,
-   auth or packaging. Preserve scope enforcement, user isolation, declared
-   safety annotations and 1:1 CLI/API coverage. Do not introduce a generic
-   executor or aliases to evade host review or permission controls.
+`src/app/api/mcp/catalog-byte-budget.test.ts` guards this: it recomputes the
+host spec bytes from the live catalog and fails if any tool exceeds 8,000
+bytes or the catalog exceeds 62,500 bytes, so future catalog growth cannot
+silently re-trigger host-side hiding.
 
-Useful local checks:
+## Remaining uncertainties
 
-```sh
-npm ci
-npm --prefix cli ci
-npx vitest run src/app/api/mcp/catalog-contract.test.ts
-npm --prefix cli test
-npm --prefix cli run typecheck
-node scripts/build-agent-skills.mjs --check
-python3 scripts/package-agent-plugin.py --check
-node scripts/build-plugin-marketplace.mjs --check
-npm run lint
-npm test
-npm run build
-```
+- **ChatGPT cloud path**: the separate ChatGPT connection omitted
+  `update_settings` too. Not directly instrumentable from here; expected to
+  resolve with the same spec-size reduction, but verify after deploy.
+- **Production verification**: the fix is not yet deployed. After deploy, run
+  a fresh Codex session (re-install not required; server code is what changed)
+  and re-check `/mcp verbose` against a registry scan, then a `dryRun: true`
+  settings preview. Do not rely on stale sessions — the host may cache tool
+  catalogs for up to 30 minutes per process.
+- **Host version drift**: constants were read from codex-rs 0.160.0. A future
+  Codex release could change the budget; the guard test documents the
+  assumption. A silent policy change could re-hide tools without any local
+  signal — worth a bug report (below).
+- **Other harnesses** (Claude, Cursor, etc.): different exposure pipelines;
+  untested. The 64 KB figure is Codex-specific.
 
-`tally mcp catalog --names` reads the bundled CLI catalog, not host acceptance.
-`tally mcp catalog --compare host-tools.json` compares unprefixed tool names.
-`tally mcp check --transport http --protocol legacy` uses saved CLI credentials;
-adding `--workspace` also reads account data. Do not mistake API-key checks for
-an OAuth consent/refresh test.
+## Sanitized bug report
 
-## Completion criteria
+`docs/codex-agent-plugin-tool-budget-bug-report.md` drafts a sanitized report
+for the Codex host: the budget is undocumented, produces no warning or log,
+and creates a visible contradiction (`/mcp` lists N tools, the model sees
+fewer). Suggested asks: document the constants, log skipped tools, and surface
+the discrepancy in `/mcp`.
 
-Identify the precise stage and condition that removes the tool, supply a
-minimal reproduction, and verify the correction in a fresh Codex CLI session.
-The host must expose the expected inventory and successfully perform an approved
-settings preview without saving. Report remaining ChatGPT-specific differences
-and untested OAuth behavior explicitly. Do not call marketplace launch ready
-solely because server tests or package validation pass.
+## Reproducing locally
+
+Fixture assets live in the git-excluded `investigation-tmp/repro/`
+(diagnostic only; never commit): a stdio MCP server serving a dumped
+production catalog, a local marketplace fixture plugin, and a throwaway
+`CODEX_HOME`. To re-verify after a server change:
+
+1. Dump the current catalog: run the catalog-contract test pattern and save
+   `tools/list` JSON.
+2. Point `investigation-tmp/repro/mcp-server.mjs` at the dump.
+3. `CODEX_HOME=<throwaway> codex plugin marketplace add <fixture marketplace>`
+   and `codex plugin add tallyhand@repro` (the plugin manifest and MCP config
+   must keep their `$schema` fields; `mcp.json` overrides `.mcp.json`).
+4. `CODEX_HOME=<throwaway> codex exec "count ALL_TOOLS entries starting with
+   mcp__tallyhand__ and check update_settings"`.
+
+Never commit the throwaway home, dumps of live account data, or credentials.
+
+## Historical notes (pre-resolution, kept for context)
+
+- The earlier hypothesis of an alphabetical **tool-count** cutoff was wrong in
+  mechanism but right in symptom: the boundary at 76 is where the byte budget
+  ran out, not a count cap. No official documentation states the budget.
+- Read-only vs read/write OAuth grants produce identical catalogs (still
+  true); discovery does not filter by scope; calls still enforce scopes.
+- The production catalog fingerprint was reproduced locally with the root
+  lockfile's Zod 4.3.6; the CLI lockfile resolves Zod 4.6.5 and produces
+  different serialization. The byte-budget math above uses the production
+  (root-lockfile) serialization.
+- The temporary disappearance of all settings access was an accidental
+  uninstall, separately resolved by reinstallation; unrelated to this bug.
+- Local checks: `npm test`, `npm --prefix cli test`,
+  `npm --prefix cli run typecheck`, `npm run lint`, and the catalog tests all
+  pass on the fix branch. `npm run build` was not run (no TS/build impact).
