@@ -693,7 +693,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "delete_task",
-    "Delete a time entry. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
+    "Delete one unbilled time-entry record by id. dryRun=true previews only. Billed entries are rejected; this tool does not delete invoices.",
     {
       id: z.string().describe("Task id."),
       dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),
@@ -759,7 +759,7 @@ export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeC
 
   tool(
     "delete_expense",
-    "Delete an expense. Refused (409) when billed — delete the draft invoice first. dryRun previews without deleting.",
+    "Delete one unbilled expense record by id. dryRun=true previews only. Billed expenses are rejected; this tool does not delete invoices.",
     {
       id: z.string().describe("Expense id."),
       dryRun: z.boolean().optional().describe("Preview only; nothing is deleted."),

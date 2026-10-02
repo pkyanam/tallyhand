@@ -192,3 +192,29 @@ describe("invoice editing contract", () => {
     await client.close();
   });
 });
+
+
+describe("deletion tool contract", () => {
+  it.each([
+    ["delete_task", "deleteTask"],
+    ["delete_expense", "deleteExpense"],
+  ])("%s declares deletion and forwards preview without deleting", async (name, method) => {
+    const calls: unknown[] = [];
+    const api = fakeApi();
+    (api as any)[method] = async (id: string, options: { dryRun?: boolean }) => {
+      calls.push({ id, ...options });
+      return options.dryRun ? { dryRun: true, wouldDelete: { id } } : undefined;
+    };
+    const client = await connectedClient(api);
+    const { tools } = await client.listTools();
+    const tool = tools.find(t => t.name === name)!;
+    expect(tool.description).toContain("unbilled");
+    expect(tool.description).toContain("does not delete invoices");
+    expect(tool.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false, openWorldHint: false });
+    const preview: any = await client.callTool({ name, arguments: { id: "record-fixture", dryRun: true } });
+    expect(preview.isError).toBeFalsy();
+    expect(preview.structuredContent.data).toMatchObject({ dryRun: true, wouldDelete: { id: "record-fixture" } });
+    expect(calls).toEqual([{ id: "record-fixture", dryRun: true }]);
+    await client.close();
+  });
+});
