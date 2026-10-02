@@ -18,6 +18,20 @@ A server-backed deployment (Convex, SQLite, or Postgres) is required for API acc
 
 ## Plugin installation and connection diagnostics
 
+For Codex CLI, install from the official repository marketplace:
+
+```sh
+codex plugin marketplace add pkyanam/tallyhand
+codex plugin add tallyhand@tallyhand
+codex
+```
+
+Complete OAuth when prompted and test in a new session. First verify the tool
+inventory, then read settings, then preview changes with `dryRun`. See
+[integration architecture and removal instructions](../plugins/README.md).
+This adds a local marketplace install; it does not publish a ChatGPT directory
+listing. The shared package remains portable for future harness adapters.
+
 The latest development ZIP is at [tallyhand.xyz/plugins/tallyhand.zip](https://tallyhand.xyz/plugins/tallyhand.zip).
 Use ChatGPT's **Plugins → Upload plugin** where available, complete the account connection, then start a new chat.
 This is not a public marketplace listing. Installing skills does not grant account access.

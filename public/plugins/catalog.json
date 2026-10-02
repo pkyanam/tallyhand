@@ -1,0 +1,24 @@
+{
+  "format": "tallyhand.plugin-catalog.v1",
+  "repository": "https://github.com/pkyanam/tallyhand",
+  "packages": [
+    {
+      "name": "tallyhand",
+      "version": "0.3.5",
+      "format": "agent-plugins-1.0",
+      "sourcePath": "plugins/tallyhand",
+      "archive": "https://tallyhand.xyz/plugins/tallyhand-0.3.5.zip",
+      "sha256": "54c69eb5bbda4842250f1dc6732f25fd30e65dfc7aa7a834ba164f00e5bb1a69",
+      "mcpEndpoint": "https://tallyhand.xyz/api/mcp",
+      "installTargets": [
+        {
+          "harness": "codex",
+          "marketplace": "tallyhand",
+          "source": "pkyanam/tallyhand",
+          "marketplacePath": ".agents/plugins/marketplace.json",
+          "selector": "tallyhand@tallyhand"
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,8 @@
+interface:
+  display_name: "Manage workspace"
+  short_description: "Manage settings and account data"
+  brand_color: "#111827"
+  default_prompt: "Preview my workspace settings changes"
 dependencies:
   tools:
     - type: "mcp"

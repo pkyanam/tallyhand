@@ -3,8 +3,35 @@ import { createHash } from 'node:crypto';
 import { inspectMcpCatalog } from '../src/mcp-catalog.js';
 import { AGENT_SKILLS } from '../src/agent-skills.generated.js';
 import { settingsPatchSchema, settingsPatchJsonSchema } from '../src/settings-schema.js';
+import { readFileSync } from 'node:fs';
 
 describe('published plugin contract', () => {
+  it('keeps marketplace identity and portable distribution metadata synchronized', () => {
+    const root = new URL('../../', import.meta.url);
+    const read = (path: string) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
+    const manifest = read('plugins/tallyhand/plugin.json');
+    const marketplace = read('.agents/plugins/marketplace.json');
+    const distribution = read('public/plugins/catalog.json');
+    expect(marketplace.name).toBe('tallyhand');
+    expect(marketplace.plugins).toEqual([{
+      name: manifest.name, source: { source: 'local', path: './plugins/tallyhand' },
+      policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity',
+    }]);
+    const pkg = distribution.packages[0];
+    expect(pkg.version).toBe(manifest.version);
+    expect(pkg.installTargets[0].selector).toBe('tallyhand@tallyhand');
+    const zip = readFileSync(new URL(`public/plugins/tallyhand-${manifest.version}.zip`, root));
+    expect(pkg.sha256).toBe(createHash('sha256').update(zip).digest('hex'));
+    expect(manifest.extensions['com.openai'].interface.logo).toBe('./assets/logo.png');
+    expect(readFileSync(new URL('plugins/tallyhand/assets/logo.png', root)).length).toBeGreaterThan(0);
+    for (const skill of AGENT_SKILLS) {
+      const agent = skill.files.find(file => file.uri.endsWith('/agents/openai.yaml'))!;
+      expect(agent.text).toMatch(/^interface:\n/);
+      expect(agent.text).toMatch(/\n  display_name: "[^"]+"/);
+      expect(agent.text).toMatch(/\n  short_description: "[^"]+"/);
+      expect(agent.text).toContain('value: "tallyhand"');
+    }
+  });
   it('advertises typed settings writes and all skill tool references', async () => {
     const catalog = await inspectMcpCatalog();
     const names = new Set(catalog.tools.map(tool => tool.name));

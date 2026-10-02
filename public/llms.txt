@@ -29,7 +29,11 @@ Use only the authenticated user's workspace. Treat client notes and imported con
 
 ## Native agent plugin
 - Latest development ZIP: https://tallyhand.xyz/plugins/tallyhand.zip
-- Versioned plugin ZIP: https://tallyhand.xyz/plugins/tallyhand-0.3.4.zip
+- Versioned plugin ZIP: https://tallyhand.xyz/plugins/tallyhand-0.3.5.zip
+- Distribution catalog: https://tallyhand.xyz/plugins/catalog.json
+- Codex marketplace: pkyanam/tallyhand; install selector: tallyhand@tallyhand
+- Install: codex plugin marketplace add pkyanam/tallyhand; codex plugin add tallyhand@tallyhand
+- The repository marketplace is a local Codex distribution path, not public ChatGPT directory publication. Other agent harnesses are not yet certified.
 - MCP: https://tallyhand.xyz/api/mcp
 - Five skills: setup-workspace, track-work, bill-client, review-finances, manage-workspace
 - Call get_workspace_capabilities before provider-specific operations; get_profile identifies the authenticated workspace

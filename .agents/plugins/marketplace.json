@@ -1,0 +1,20 @@
+{
+  "name": "tallyhand",
+  "interface": {
+    "displayName": "Tallyhand"
+  },
+  "plugins": [
+    {
+      "name": "tallyhand",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tallyhand"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

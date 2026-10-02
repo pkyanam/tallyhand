@@ -1,3 +1,8 @@
+interface:
+  display_name: "Bill a client"
+  short_description: "Review drafts and client billing"
+  brand_color: "#111827"
+  default_prompt: "Prepare a client invoice draft for review"
 dependencies:
   tools:
     - type: "mcp"
