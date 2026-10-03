@@ -30,7 +30,7 @@ function clerk() { return createClerkClient({ secretKey: process.env.CLERK_SECRE
 function ids(metadata: Record<string, unknown>): string[] {
   const map = metadata[KEY];
   return map && typeof map === 'object' && !Array.isArray(map)
-    ? Object.entries(map).filter(([id, v]) => /^oauthapp_[A-Za-z0-9]+$/.test(id) && v === true).map(([id]) => id) : [];
+    ? Object.entries(map).filter(([id, v]) => /^(?:oa|oauthapp)_[A-Za-z0-9]+$/.test(id) && v === true).map(([id]) => id) : [];
 }
 function view(app: Application) {
   return { id: app.id, name: app.name, clientId: app.clientId, redirectUris: app.redirectUris,
@@ -55,11 +55,22 @@ export async function createClient(userId: string, input: z.infer<typeof clientI
   const c = clerk();
   if (ids((await c.users.getUser(userId)).privateMetadata).length >= 10)
     throw new IntegrationError(409, 'client_limit', 'Remove an unused client before creating another (limit 10).');
-  const app = await c.oauthApplications.create({ ...input, scopes: [...new Set(input.scopes)].join(' ') });
+  // Clerk BAPI supports these flags although backend SDK 3.21.1 omits them
+  // from CreateOAuthApplicationParams. Its serializer forwards camelCase keys.
+  // Explicit per-client requirements avoid relying on inherited instance flags.
+  // https://github.com/clerk/clerk-sdk-php/blob/main/docs/Models/Operations/CreateOAuthApplicationRequestBody.md
+  const params = { ...input, scopes: [...new Set(input.scopes)].join(' '),
+    consentScreenEnabled: true, pkceRequired: true };
+  const app = await c.oauthApplications.create(params);
   try {
     // Fail closed if provider instance settings cannot guarantee safe consent.
-    if (!app.consentScreenEnabled || !app.pkceRequired || input.scopes.some(s => !app.scopes.split(/\s+/).includes(s)))
-      throw new IntegrationError(503, 'provider_configuration', 'The OAuth provider must enable consent, require PKCE and support the requested scopes. Ask the deployment administrator to check Clerk OAuth settings.');
+    const missing = [
+      ...(!app.consentScreenEnabled ? ['consent screen is not enabled'] : []),
+      ...(!app.pkceRequired ? ['explicit client PKCE requirement was not confirmed'] : []),
+      ...input.scopes.filter(s => !app.scopes.split(/\s+/).includes(s)).map(s => `scope ${s} was not assigned`),
+    ];
+    if (missing.length)
+      throw new IntegrationError(503, 'provider_configuration', `OAuth client registration could not be verified: ${missing.join('; ')}. No client credentials were saved. Contact the deployment administrator.`);
     // Deep-merge a unique key, not a read/replace array: simultaneous creates do not drop ownership.
     await c.users.updateUserMetadata(userId, { privateMetadata: { [KEY]: { [app.id]: true } } });
   } catch (e) {
