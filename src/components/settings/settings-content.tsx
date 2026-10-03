@@ -198,8 +198,8 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
     try {
       if (dataMode === "cloud") {
         const current = await readCloudBackup();
-        const confirmation = window.prompt("Delete YOUR cloud business data and reset settings? This revokes shared links and approvals, but keeps your sign-in and API keys. Your offline app is untouched. A backup will download first. Type RESET CLOUD DATA to continue.");
-        if (confirmation !== "RESET CLOUD DATA") return;
+        const confirmation = window.prompt("Delete YOUR cloud business data and reset settings? This permanently revokes ALL personal API keys, shared links and approvals. CLI connections using those keys will stop working. Your sign-in and external OAuth connections remain. Your offline app is untouched. A backup will download first. Type RESET CLOUD DATA AND API KEYS to continue.");
+        if (confirmation !== "RESET CLOUD DATA AND API KEYS") return;
         downloadText(`tallyhand-before-reset-${Date.now()}.json`, JSON.stringify(current.bundle, null, 2), "application/json");
         if (!window.confirm("Confirm your downloaded cloud backup is saved before deleting data. Cancel if the download was blocked.")) return;
         await replaceCloudData("reset", current.revision, confirmation);

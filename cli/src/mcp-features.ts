@@ -40,9 +40,9 @@ export function registerWorkspaceFeatures(server: McpServer, api: Api, options: 
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (_args, ctx) => { const denied = toolAuthError(options, "tally:read", ctx); if (denied) return denied; if (!api.backup) throw new Error("Cloud backups unavailable on this backend"); return result(await api.backup()); });
   for (const action of ["import", "reset"] as const) {
-    const phrase = action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA";
+    const phrase = action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA AND API KEYS";
     server.registerTool(`${action}_workspace`, {
-      description: `${action === "import" ? "Replace workspace with a tallyhand.v1 backup" : "Clear workspace business data and settings"}. Requires explicit user confirmation and the revision from export_workspace_backup. Save the exported bundle before calling. Revokes share links; preserves login and API keys. Revision mismatch changes nothing.`,
+      description: `${action === "import" ? "Replace workspace with a tallyhand.v1 backup" : "Clear workspace business data and settings"}. Requires explicit user confirmation and the revision from export_workspace_backup. Save the exported bundle before calling. Revokes share links. ${action === "reset" ? "Revokes ALL personal API keys, including the calling key." : "Preserves API keys."} Login and external OAuth remain. Revision mismatch changes nothing.`,
       inputSchema: z.object({ expectedRevision: z.number().int().nonnegative(), confirmation: z.literal(phrase), backupSaved: z.literal(true), ...(action === "import" ? { bundle: z.record(z.string(), z.unknown()) } : {}) }),
       outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, "tally:manage"),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },

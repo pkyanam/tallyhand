@@ -650,9 +650,9 @@ export function buildProgram(): Command {
       emit(out.json, result, () => console.log("Cloud import complete; previous data saved in " + opts.backupOut));
     }));
   data.command("reset").requiredOption("--backup-out <path>", "save current cloud data to a NEW file before resetting")
-    .requiredOption("--confirm <phrase>", "must be RESET CLOUD DATA; keeps login and API tokens")
+    .requiredOption("--confirm <phrase>", "must be RESET CLOUD DATA AND API KEYS; revokes ALL personal API keys; keeps login and external OAuth")
     .action(wrap(async (cmd, opts) => {
-      if (opts.confirm !== "RESET CLOUD DATA") throw new Error("Required confirmation: RESET CLOUD DATA");
+      if (opts.confirm !== "RESET CLOUD DATA AND API KEYS") throw new Error("Required confirmation: RESET CLOUD DATA AND API KEYS");
       const { api, out } = ctx(cmd); needAuth(api);
       const current = await api.backup();
       writeFileSync(opts.backupOut, JSON.stringify(current.bundle, null, 2) + "\n", { flag: "wx", mode: 0o600 });

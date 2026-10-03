@@ -43,9 +43,14 @@ export async function POST(req: Request) {
   }
   let body;
   try { body = JSON.parse(text); } catch { return reply({ error: { message: "Invalid JSON." } }, 400); }
-  if (!body || !["import", "reset"].includes(body.action) || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0 || body.confirmation !== (body.action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA"))
+  if (!body || !["import", "reset"].includes(body.action) || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0 || body.confirmation !== (body.action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA AND API KEYS"))
     return reply({ error: { message: "Provide an action, current backup revision, and exact confirmation phrase." } }, 400);
   try {
+    if (body.action === "reset") {
+      const capabilities = await client().query("backup:read", { userId }) as { resetRevokesApiKeys?: boolean };
+      if (capabilities.resetRevokesApiKeys !== true)
+        return reply({ error: { message: "Reset is temporarily unavailable until the updated Convex backend is deployed. Nothing was reset." } }, 503);
+    }
     const bundle = body.action === "import" ? validateCloudBackup(body.bundle) : undefined;
     return await withIdempotency(req, async () => reply({ data: await client().mutation("backup:replace", {
       userId, action: body.action, expectedRevision: body.expectedRevision, confirmation: body.confirmation,

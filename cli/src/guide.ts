@@ -6,6 +6,16 @@ Tallyhand is a local-first time tracker + invoicer for contractors. This CLI/MCP
 surface talks to a Tallyhand server over REST (/api/v1). The pure browser-PWA
 IndexedDB mode is NOT HTTP-reachable — point at a server-backed deployment.
 
+## Fresh setup and reset
+
+After a reset, discard previously read workspace records and read the workspace again.
+Chat history can still contain deleted demo data. Never restore business identity,
+clients, projects or rates from that history without asking the user to confirm them.
+Reset clears cloud business data/settings and revokes all personal API keys; import
+preserves keys. Neither operation erases chat history or external OAuth connections.
+An approval-required response is pending, not success; follow the host's approval
+and resume flow and verify saved records before reporting completion.
+
 ## Auth
 
 Every route except GET /health and GET /openapi.json needs

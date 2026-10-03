@@ -34,19 +34,27 @@ async function snapshot(ctx: QueryCtx | MutationCtx, userId: string) {
 }
 export const read = ownerQuery({ args: { userId: v.string() }, handler: async (ctx, args) => {
   const { bundle, revision } = await snapshot(ctx, args.userId);
-  return { bundle, revision };
+  return { bundle, revision, resetRevokesApiKeys: true };
 } });
 export const replace = ownerMutation({ args: {
   userId: v.string(), expectedRevision: v.number(), action: v.union(v.literal("import"), v.literal("reset")),
   confirmation: v.string(), bundle: v.optional(v.any()),
 }, handler: async (ctx, args) => {
-  if (args.confirmation !== (args.action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA")) throw new ConvexError({ code: "BAD_REQUEST", message: "Confirmation required" });
+  if (args.confirmation !== (args.action === "import" ? "REPLACE CLOUD DATA" : "RESET CLOUD DATA AND API KEYS")) throw new ConvexError({ code: "BAD_REQUEST", message: "Confirmation required" });
   let bundle;
   try { bundle = args.action === "import" ? validateCloudBackup(args.bundle) : null; }
   catch { throw new ConvexError({ code: "BAD_REQUEST", message: "Invalid backup" }); }
   const current = await snapshot(ctx, args.userId);
   if (current.revision !== args.expectedRevision) throw new ConvexError({ code: "BACKUP_CHANGED", message: "Workspace changed since backup" });
+  // Credentials are never exported/imported. Reset revokes all personal API keys
+  // atomically with business records, including the key used to request reset.
+  const tokens = args.action === "reset"
+    ? await ctx.db.query("apiTokens").withIndex("by_user", q => q.eq("userId", args.userId)).take(MAX_STORED_DOCUMENTS + 1)
+    : [];
+  if (current.docs.length + tokens.length > MAX_STORED_DOCUMENTS)
+    throw new ConvexError({ code: "BACKUP_TOO_LARGE", message: "Workspace exceeds the atomic reset limit" });
   // This entire operation is one transaction. A failed insert rolls back all deletes.
+  for (const token of tokens) await ctx.db.delete(token._id);
   for (const doc of current.docs) await ctx.db.delete(doc._id);
   if (bundle) {
     for (const table of tables) {
@@ -66,6 +74,8 @@ export const replace = ownerMutation({ args: {
     }
   }
   await ctx.db.insert("settings", { userId: args.userId, data: normalizeSettings(bundle?.settings ?? DEFAULT_SETTINGS) });
-  // Account, sign-in and personal API tokens survive. Old public links and approvals do not.
-  return { action: args.action, complete: true };
+  // Clerk identity/OAuth grants live outside Convex and are not account deletion.
+  // Keep the monotonic revision so stale pre-reset writes cannot reuse a revision.
+  return { action: args.action, complete: true, revokedApiKeys: tokens.length,
+    loginPreserved: true, externalOAuthConnectionsPreserved: true };
 } });
