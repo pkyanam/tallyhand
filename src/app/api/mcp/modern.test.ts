@@ -13,6 +13,7 @@ describe("July 2026 MCP HTTP", () => {
     const body = await r.json();
     expect(body.result.resultType).toBe("complete");
     expect(JSON.stringify(body.result)).toContain("2026-07-28");
+    expect(JSON.stringify(body.result)).toContain("https://tallyhand.xyz/brand/icon-192.png");
   });
   it("returns modern cache hints and structured tool definitions", async () => {
     const r = await POST(request("tools/list"));
@@ -46,3 +47,9 @@ describe("July 2026 MCP HTTP", () => {
     expect(r.status).toBe(405);
   });
 });
+
+ it("publishes server icons in legacy initialize", async () => {
+    const r = await POST(new Request("http://localhost:3000/api/mcp", {method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",authorization:"Bearer synthetic-mcp-test-key"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"fixture",version:"1"}}})}));
+    const result = (await r.json()).result;
+    expect(result.serverInfo.icons).toEqual([{src:"https://tallyhand.xyz/brand/icon-192.png",mimeType:"image/png",sizes:["192x192"]}]);
+ });

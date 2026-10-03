@@ -10,6 +10,7 @@
  * snippet works as pasted — with your token in place of <your-token>.
  */
 import * as React from "react";
+import { OAuthClientsCard } from "@/components/settings/oauth-clients-card";
 import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -214,6 +215,7 @@ export function ConnectClient() {
             <a href="/docs#plugin" className="underline">Installation, updates, and troubleshooting</a>
           </CardContent>
         </Card>
+        <OAuthClientsCard />
         {/* ------------------------------------------------ tokens */}
         <Card>
           <CardHeader>

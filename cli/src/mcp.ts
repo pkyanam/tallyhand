@@ -66,7 +66,7 @@ const moneyNote =
 
 export function createMcpServer(api: Api, options: McpAuthOptions = {}, observeCatalog?: (tools: ReadonlyArray<Record<string, unknown>>) => void): McpServer {
   api = withMcpPrivacy(api);
-  const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz" }, {
+  const server = new TallyhandMcpServer({ name: "tallyhand", title: "Tallyhand", version: MCP_VERSION, websiteUrl: "https://tallyhand.xyz", icons: [{ src: "https://tallyhand.xyz/brand/icon-192.png", mimeType: "image/png", sizes: ["192x192"] }] }, {
     instructions: "Read tally://guide. Explicit consent for financial changes, deletes, reset, import. Never request credentials.",
     cacheHints: {
       "tools/list": { ttlMs: 300000, cacheScope: "private" },

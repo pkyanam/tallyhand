@@ -1,0 +1,12 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+const m = vi.hoisted(() => ({ session: vi.fn() }));
+vi.mock('@/lib/auth/session', () => ({ requireSessionUserId: m.session }));
+import { integrationFailure, integrationSession } from './session-gate';
+import { protectedResourceMetadata } from '@/lib/mcp/metadata';
+beforeEach(() => { vi.stubEnv('TALLY_AUTH','clerk'); vi.stubEnv('TALLY_MCP_OAUTH_ENABLED','true'); vi.stubEnv('TALLY_OAUTH_ISSUER','https://issuer.example'); vi.stubEnv('CLERK_SECRET_KEY','synthetic'); vi.stubEnv('APP_BASE_URL','https://tally.example'); m.session.mockResolvedValue('user_a'); });
+afterEach(() => vi.unstubAllEnvs());
+it('requires browser session for credential management', async () => { await expect(integrationSession(new Request('https://tally.example/api/v1/oauth-clients',{headers:{authorization:'Bearer synthetic'}}))).rejects.toMatchObject({status:403}); });
+it('rejects cross-origin and missing-origin mutations', async () => { for(const origin of ['', 'https://other.example']) await expect(integrationSession(new Request('https://tally.example/api/v1/oauth-clients',{method:'POST',headers:{origin}}))).rejects.toMatchObject({status:403}); });
+it('allows same-origin session mutation', async () => { expect(await integrationSession(new Request('https://tally.example/api/v1/oauth-clients',{method:'POST',headers:{origin:'https://tally.example'}}))).toBe('user_a'); });
+it('does not expose provider error details', async () => { expect(await integrationFailure(new Error('synthetic-secret')).text()).not.toContain('synthetic-secret'); });
+it('advertises all workspace scopes without treating offline_access as an API permission', async () => { expect((await protectedResourceMetadata().json()).scopes_supported).toEqual(['tally:read','tally:write','tally:manage']); });
