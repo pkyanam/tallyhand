@@ -4,6 +4,7 @@ import { useSignIn } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 /** Clerk's v5 widget does not list AgentID yet, but its redirect API supports it. */
 export function AgentIdSignInButton({ redirectUrlComplete }: { redirectUrlComplete: string }) {
@@ -32,8 +33,10 @@ export function AgentIdSignInButton({ redirectUrlComplete }: { redirectUrlComple
     }
   }
 
-  return <div className="w-full max-w-sm text-center">
-    <Button type="button" variant="outline" className="w-full" disabled={!isLoaded || pending} onClick={startSignIn}>
+  return <div className="w-full text-center">
+    <Button type="button" variant="outline" className="h-12 w-full gap-3 rounded-md border-input bg-background text-sm font-medium shadow-sm" disabled={!isLoaded || pending} onClick={startSignIn}>
+      <Image src="/brand/agentid-black.svg" alt="" width={24} height={24} className="dark:hidden" />
+      <Image src="/brand/agentid-white.svg" alt="" width={24} height={24} className="hidden dark:block" />
       {pending ? "Connecting to AgentID…" : "Continue with AgentID"}
     </Button>
     {error && <p role="alert" className="mt-2 text-sm text-destructive">Unable to start AgentID sign-in. Please try again.</p>}
