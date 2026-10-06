@@ -33,8 +33,10 @@ export async function requireOwner(
   let userId: string | undefined;
   if (identity) {
     userId = identity.subject;
-    // The Clerk Convex JWT template includes the app's public role claim.
-    if (write && identity.role !== "member" && identity.role !== "admin") {
+    // New Clerk accounts have no public role metadata yet. Match the app's
+    // member default only for absent/null claims; explicit unknown roles deny.
+    const role = identity.role ?? "member";
+    if (write && role !== "member" && role !== "admin") {
       throw new ConvexError({ code: "FORBIDDEN", message: "Viewers have read-only access" });
     }
   }
