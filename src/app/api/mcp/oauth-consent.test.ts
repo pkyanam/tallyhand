@@ -32,10 +32,10 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(res.headers.get("www-authenticate")).toContain("tally:read tally:write");
     expect(await res.text()).not.toContain("oat_synthetic_fixture");
   });
-  it("advertises precise tool scopes for all 86 tools", async () => {
+  it("advertises precise tool scopes for all 91 tools", async () => {
     const res = await POST(request("tools/list", {}));
     const body = await payload(res);
-    expect(body.result.tools).toHaveLength(86);
+    expect(body.result.tools).toHaveLength(91);
     for (const tool of body.result.tools) {
       expect(tool._meta.securitySchemes[0].scopes).toContain("tally:read");
       expect(tool.securitySchemes).toEqual(tool._meta.securitySchemes);
@@ -50,12 +50,29 @@ it("serves short legacy calls as JSON and preserves no-transform", async () => {
   const response = await POST(request("tools/list", {}));
   expect(response.headers.get("content-type")).toContain("application/json");
   expect(response.headers.get("cache-control")).toContain("no-transform");
-  expect((await payload(response)).result.tools).toHaveLength(86);
+  expect((await payload(response)).result.tools).toHaveLength(91);
 });
 
 it("keeps legacy streaming when progress is requested", async () => {
   const response = await POST(request("tools/list", { _meta: { progressToken: "fixture-progress" } }));
   expect(response.headers.get("content-type")).toContain("text/event-stream");
   expect(response.headers.get("cache-control")).toContain("no-transform");
-  expect((await payload(response)).result.tools).toHaveLength(86);
+  expect((await payload(response)).result.tools).toHaveLength(91);
 });
+
+for (const [name, args, scope] of [
+  ["setup_workspace", { settings: {}, dryRun: true }, "tally:write"],
+  ["request_workspace_write", { operationId: "patch_clients_id", params: { id: "c1" } }, "tally:write"],
+  ["request_workspace_manage", { operationId: "delete_clients_id", params: { id: "c1" } }, "tally:manage"],
+] as const) {
+  it(`blocks read-only grants for ${name} on legacy and modern transports`, async () => {
+    const legacy = await POST(request("tools/call", { name, arguments: args }));
+    const body = await payload(legacy);
+    expect(body.result.isError).toBe(true);
+    expect(body.result._meta["mcp/www_authenticate"][0]).toContain(`scope="tally:read ${scope}"`);
+    const modern = await POST(request("tools/call", { name, arguments: args }, true));
+    expect(modern.status).toBe(403);
+    expect(modern.headers.get("www-authenticate")).toContain(`tally:read ${scope}`);
+    expect(JSON.stringify(body)).not.toContain("oat_synthetic_fixture");
+  });
+}

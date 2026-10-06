@@ -66,6 +66,7 @@ import {
   handleExport,
   handleDoctor,
 } from "./commands.js";
+import { getOnboarding, setupWorkspace, parseSetupPatch } from "./onboarding.js";
 import { registerExtensionCommands } from "./extension-commands.js";
 import { runMcpServer } from "./mcp.js";
 /* ------------------------------------------------------------------ */
@@ -82,7 +83,7 @@ const wrap =
   (fn: (...args: any[]) => Promise<void>) =>
   (...args: any[]): Promise<void> => {
     const cmd = args[args.length - 1] as Command;
-    return fn(cmd, ...args.slice(0, -1)).catch(fail);
+    return fn(cmd, ...args.slice(0, -1)).catch(error => fail(error, !!cmd.optsWithGlobals().json));
   };
 
 export function buildProgram(): Command {
@@ -96,6 +97,20 @@ export function buildProgram(): Command {
     .option("--json", "machine-readable JSON output")
     .option("--timing", "write request timings to stderr (never prints credentials)");
 
+  const apiCommands = program.command("api").description("Request an authenticated workspace REST operation");
+  apiCommands.command("request <method> <path>").option("--body <json>").option("--query <json>", "query parameters object").option("--dry-run").option("--idempotency-key <key>")
+    .action(wrap(async (cmd, method, path, opts) => { const { api } = ctx(cmd); needAuth(api); const body = opts.body === undefined ? undefined : JSON.parse(opts.body); console.log(JSON.stringify(await api.requestWorkspaceOperation({ method, path, body, query: opts.query === undefined ? undefined : JSON.parse(opts.query), dryRun: opts.dryRun || undefined, idempotencyKey: opts.idempotencyKey }), null, 2)); }));
+  program.command("setup").description("Inspect workspace readiness and actionable next steps")
+    .option("--intent <intent>", "time_tracking or invoicing", "time_tracking")
+    .action(wrap(async (cmd, opts) => { const { api } = ctx(cmd); console.log(JSON.stringify(await getOnboarding(api, opts.intent), null, 2)); }));
+  const onboarding = program.command("onboarding").description("Inspect, preview, and configure workspace setup");
+  onboarding.command("status").option("--intent <intent>", "time_tracking or invoicing", "time_tracking")
+    .action(wrap(async (cmd, opts) => { const { api } = ctx(cmd); console.log(JSON.stringify(await getOnboarding(api, opts.intent), null, 2)); }));
+  for (const action of ["preview", "configure"] as const) {
+    onboarding.command(action).requiredOption("--patch <json>", "business and invoice settings patch")
+      .option("--intent <intent>", "time_tracking or invoicing", "time_tracking")
+      .action(wrap(async (cmd, opts) => { const { api } = ctx(cmd); console.log(JSON.stringify(await setupWorkspace(api, { settings: parseSetupPatch(opts.patch), intent: opts.intent, dryRun: action === "preview" }), null, 2)); }));
+  }
   const timer = program.command("timer").description("Run a live timer");
   timer
     .command("start")
@@ -660,8 +675,23 @@ export function buildProgram(): Command {
       emit(out.json, result, () => console.log("Cloud reset complete; previous data saved in " + opts.backupOut));
     }));
 
-  program.command("login").description("Save a personal API key using hidden terminal input")
-    .action(wrap(async () => { const { login } = await import("./login.js"); await login(); }));
+  invoice.command("overdue").description("List overdue unpaid invoices").option("--client <id>")
+    .action(wrap(async (cmd, opts) => { const { api, out } = ctx(cmd); needAuth(api); const invoices = await api.listInvoices({ all: true, overdue: true, clientId: opts.client }); emit(out.json, invoices, () => console.log(JSON.stringify(invoices, null, 2))); }));
+
+  program.command("login").description("Sign in using a personal API key or browser OAuth")
+    .option("--oauth", "sign in through the browser using PKCE")
+    .option("--agentid", "sign in with AgentID, then approve OAuth consent")
+    .option("--no-open", "print the browser authorization link")
+    .action(wrap(async (cmd, opts) => {
+      if (!opts.oauth) { if (opts.agentid || opts.open === false) throw new Error("--agentid and --no-open require --oauth"); const { login } = await import("./login.js"); await login(); return; }
+      const { oauthLogin } = await import("./oauth-login.js");
+      const cfg = resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl });
+      const result = await oauthLogin({ baseUrl: cfg.baseUrl, noOpen: opts.open === false, agentid: opts.agentid, onAuthorization: info => { console.error(cmd.optsWithGlobals().json ? JSON.stringify(info) : info.authorizationUrl); } });
+      console.log(JSON.stringify(result, null, 2));
+    }));
+  const auth = program.command("auth").description("Inspect or remove local OAuth credentials");
+  auth.command("status").action(wrap(async cmd => { const { authStatus } = await import("./oauth-login.js"); console.log(JSON.stringify(authStatus(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl), null, 2)); }));
+  auth.command("logout").action(wrap(async cmd => { const { logout } = await import("./oauth-login.js"); console.log(JSON.stringify(await logout(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl), null, 2)); }));
 
   program.command("setup-check").description("Verify public setup docs, installer, and OAuth discovery")
     .action(wrap(async (cmd) => { const { checkSetup } = await import("./setup-check.js"); await checkSetup(resolveConfig({ apiUrl: cmd.optsWithGlobals().apiUrl }).baseUrl); }));
@@ -769,5 +799,5 @@ export function shouldAutoRun(argv1: string | undefined): boolean {
 }
 
 if (shouldAutoRun(process.argv[1])) {
-  buildProgram().parseAsync(process.argv).catch(fail);
+  buildProgram().parseAsync(process.argv).catch(error => fail(error, process.argv.includes("--json")));
 }

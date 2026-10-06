@@ -53,7 +53,7 @@ export function oauthChallenge(status = 401, scopes: string[] = ["tally:read"]):
 }
 export function requiredRestScope(req: Request): string | null {
   const path = new URL(req.url).pathname;
-  if (!/^\/api\/v1\/(clients|projects|tasks|expenses|invoices|settings|recurring-schedules|retainers|data|mileage|contracts|tax-payments|rate-cards|profile|capabilities|controls|share-links|dunning|scheduler)(\/|$)/.test(path)) return null;
+  if (!/^\/api\/v1\/(clients|projects|tasks|expenses|invoices|settings|recurring-schedules|retainers|data|mileage|contracts|tax-payments|rate-cards|profile|capabilities|controls|changes|requests|onboarding|share-links|dunning|scheduler)(\/|$)/.test(path)) return null;
   if (path === "/api/v1/dunning/run") return new URL(req.url).searchParams.get("dry_run") === "true" ? "tally:read" : "tally:manage";
   if (path === "/api/v1/scheduler/run") return new URL(req.url).searchParams.get("dry_run") === "true" ? "tally:read" : "tally:write";
   if (path.startsWith("/api/v1/share-links") && req.method !== "GET" && req.method !== "HEAD") return "tally:manage";

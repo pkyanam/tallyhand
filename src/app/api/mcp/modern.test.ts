@@ -24,7 +24,7 @@ describe("July 2026 MCP HTTP", () => {
     expect(result.ttlMs).toBe(300000);
     expect(result.tools.find((t: { name: string }) => t.name === "reset_workspace").annotations.destructiveHint).toBe(true);
     expect(result.tools.every((t: { outputSchema?: unknown }) => !!t.outputSchema)).toBe(true);
-    expect(result.tools).toHaveLength(86);
+    expect(result.tools).toHaveLength(91);
     for (const tool of result.tools) expect(tool.securitySchemes).toEqual(tool._meta.securitySchemes);
   });
   it("validates required metadata headers", async () => {

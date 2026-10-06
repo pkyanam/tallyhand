@@ -9,7 +9,7 @@ async function GETHandler(req: Request) {
   const key = new URL(req.url).searchParams.get("control");
   if (!key || !Object.hasOwn(AGENT_CONTROLS, key)) return badRequest("Unknown control", { controls: Object.keys(AGENT_CONTROLS) });
   const control = AGENT_CONTROLS[key as keyof typeof AGENT_CONTROLS];
-  return ok({ control: key, url: new URL(control.path, oauthConfig().origin).href, instructions: control.reason, requiresUserInteraction: true });
+  return ok({ control: key, url: new URL(control.path, oauthConfig().origin).href, instructions: control.reason, requiresUserInteraction: true, interaction: control.interaction, agentCanNavigate: control.agentCanNavigate, requiresHumanConsent: control.requiresHumanConsent, requiredPermission: control.permission, bearerApiAvailable: control.bearerApiAvailable, agentInstructions: control.instructions });
 }
 
 export const GET = withApiRequestCache(GETHandler);

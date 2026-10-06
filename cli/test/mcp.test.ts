@@ -6,6 +6,7 @@ import { ApiError } from "../src/client.js";
 
 import { CLI_MCP_PARITY } from "../src/mcp-parity.js";
 const EXPECTED_TOOLS = [
+  "request_workspace_write", "request_workspace_manage",
   "export_data", "export_workspace_backup", "import_workspace", "reset_workspace",
   "health_check",
   "list_clients",

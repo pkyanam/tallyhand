@@ -38,12 +38,12 @@ async function rpc(response: Response) {
 describe("complete MCP catalog and settings dispatch", () => {
   for (const version of ["2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"]) {
     for (const progress of [false, true]) {
-      it(`returns all 86 tools and all 12 update tools over ${version}, progress=${progress}`, async () => {
+      it(`returns all 91 tools and all 12 update tools over ${version}, progress=${progress}`, async () => {
         const response = await POST(request("tools/list", {}, version, progress));
         expect(response.status).toBe(200);
         const { result } = await rpc(response);
         const names = result.tools.map((tool: { name: string }) => tool.name);
-        expect(new Set(names).size).toBe(86);
+        expect(new Set(names).size).toBe(91);
         expect(names.filter((name: string) => name.startsWith("update_"))).toHaveLength(12);
         expect(names).toContain("update_settings");
         expect(result.nextCursor).toBeUndefined();

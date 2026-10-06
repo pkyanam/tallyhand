@@ -13,7 +13,7 @@ export function registerExtensionCommands(program: Command) {
         const cfg = resolveConfig({ apiUrl: options.apiUrl, token: options.token });
         if (!cfg.token) throw new Error("Sign in with tally login first");
         console.log(JSON.stringify(await fn(new TallyhandClient({ ...cfg, timing: !!options.timing }), options, args), null, options.json ? undefined : 2));
-      } catch (error) { fail(error); }
+      } catch (error) { fail(error, !!options.json); }
     });
   }
   for (const entity of extensionEntityNames) {

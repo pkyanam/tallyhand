@@ -1,6 +1,8 @@
 import { extensionModels, extensionEntityNames } from "./extension-models.js";
 /** Public business-feature contract. Local credential/process controls stay local. */
 export const CLI_MCP_PARITY: Record<string, string> = {
+  "api request": "request_workspace_read",
+  setup: "get_onboarding", "onboarding status": "get_onboarding", "onboarding preview": "setup_workspace", "onboarding configure": "setup_workspace", "invoice overdue": "list_overdue_invoices",
   "timer start": "timer_start", "timer stop": "timer_stop", "timer status": "timer_status", log: "log_time", unbilled: "list_unbilled",
   "clients list": "list_clients", "clients create": "create_client", "clients show": "get_client", "clients update": "update_client", "clients delete": "delete_client",
   "projects list": "list_projects", "projects create": "create_project", "projects show": "get_project", "projects update": "update_project", "projects delete": "delete_project",
@@ -12,7 +14,7 @@ export const CLI_MCP_PARITY: Record<string, string> = {
   "settings show": "get_settings", "settings set": "update_settings", "report revenue": "revenue_summary", export: "export_data",
   "data export": "export_workspace_backup", "data import": "import_workspace", "data reset": "reset_workspace",
 };
-export const LOCAL_ONLY_COMMANDS = ["setup-check", "login", "config set", "config show", "doctor", "mcp", "mcp check", "mcp catalog", "mcp oauth-check"];
+export const LOCAL_ONLY_COMMANDS = ["auth status", "auth logout", "setup-check", "login", "config set", "config show", "doctor", "mcp", "mcp check", "mcp catalog", "mcp oauth-check"];
 
 for (const entity of extensionEntityNames) {
   const model = extensionModels[entity];

@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 describe('release diagnostics', () => {
   it('preserves top-level auth descriptors across the complete bundled catalog', async () => {
     const catalog = await inspectMcpCatalog();
-    expect(catalog.total).toBe(86);
-    expect(catalog.tools).toHaveLength(86);
-    expect(new Set(catalog.tools.map(tool => tool.name)).size).toBe(86);
+    expect(catalog.total).toBe(91);
+    expect(catalog.tools).toHaveLength(91);
+    expect(new Set(catalog.tools.map(tool => tool.name)).size).toBe(91);
     for (const tool of catalog.tools) {
       expect(tool.securitySchemes, tool.name).toEqual(tool._meta?.securitySchemes);
       expect(tool.securitySchemes, tool.name).toEqual(expect.arrayContaining([

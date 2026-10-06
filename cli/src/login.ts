@@ -19,7 +19,7 @@ export async function login() {
       process.stdin.on("data", onData);
     });
     if (!/^thp_[A-Za-z0-9_-]+$/.test(token)) throw new Error("Expected a personal API key starting with thp_");
-    writeFileConfig({ token });
+    writeFileConfig({ token, oauth: undefined });
     console.error("API key saved locally in ~/.tallyhand/config.json. Treat this file like a password. Run tally doctor to check it.");
   } finally { process.stdin.setRawMode(oldRaw); process.stdin.pause(); value = ""; }
 }

@@ -20,9 +20,13 @@ Streamable HTTP MCP endpoint: https://tallyhand.xyz/api/mcp
 Protected resource metadata: https://tallyhand.xyz/.well-known/oauth-protected-resource/api/mcp
 Clerk OAuth with PKCE, user consent, and resource https://tallyhand.xyz/api/mcp; scopes tally:read, tally:write, tally:manage.
 Personal API keys use Authorization: Bearer in headers. Never place keys in URLs or tool arguments.
-CLI: tally config set api-url https://tallyhand.xyz, then tally login and tally doctor.
+AgentID browser entry: https://tallyhand.xyz/login/agentid (automatic sign-in; optional safe local next).
+CLI: tally config set api-url https://tallyhand.xyz, then tally login --oauth --agentid and tally doctor. OAuth credentials refresh automatically; tally auth status and tally auth logout inspect/revoke them. Existing personal API-key login remains available.
+Start with GET /api/v1/onboarding or MCP get_onboarding; configure missing setup via POST /api/v1/onboarding or setup_workspace (preview first). tally setup --json reports readiness.
+GET /api/v1/capabilities lists operations, caller permissions and backend availability. Generic request_workspace_read/write/manage tools and tally api request cover workspace operations beyond named tools.
+Convex recovery: GET /api/v1/changes?since=N checks the workspace revision; GET /api/v1/requests/{idempotency-key} reports durable request state. Pending or absent receipts require reconciliation before repeating a mutation.
 Local stdio MCP: tally mcp. Run tally --help for command discovery; --json gives structured output.
-86 tools cover the CLI business API; resources, prompts, completion, structured output, and form elicitation are supported.
+91 tools cover the CLI business API; resources, prompts, completion, structured output, and form elicitation are supported.
 Optional Tasks, Skills, and MCP Apps extensions are not currently advertised.
 
 ## Data and action semantics

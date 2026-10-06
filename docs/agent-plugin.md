@@ -20,7 +20,7 @@ The server also implements the currently draft Skills extension: `skills/list`, 
 
 ## Coverage and boundaries
 
-The CLI/MCP parity map is maintained in `cli/src/mcp-parity.ts` and checked in CI. The release exposes 86 tools: existing time/client/project/invoice/expense/recurring/retainer/settings/backup operations, plus mileage, contracts, tax-payment records, rate cards, shares, overdue-reminder previews/runs, stable account identity, capability discovery and secure control links.
+The CLI/MCP parity map is maintained in `cli/src/mcp-parity.ts` and checked in CI. The release exposes 91 tools: existing time/client/project/invoice/expense/recurring/retainer/settings/backup operations, plus mileage, contracts, tax-payment records, rate cards, shares, overdue-reminder previews/runs, stable account identity, capability discovery and secure control links.
 
 - Workspace reads/writes: account-scoped REST handlers shared by CLI and MCP
 - Credentials, user administration, payment authorization, PDF printing, browser notifications, offline-browser export and PWA installation: explicit secure UI links

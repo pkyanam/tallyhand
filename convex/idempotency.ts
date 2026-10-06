@@ -1,5 +1,5 @@
 import { v, ConvexError } from "convex/values";
-import { serverMutation } from "./access";
+import { serverMutation, serverQuery } from "./access";
 
 /** Atomic claim: simultaneous retries cannot both enter the handler. */
 export const claim = serverMutation({
@@ -26,5 +26,14 @@ export const complete = serverMutation({
     if (!row || row.claimId !== args.claimId) throw new ConvexError("Request claim mismatch");
     if (row.state === "complete") return;
     await ctx.db.patch(row._id, { state: "complete", status: args.status, body: args.body, contentType: args.contentType });
+  },
+});
+
+/** Metadata only: response payloads and claim credentials never leave this query. */
+export const status = serverQuery({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    const row = await ctx.db.query("requestReceipts").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    return row ? { state: row.state, status: row.status ?? null, createdAt: row.createdAt } : null;
   },
 });

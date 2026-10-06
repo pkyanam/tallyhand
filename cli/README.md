@@ -183,3 +183,18 @@ revokes links; use `true` to enable a fresh link. `--patch` also accepts
 `lineItems` (whole-list replacement; preserve source IDs), client, dates and
 payment fields. The authenticated API offers `GET /invoices/{id}/pdf` for
 private invoices. PDF export does not send the invoice or mark work billed.
+
+## Autonomous AgentID workflow
+
+```sh
+tally config set api-url https://tallyhand.xyz
+tally login --oauth --agentid
+tally auth status
+tally setup --json
+tally onboarding status --intent invoicing --json
+tally api request GET /capabilities --json
+```
+
+Use `--no-open` on OAuth login when your agent opens the displayed URL itself. macOS opens Helium by default. OAuth grants refresh automatically; explicit API tokens keep precedence. `tally auth logout` revokes when supported and clears saved OAuth credentials.
+
+`onboarding configure --patch '<JSON>'` applies setup; `onboarding preview --patch '<JSON>'` validates without writing. Generic `api request` supports `--query '<JSON>'`, `--body '<JSON>'`, `--dry-run`, and `--idempotency-key`. It accepts workspace API paths and preserves authorization, roles and validation. MCP provides `get_onboarding`, `setup_workspace`, and `request_workspace_read/write/manage`; use operation IDs from `get_workspace_capabilities`. Generic tools never expose session-only credential management or provider callbacks.

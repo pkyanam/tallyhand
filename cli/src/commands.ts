@@ -40,6 +40,9 @@ export const VERSION = RELEASE_VERSION;
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {
   hasToken: boolean;
+  requestWorkspaceOperation?: TallyhandClient["requestWorkspaceOperation"];
+  onboarding?(intent?: "time_tracking" | "invoicing"): Promise<any>;
+  configureOnboarding?(input: { settings: Record<string, unknown>; dryRun?: boolean; intent?: "time_tracking" | "invoicing" }): Promise<any>;
   extensionList?: TallyhandClient["extensionList"];
   extensionGet?: TallyhandClient["extensionGet"];
   extensionCreate?: TallyhandClient["extensionCreate"];
@@ -107,7 +110,13 @@ export interface Out {
   json: boolean;
 }
 
-export function fail(err: unknown): never {
+export function fail(err: unknown, json = false): never {
+  if (json) {
+    const code = err instanceof ApiError ? err.code : "invalid_request";
+    const message = err instanceof Error ? err.message : "Command failed";
+    console.error(JSON.stringify({ error: { code, message, ...(err instanceof ApiError ? { status: err.status } : {}), nextAction: code === "unauthorized" ? "tally login" : code === "connection_failed" ? "tally doctor" : "Review command input and tally --help" } }));
+    process.exit(1);
+  }
   if (err instanceof ApiError) {
     console.error(`Error: ${err.message}`);
     if (err.details !== undefined) console.error(JSON.stringify({ code: err.code, details: err.details }));
