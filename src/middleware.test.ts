@@ -86,15 +86,16 @@ describe("middleware", () => {
     expect(await response.json()).toEqual({ error: { code: "unauthorized", message: "Not signed in" } });
   });
 
-  it("leaves the OpenAPI spec public", async () => {
-    const response = await invoke(fakeReq("/api/v1/openapi.json"));
+  it.each(["/api/v1/openapi.json", "/openapi.json"])("leaves the OpenAPI spec public at %s", async (path) => {
+    const response = await invoke(fakeReq(path));
     expect(response.status).toBe(200);
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(clerkState.protectCalls).toBe(0);
   });
 
-  it("leaves the health endpoint public", async () => {
-    expect((await invoke(fakeReq("/api/health"))).status).toBe(200);
+  it.each(["/api/health", "/api/v1/health"])("leaves the health endpoint public at %s", async (path) => {
+    expect((await invoke(fakeReq(path))).status).toBe(200);
+    expect(clerkState.middlewareCalls).toBe(0);
   });
 
   it("passes through public pages and endpoints", async () => {
