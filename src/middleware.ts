@@ -62,6 +62,21 @@ function hasBearer(req: NextRequest): boolean {
   return /^Bearer\s+.+/i.test(header.trim());
 }
 
+/** Edge-safe discovery only; credential verification remains in the API handlers. */
+function apiOAuthChallengeHeaders(pathname: string): Record<string, string> | undefined {
+  if (!pathname.startsWith("/api/v1/") || process.env.TALLY_MCP_OAUTH_ENABLED !== "true" || !process.env.TALLY_OAUTH_ISSUER) return;
+  try {
+    // Match oauthConfig's configured origin; never derive metadata from an
+    // untrusted request Host header or import the Node-only OAuth verifier.
+    const base = new URL(process.env.APP_BASE_URL ?? process.env.TALLYHAND_APP_URL ?? "http://localhost:3000");
+    if (base.protocol !== "https:" && base.protocol !== "http:") return;
+    return {
+      "WWW-Authenticate": `Bearer resource_metadata="${base.origin}/.well-known/oauth-protected-resource/api/mcp", scope="tally:read"`,
+      "Cache-Control": "no-store",
+    };
+  } catch { return; }
+}
+
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   const authMode = effectiveAuth({
     TALLY_AUTH: process.env.TALLY_AUTH,
@@ -127,7 +142,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       if (isApiRoute(request.nextUrl.pathname)) {
         return NextResponse.json(
           { error: { code: "unauthorized", message: "Not signed in" } },
-          { status: 401 },
+          { status: 401, headers: apiOAuthChallengeHeaders(request.nextUrl.pathname) },
         );
       }
       await auth.protect();
@@ -140,7 +155,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     // (shared env token or personal thp_… token) via resolveUserId().
     if (session || hasBearer(req)) return NextResponse.next();
     if (isApiRoute(pathname)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: apiOAuthChallengeHeaders(pathname) });
     }
     const login = req.nextUrl.clone();
     login.pathname = "/login";

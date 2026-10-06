@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import middleware from "./middleware";
 
@@ -65,7 +65,11 @@ function fakeReq(path: string, headers: Record<string, string> = {}, cookies: Re
 const invoke = async (req: NextRequest): Promise<Response> =>
   (await middleware(req, {} as unknown as NextFetchEvent)) as Response;
 
+afterEach(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
+  vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "false");
+  vi.stubEnv("TALLY_OAUTH_ISSUER", "");
   clerkState.userId = null;
   clerkState.protectCalls = 0;
   clerkState.middlewareCalls = 0;
@@ -84,6 +88,32 @@ describe("middleware", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(await response.json()).toEqual({ error: { code: "unauthorized", message: "Not signed in" } });
+  });
+
+  it.each(["clerk", "builtin"] as const)("adds configured OAuth discovery to %s v1 401 without changing the gate", async mode => {
+    modeState.authMode = mode;
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
+    vi.stubEnv("TALLY_OAUTH_ISSUER", "https://issuer.example");
+    vi.stubEnv("APP_BASE_URL", "https://canonical.example/subpath");
+    const response = await invoke(fakeReq("/api/v1/profile", { Host: "untrusted.example" }));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toBe('Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource/api/mcp", scope="tally:read"');
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual(mode === "clerk" ? { error: { code: "unauthorized", message: "Not signed in" } } : { error: "Unauthorized" });
+    expect((await invoke(fakeReq("/api/v1/profile", { Authorization: "Bearer invalid" }))).status).toBe(200);
+    const admin = await invoke(fakeReq("/api/admin/users"));
+    expect(admin.status).toBe(401);
+    expect(admin.headers.has("WWW-Authenticate")).toBe(false);
+  });
+
+  it("keeps unauthenticated gates when OAuth discovery is incomplete or the configured origin is invalid", async () => {
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
+    expect((await invoke(fakeReq("/api/v1/profile"))).headers.has("WWW-Authenticate")).toBe(false);
+    vi.stubEnv("TALLY_OAUTH_ISSUER", "https://issuer.example");
+    vi.stubEnv("APP_BASE_URL", "invalid origin");
+    const response = await invoke(fakeReq("/api/v1/profile"));
+    expect(response.status).toBe(401);
+    expect(response.headers.has("WWW-Authenticate")).toBe(false);
   });
 
   it.each(["/api/v1/openapi.json", "/openapi.json", "/openapi.yaml"])("leaves the OpenAPI spec public at %s", async (path) => {
