@@ -33,7 +33,7 @@ describe("OAuth credentials", () => {
       expect(browser.pathname).toBe("/login/agentid");
       const continuation = new URL(browser.searchParams.get("next")!, grant.origin);
       expect(continuation.pathname).toBe("/login/oauth/continue");
-      authorization = new URL(continuation.searchParams.get("authorization_url")!);
+      authorization = new URL(Buffer.from(continuation.searchParams.get("authorization_url_b64")!, "base64url").toString("utf8"));
       expect(authorization.searchParams.has("login_hint")).toBe(false);
       callbackCheck = (async () => {
         const callback = new URL(workflow.redirectUri); callback.searchParams.set("state", "wrong"); callback.searchParams.set("code", "approved-code");

@@ -90,7 +90,7 @@ export async function oauthLogin(opts: { baseUrl: string; noOpen?: boolean; agen
     for (const [key, value] of Object.entries({ client_id: clientId, redirect_uri: REDIRECT, response_type: "code", resource, scope, state: pkce.state, code_challenge: pkce.challenge, code_challenge_method: "S256" })) url.searchParams.set(key, value);
     let browserUrl = url;
     if (opts.agentid) {
-      const continuation = `/login/oauth/continue?authorization_url=${encodeURIComponent(url.toString())}`;
+      const continuation = `/login/oauth/continue?authorization_url_b64=${Buffer.from(url.toString()).toString("base64url")}`;
       browserUrl = new URL("/login/agentid", origin);
       browserUrl.searchParams.set("next", continuation);
     }
