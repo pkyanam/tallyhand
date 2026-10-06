@@ -1,4 +1,4 @@
-# Tallyhand 0.3.7-rc.4 public-review preparation
+# Tallyhand public-review preparation
 
 Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support: **info@belweave.com**. Currently free, no paid plans. Country targeting: no country restrictions requested, subject to platform availability and applicable law.
 
@@ -14,11 +14,11 @@ Prepared October 2, 2026. Publisher selected by the owner: **Belweave**. Support
 
 Canonical review metadata is in root `plugin.json` under `extensions.com.openai`. Some older local Codex validators reject newer portal fields in the compatibility overlay; those declarations remain in the canonical root, which takes precedence in current OpenAI import behavior.
 
-The development distribution is the 0.3.7-rc.4 candidate. Versioned 0.3.6 and 0.3.7-rc.1 archives remain available. The candidate ZIP is `public/plugins/tallyhand-0.3.7-rc.4.zip`; its sources are in `releases/plugin-0.3.7-rc.4/`. Do not install or update a user's private entry without their request.
+The current distribution is version 0.3.8, including autonomous AgentID onboarding, workspace API adapters, and 91 MCP tools. Its ZIP is `public/plugins/tallyhand-0.3.8.zip`; current sources are in `plugins/tallyhand/`. Historical review candidates and versioned archives remain available for reproducibility. Do not install or update a user's private entry without their request.
 
 ## Working discovery fix is preserved
 
-The October 1 diagnosis is resolved: Codex 0.160.x has an agent-plugin tool-spec byte budget, and repeats server instructions in each tool. The compact catalog and byte-budget regression test remain in place. All 86 tools, including all 12 update tools, remain advertised. The owner confirmed working ChatGPT access after manually updating the plugin skill. This does not certify every OAuth lifecycle or every review case.
+The October 1 diagnosis is resolved: Codex 0.160.x has an agent-plugin tool-spec byte budget, and repeats server instructions in each tool. The compact catalog and byte-budget regression test remain in place. All 91 current tools, including all 12 update tools, remain advertised. The owner confirmed working ChatGPT access after manually updating the plugin skill. This does not certify every OAuth lifecycle or every review case.
 
 ## MCP privacy boundary
 
@@ -26,7 +26,7 @@ MCP uses a data-minimization facade; the ordinary app, REST and direct CLI keep 
 
 ## Verification evidence
 
-- Local catalog: 86 tools; every tool declares boolean read-only, destructive and open-world annotations
+- Current local catalog: 91 tools; every tool declares boolean read-only, destructive and open-world annotations
 - Legacy/modern transport and byte-budget regression suite passes
 - Public page paths have middleware tests under Clerk, builtin and no-auth modes
 - CLI tests include MCP-only redaction, write blocking, preservation of normal API data and refusal of lossy backups
