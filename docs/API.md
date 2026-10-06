@@ -212,7 +212,14 @@ curl -s -X PATCH $BASE/settings -H "$H" -H 'Content-Type: application/json' -d '
 
 ## Notes & limits
 
-- Storage is local SQLite today (`TALLYHAND_DB_PATH`); Postgres comes with the
-  hosted deployment. Back up the `.db` file like any precious data.
-- The browser PWA's IndexedDB and this SQLite DB are separate stores for now —
-  bridging them is the sync story (Phase 4), not this API.
+- SQLite, Postgres/Neon and Convex are supported server providers. Back up a
+  self-hosted SQLite `.db` file (`TALLYHAND_DB_PATH`) or use your database's
+  backup tooling. Cloud export/import/reset currently requires Convex.
+- Local browser data and hosted workspace data are separate. Export a backup
+  before switching modes; cloud import replaces the destination workspace
+  rather than merging it. Import/reset require a current backup revision and
+  an exact confirmation phrase. Cloud reset also revokes all personal API keys.
+- General outbound workspace-event webhooks and an A2A agent service are not
+  available. Discover supported access through
+  `/.well-known/integrations.json`; discover guided workflow archives through
+  `/.well-known/agent-skills/index.json`.

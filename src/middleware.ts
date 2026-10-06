@@ -42,7 +42,7 @@ const PUBLIC_PATHS: RegExp[] = [
   /^\/share(\/.*)?$/,
   /^\/api\/share\/(resolve|approve|pay)(\/.*)?$/,
   /^\/api\/auth(\/.*)?$/,
-  // Public liveness routes return only status/version, never workspace data.
+  // Public liveness/configuration probes never return workspace data.
   /^\/api\/(?:v1\/)?health$/,
   // The spec documents itself as requiring no authentication.
   /^\/api\/v1\/openapi\.json$/,
