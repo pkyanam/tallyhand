@@ -12,5 +12,9 @@ export const runtime = "nodejs";
  * version of the API actually implements.
  */
 export async function GET() {
-  return Response.json(OPENAPI_V1);
+  return Response.json(OPENAPI_V1, { headers: {
+    "Cache-Control": "public, max-age=300",
+    "Access-Control-Allow-Origin": "*",
+    "X-Content-Type-Options": "nosniff",
+  } });
 }

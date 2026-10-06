@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "bill-client",
+      "description": "Prepare, review and manage Tallyhand invoice drafts, recurring schedules, retainers, public invoice or timesheet links and overdue reminders.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/bill-client.zip",
+      "digest": "sha256:6d8f841ef2608b16af283d55beef309c7b09fa7a52e8f301744aa5ede8dcad37"
+    },
+    {
+      "name": "manage-workspace",
+      "description": "Manage Tallyhand settings, cloud backups/import/reset, public shares and secure account controls; diagnose connection and validation errors.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/manage-workspace.zip",
+      "digest": "sha256:26bf000f9863c7c278903da3cecb63b4f4e322566b81d1c83b3a20e5a3aaad2d"
+    },
+    {
+      "name": "review-finances",
+      "description": "Review Tallyhand revenue, unbilled work, expenses, tax-payment records, contracts and client/project financial health.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/review-finances.zip",
+      "digest": "sha256:5f9e09bd951d2e0f15e1305ab9162d910e2d33ab591918ea9c0f3529e04474e1"
+    },
+    {
+      "name": "setup-workspace",
+      "description": "Set up a contractor workspace, business profile, client, project, invoice defaults and draft billing workflow in Tallyhand.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/setup-workspace.zip",
+      "digest": "sha256:89e94a1c6c80adc10a81e548548cc43c837beaeb8299ea0444642ba43c72876e"
+    },
+    {
+      "name": "track-work",
+      "description": "Track contractor time and expenses in Tallyhand with live timers, manual entries, mileage, projects and rate cards.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/track-work.zip",
+      "digest": "sha256:66c4730ed57df2046a5f73f00a2c8b8a52513c5b16c81d041caf4390ae61730c"
+    }
+  ]
+}

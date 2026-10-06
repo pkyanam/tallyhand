@@ -1,20 +1,20 @@
 # Tallyhand API v1 — Agent Quickstart
 
 The REST API lets AI agents (and scripts, and the `tally` CLI) drive Tallyhand
-without a browser. It runs against a **server-side SQLite database**
-(`node:sqlite`, zero dependencies) — the same `StorageProvider` interface the
-browser app uses with IndexedDB. A Postgres provider for the hosted deployment
-arrives in Phase 4; the API surface stays the same.
+without a browser. It uses the configured server storage provider: SQLite,
+Postgres/Neon, or Convex. The hosted deployment uses Convex with per-user
+isolation. Browser-only IndexedDB data is not accessible through hosted APIs.
 
-Full machine-readable spec: `GET /api/v1/openapi.json` (served from the API
-tree itself, so it always matches the running server).
+Canonical machine-readable spec: `GET /openapi.json`. The existing
+`GET /api/v1/openapi.json` URL serves the same API-owned document.
 
 ## Enabling
 
 ```bash
 export TALLYHAND_API_TOKEN="a-long-random-secret"   # required — API returns 503 without it
 export TALLYHAND_DB_PATH="$HOME/.tallyhand/tallyhand.db"  # optional — this is the default
-export TALLYHAND_PROVIDER="sqlite"                  # optional — only "sqlite" today
+export TALLY_STORAGE="sqlite"                      # local server storage
+export TALLY_AUTH="none"                           # single-user local mode
 ```
 
 Then start the Next.js server (`npm run dev` / `npm start`). The API lives at
@@ -22,22 +22,36 @@ Then start the Next.js server (`npm run dev` / `npm start`). The API lives at
 
 ## Auth
 
-Every route except `GET /health` and `GET /openapi.json` requires:
+Hosted users create a personal API key at
+https://tallyhand.xyz/settings/connect. Workspace routes accept:
 
 ```
-Authorization: Bearer <TALLYHAND_API_TOKEN>
+Authorization: Bearer <personal-api-key-or-resource-bound-OAuth-access-token>
 ```
 
-Missing/invalid token → `401 { error: { code: "unauthorized", ... } }`.
-Token unset server-side → `503 { error: { code: "api_disabled", ... } }`.
+`/api/v1/health` and both OpenAPI URLs are public. OAuth uses Clerk, S256
+PKCE, user consent and resource `https://tallyhand.xyz/api/mcp`, including
+when the token is used for REST workspace operations. Scopes are `tally:read`,
+`tally:write` and `tally:manage`; request only those needed. Discover the
+authorization server through `/.well-known/oauth-protected-resource/api/mcp`.
+Browser-session JWTs are not OAuth access tokens. API-key and OAuth-client
+management require browser sign-in, not an API key or OAuth bearer token.
+See the [integration guide](https://tallyhand.xyz/docs/integrations).
+
+Self-hosted single-user deployments can configure `TALLYHAND_API_TOKEN`
+instead. Missing/invalid credentials return 401; a disabled single-user
+API returns 503. Provider-specific operations may be unavailable; query
+`GET /api/v1/capabilities` before using them.
 
 ## Remote MCP
 
 The same deployment also serves the MCP server over **Streamable HTTP**
 (stateless) at `<origin>/api/mcp` — one deployment for web, REST, and MCP.
 It exposes the exact same tools as `tally mcp` (local stdio), so anything
-written against one transport works on the other. Auth is the same Bearer
-token as the REST API.
+written against one transport works on the other. It accepts a personal API
+key or a resource-bound Clerk OAuth access token in the Bearer header.
+OAuth must be enabled and configured by the server operator; see
+[MCP details](mcp.md). The example below uses an API key.
 
 Point any MCP client at it:
 

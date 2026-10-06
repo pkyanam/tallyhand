@@ -24,6 +24,7 @@ jobs:
       - name: Verify bundled agent skills
         run: |
           node scripts/build-agent-skills.mjs --check
+          python3 scripts/publish-agent-skills.py --check
           python3 scripts/package-agent-plugin.py --check
           node scripts/build-plugin-marketplace.mjs --check
 
