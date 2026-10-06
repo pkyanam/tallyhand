@@ -11,17 +11,26 @@
  * - builtin → email magic-link form (no password to remember).
  * - none    → explains auth is disabled (single-user local mode).
  */
+import { redirect } from "next/navigation";
 import { safeLocalNext } from "../oauth/continue/validation";
 import { effectiveAuth } from "@/lib/mode";
 import { BuiltinLoginForm } from "../builtin-login-form";
 
 export default async function LoginPage({
   searchParams,
+  params,
 }: {
-  searchParams: Promise<{ next?: string; mode?: string }>;
+  searchParams: Promise<{ next?: string; mode?: string; iss?: string; login_hint?: string }>;
+  params?: Promise<{ rest?: string[] }>;
 }) {
   const auth = effectiveAuth();
-  const { next, mode } = await searchParams;
+  const { next, mode, iss, login_hint } = await searchParams;
+  const rest = params ? (await params).rest : undefined;
+  // A catalog login hint starts the configured provider flow; it grants no identity or access.
+  if (auth === "clerk" && process.env.AGENTID_CLIENT_ID && !rest?.length &&
+      iss === "https://auth.agentid.com" && typeof login_hint === "string" && login_hint.trim()) {
+    redirect(`/login/agentid?next=${encodeURIComponent(safeLocalNext(next ?? "/dashboard"))}`);
+  }
 
   if (auth === "clerk") {
     // ?mode=sign-up renders the registration form; default is sign-in.
