@@ -26,8 +26,10 @@ export default async function LoginPage({
     // ?mode=sign-up renders the registration form; default is sign-in.
     // Clerk's <SignIn> also links to sign-up on its own.
     const { SignIn, SignUp } = await import("@clerk/nextjs");
+    const { AgentIdSignInButton } = await import("../agentid-sign-in-button");
     return (
-      <main className="min-h-screen flex items-center justify-center p-6">
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
+        {process.env.AGENTID_CLIENT_ID && <AgentIdSignInButton redirectUrlComplete={next ?? "/"} />}
         {mode === "sign-up" ? (
           <SignUp forceRedirectUrl={next ?? "/"} />
         ) : (
