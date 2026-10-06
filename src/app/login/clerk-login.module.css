@@ -1,0 +1,53 @@
+.card :global(.cl-rootBox),
+.card :global(.cl-cardBox),
+.card :global(.cl-card) {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.card :global(.cl-socialButtonsBlockButton) {
+  height: 48px;
+  border: 1px solid hsl(var(--input)) !important;
+  border-radius: 6px !important;
+  background: hsl(var(--background));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  color: hsl(var(--foreground)) !important;
+}
+
+.card :global(.cl-socialButtonsBlockButton)::before,
+.card :global(.cl-socialButtonsBlockButton)::after {
+  display: none;
+}
+
+.card :global(.cl-socialButtonsBlockButton):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.card :global(.cl-socialButtonsBlockButton):hover {
+  background: hsl(var(--accent));
+}
+
+.card :global(.cl-socialButtonsBlockButtonText) {
+  font-size: 14px !important;
+  font-weight: 500;
+  color: hsl(var(--foreground)) !important;
+}
+
+.card :global(.cl-socialButtonsBlockButton) > span {
+  gap: 12px;
+}
+
+.card :global(.cl-socialButtonsBlockButton) > span > span:first-child,
+.card :global(.cl-providerIcon) {
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+}
+
+.card :global(.cl-formButtonPrimary) {
+  background: hsl(var(--primary)) !important;
+  background-image: none !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
