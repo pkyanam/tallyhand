@@ -2,7 +2,7 @@
  * requireApiToken: the shared env token and personal thp_ tokens both
  * authenticate /api/v1 and /api/mcp.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, unlinkSync } from "node:fs";
 import { tempDbPath } from "@/server/sqlite-provider";
 import { requireApiToken } from "./auth";
@@ -32,10 +32,13 @@ describe("requireApiToken", () => {
     dbPath = tempDbPath("tallyhand-authtest");
     process.env.TALLYHAND_DB_PATH = dbPath;
     process.env.TALLY_STORAGE = "sqlite";
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "false");
+    vi.stubEnv("TALLY_OAUTH_ISSUER", "");
     __resetApiTokenCaches();
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (savedToken === undefined) delete process.env.TALLYHAND_API_TOKEN;
     else process.env.TALLYHAND_API_TOKEN = savedToken;
     if (savedDbPath === undefined) delete process.env.TALLYHAND_DB_PATH;
@@ -71,6 +74,36 @@ describe("requireApiToken", () => {
     expect(await res?.json()).toEqual({
       error: { code: "unauthorized", message: "Invalid or missing API token" },
     });
+  });
+
+  it.each([undefined, SHARED])("challenges missing bearer on an OAuth-enabled deployment with shared token %s", async sharedToken => {
+    if (sharedToken === undefined) delete process.env.TALLYHAND_API_TOKEN;
+    else process.env.TALLYHAND_API_TOKEN = sharedToken;
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
+    vi.stubEnv("TALLY_OAUTH_ISSUER", "https://issuer.example");
+    vi.stubEnv("APP_BASE_URL", "https://tally.example");
+    const response = await requireApiToken(new Request("https://tally.example/api/v1/profile"));
+    expect(response?.status).toBe(401);
+    expect(response?.headers.get("WWW-Authenticate")).toBe('Bearer resource_metadata="https://tally.example/.well-known/oauth-protected-resource/api/mcp", scope="tally:read"');
+    expect(response?.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response?.json()).toMatchObject({ error: { code: "unauthorized" } });
+  });
+
+  it("preserves API-disabled response when OAuth lacks an issuer", async () => {
+    delete process.env.TALLYHAND_API_TOKEN;
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
+    const response = await requireApiToken(reqWith(null));
+    expect(response?.status).toBe(503);
+    expect(response?.headers.has("WWW-Authenticate")).toBe(false);
+  });
+
+  it("keeps valid shared and personal credentials working when OAuth is enabled", async () => {
+    process.env.TALLYHAND_API_TOKEN = SHARED;
+    vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
+    vi.stubEnv("TALLY_OAUTH_ISSUER", "https://issuer.example");
+    expect(await requireApiToken(reqWith(SHARED))).toBeNull();
+    const secret = await createApiToken("user_1", "cli");
+    expect(await requireApiToken(reqWith(secret.token))).toBeNull();
   });
 
   it("accepts a personal thp_ token exactly like the shared token", async () => {
