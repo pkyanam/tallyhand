@@ -3,6 +3,7 @@ import { integrationDiscovery, mcpServerCard } from "./integration-discovery";
 import { GET as canonicalSpec } from "@/app/openapi.json/route";
 import { GET as existingSpec } from "@/app/api/v1/openapi.json/route";
 import { GET as catalog } from "@/app/.well-known/api-catalog/route";
+import { GET as yamlSpec } from "@/app/openapi.yaml/route";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("public integration discovery", () => {
@@ -21,6 +22,8 @@ describe("public integration discovery", () => {
       }
     }
     expect(doc.surfaces[1].auth.entries).toHaveLength(2);
+    expect(doc.surfaces[0].spec).toBe("https://tallyhand.xyz/openapi.yaml");
+    expect(doc.surfaces[0].specAlternates).toEqual(["https://tallyhand.xyz/openapi.json"]);
     expect(doc.surfaces[2]).not.toHaveProperty("packages");
     expect(mcpServerCard().authentication).toEqual({ type: "oauth2", authorization_server: "https://clerk.tallyhand.xyz" });
   });
@@ -41,5 +44,9 @@ describe("public integration discovery", () => {
     expect(response.headers.get("content-type")).toContain("application/linkset+json");
     const body = await response.json();
     expect(body.linkset[0].item).toHaveLength(2);
+    const yaml = yamlSpec();
+    expect(yaml.headers.get("content-type")).toContain("application/yaml");
+    const text = await yaml.text();
+    expect(text.startsWith('openapi: "3.1.0"\n')).toBe(true);
   });
 });
