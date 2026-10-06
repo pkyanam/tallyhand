@@ -71,6 +71,13 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
     if (await findApiToken(provided)) return null;
   }
 
+  // Hosted OAuth deployments are available without the optional self-hosted
+  // shared secret. Challenge discovery clients so they can find authorization.
+  if (!provided) {
+    const { oauthConfig, oauthChallenge } = await import("@/lib/auth/oauth");
+    if (oauthConfig().enabled) return oauthChallenge();
+  }
+
   if (!provided && !process.env.TALLYHAND_API_TOKEN) {
     return jsonError(
       503,
