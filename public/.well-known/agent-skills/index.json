@@ -27,7 +27,7 @@
       "description": "Set up a contractor workspace, business profile, client, project, invoice defaults and draft billing workflow in Tallyhand.",
       "type": "archive",
       "url": "/.well-known/agent-skills/setup-workspace.zip",
-      "digest": "sha256:89e94a1c6c80adc10a81e548548cc43c837beaeb8299ea0444642ba43c72876e"
+      "digest": "sha256:c97a6bf68e7764b81c3de21a943e2fc37927ebd47a45f8586d268ce8070cb0d9"
     },
     {
       "name": "track-work",

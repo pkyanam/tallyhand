@@ -26,7 +26,7 @@ async function wireCatalog(server: McpServer) {
 }
 
 describe("wire auth descriptors", () => {
-  it("preserves the default SDK descriptors across the entire 86-tool catalog", async () => {
+  it("preserves the default SDK descriptors across the entire 91-tool catalog", async () => {
     const reference = new McpServer({ name: "reference", version: "1" });
     const original = McpServer.prototype.registerTool;
     const spy = vi.spyOn(McpServer.prototype, "registerTool").mockImplementation(function (this: McpServer, name: string, config: any, callback: any) {
@@ -37,8 +37,8 @@ describe("wire auth descriptors", () => {
     try { current = createMcpServer(new Proxy({}, { get: () => async () => null }) as Api); }
     finally { spy.mockRestore(); }
     const [before, after] = await Promise.all([wireCatalog(reference), wireCatalog(current)]);
-    expect(before).toHaveLength(86);
-    expect(after).toHaveLength(86);
+    expect(before).toHaveLength(91);
+    expect(after).toHaveLength(91);
     for (let index = 0; index < before.length; index++) {
       const { securitySchemes, ...unchanged } = after[index];
       expect(securitySchemes).toEqual(before[index]._meta.securitySchemes);

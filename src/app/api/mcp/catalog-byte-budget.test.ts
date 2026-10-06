@@ -32,7 +32,7 @@ const ASSERTED_TOTAL_BUDGET = 62_500;
 // Host-side descriptions/annotations appended before the budget is computed.
 const PLUGIN_SOURCE_NOTE = "This tool is part of plugin `Tallyhand`.";
 // Tallyhand MCP server instructions (cli/src/mcp.ts) — repeated per tool by the host.
-const SERVER_INSTRUCTIONS = "Read tally://guide. Explicit consent for financial changes, deletes, reset, import. Never request credentials.";
+const SERVER_INSTRUCTIONS = "Read tally://guide. Consent for mutations; never ask secrets.";
 const NAMESPACE = "mcp__tallyhand";
 
 beforeEach(() => {

@@ -11,6 +11,7 @@
  * - builtin → email magic-link form (no password to remember).
  * - none    → explains auth is disabled (single-user local mode).
  */
+import { safeLocalNext } from "../oauth/continue/validation";
 import { effectiveAuth } from "@/lib/mode";
 import { BuiltinLoginForm } from "../builtin-login-form";
 
@@ -26,7 +27,7 @@ export default async function LoginPage({
     // ?mode=sign-up renders the registration form; default is sign-in.
     // Clerk's <SignIn> also links to sign-up on its own.
     const { ClerkLogin } = await import("../clerk-login");
-    return <ClerkLogin mode={mode} redirectUrlComplete={next ?? "/"} agentIdEnabled={Boolean(process.env.AGENTID_CLIENT_ID)} />;
+    return <ClerkLogin mode={mode} redirectUrlComplete={safeLocalNext(next)} agentIdEnabled={Boolean(process.env.AGENTID_CLIENT_ID)} />;
   }
 
   if (auth === "builtin") {

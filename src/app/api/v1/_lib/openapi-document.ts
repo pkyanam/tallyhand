@@ -32,6 +32,9 @@ import { WORKSPACE_PATHS } from "./openapi-workspace";
  * - Deletion guards return 409 with per-relation counts in
  *   error.details when related records exist.
  */
+function sessionOperation(summary: string, description = "Requires a signed-in browser session; existing credential controls apply.") {
+  return { summary, description, "x-authentication": "session", security: [{ sessionCookie: [] }], responses: { "200": { description: "Success" }, "401": { description: "Session required" }, "403": { description: "Permission or origin denied" }, "503": { description: "Provider unavailable" } } };
+}
 export const OPENAPI_V1 = {
   openapi: "3.1.0",
   info: {
@@ -58,6 +61,51 @@ export const OPENAPI_V1 = {
   ],
   paths: {
     ...WORKSPACE_PATHS,
+    "/onboarding": {
+      get: {
+        tags: ["meta"], summary: "Inspect task-specific workspace readiness",
+        description: "Time tracking requires no business settings. Invoicing readiness recommends a seller business.name. Missing configuration includes exact fields and machine-actionable steps with required inputs; readiness does not grant authorization or replace operation validation.",
+        parameters: [{ name: "intent", in: "query", schema: { type: "string", enum: ["time_tracking", "invoicing"], default: "time_tracking" } }],
+        responses: { "200": { description: "Readiness envelope", content: { "application/json": { schema: { type: "object", properties: { data: { $ref: "#/components/schemas/OnboardingReadiness" } } } } } }, "400": { $ref: "#/components/responses/BadRequest" }, "401": { description: "Invalid credentials" }, "403": { description: "OAuth tally:read required" } },
+      },
+      post: {
+        tags: ["settings"], summary: "Configure existing workspace settings for onboarding",
+        description: "Apply the existing validated settings patch. Requires tally:write for OAuth; viewer writes remain forbidden. Cookie sessions require x-tallyhand-sync: 1. dryRun=true in the body or dry_run=true in the query validates without mutation or consuming an idempotency key. Nested settings merge with persisted values; no data is fabricated.",
+        parameters: [{ $ref: "#/components/parameters/DryRun" }, { $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["settings"], properties: { settings: { $ref: "#/components/schemas/SettingsPatch" }, intent: { type: "string", enum: ["time_tracking", "invoicing"] }, dryRun: { type: "boolean", default: false } } } } } },
+        responses: { "200": { description: "Applied: { data: readiness plus settings }; preview: { data: { dryRun: true, valid: true, patch, warnings: [] } }" }, "400": { $ref: "#/components/responses/BadRequest" }, "401": { description: "Invalid credentials" }, "403": { description: "Insufficient scope or read-only role" }, "503": { description: "Settings unavailable" } },
+      },
+    },
+    "/changes": { get: { tags: ["meta"], summary: "Poll the authenticated workspace change revision", description: "Owner-scoped Convex only. Lightweight revision polling; not a change-event stream.", parameters: [{ name: "since", in: "query", schema: { type: "integer", minimum: 0 } }], responses: { "200": { description: "{ data: { available: true, revision, changed: boolean|null, pollAfterMs: 2000 } }" }, "400": { $ref: "#/components/responses/BadRequest" }, "401": { description: "Invalid credentials" }, "403": { description: "Insufficient scope" }, "501": { description: "RECOVERY_UNAVAILABLE: requires Convex storage" } } } },
+    "/requests/{key}": { get: { tags: ["meta"], summary: "Inspect an authenticated owner's idempotency receipt", description: "Convex only. Metadata does not disclose stored response bodies. A pending receipt requires reconciliation before retrying a mutation.", parameters: [{ name: "key", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "{ data: { state: pending|complete, status: number|null, createdAt, requiresReconciliation } }" }, "401": { description: "Invalid credentials" }, "403": { description: "Insufficient scope" }, "404": { description: "REQUEST_NOT_FOUND" }, "501": { description: "RECOVERY_UNAVAILABLE: requires Convex storage" } } } },
+    "/controls": { get: { tags: ["meta"], summary: "Discover a secure control and its interaction requirements", parameters: [{ name: "control", in: "query", required: true, schema: { type: "string", enum: ["account", "api_keys", "users", "payments", "invoice_pdf", "offline_data", "install_pwa", "notifications"] } }], responses: { "200": { description: "{ data: { control, url, instructions, requiresUserInteraction: true, interaction, agentCanNavigate: true, requiresHumanConsent, requiredPermission, bearerApiAvailable, agentInstructions } }. Browser navigation may be performed by an authorized agent; external and device consent remain enforced." }, "400": { $ref: "#/components/responses/BadRequest" }, "401": { description: "Invalid credentials" }, "403": { description: "OAuth tally:read required" } } } },
+    "/capabilities": { get: {
+      tags: ["meta"], summary: "Discover caller authorization, operations and backend limits",
+      description: "Bearer-authenticated discovery. Reports current verified OAuth scopes or API-token permissions and the caller role; allowedNow is bounded by the backend and role. Session credential controls and provider consent never become bearer grants. Every operation still validates authorization and inputs.",
+      responses: { "200": { description: "Capability envelope", content: { "application/json": { schema: { type: "object", properties: { data: { $ref: "#/components/schemas/AgentCapabilities" } } } } } }, "401": { description: "Invalid credentials" }, "403": { description: "OAuth tally:read required" } },
+    } },
+    "/api-tokens": {
+      get: sessionOperation("List the signed-in user's API tokens without secret hashes"),
+      post: { ...sessionOperation("Create a personal API token; raw secret returned once", "Session only. Agent may use the authorized secure browser UI. Bearer credentials cannot mint new credentials. Unavailable in single-user mode."), requestBody: { content: { "application/json": { schema: { type: "object", properties: { name: { type: "string", maxLength: 64 } } } } } } },
+    },
+    "/api-tokens/{id}": { delete: { ...sessionOperation("Revoke the signed-in user's API token"), parameters: [{ $ref: "#/components/parameters/Id" }] } },
+    "/oauth-clients": {
+      get: sessionOperation("List OAuth integration clients", "Clerk OAuth session only; bearer credentials rejected."),
+      post: sessionOperation("Create an OAuth integration client", "Clerk OAuth session only; same-origin writes. Existing provider configuration validation and credential controls apply."),
+    },
+    "/oauth-clients/{id}": {
+      post: { ...sessionOperation("Rotate an OAuth client secret", "Clerk OAuth session only; same-origin write; returned secret requires secure handling."), parameters: [{ $ref: "#/components/parameters/Id" }] },
+      delete: { ...sessionOperation("Revoke an OAuth integration client", "Clerk OAuth session only; same-origin write."), parameters: [{ $ref: "#/components/parameters/Id" }] },
+    },
+    "/stripe/connect/start": { get: sessionOperation("Start Stripe Connect authorization", "Session only; redirects to provider consent. Provider and encryption configuration required.") },
+    "/stripe/connect/callback": { get: sessionOperation("Complete Stripe Connect callback", "Session and verified provider state required; provider callback, not a general agent action.") },
+    "/stripe/connect/status": { get: sessionOperation("Read Stripe Connect availability and connection status", "Session only; Convex does not support Stripe Connect.") },
+    "/stripe/connect": { delete: sessionOperation("Disconnect Stripe Connect", "Session only; requires x-tallyhand-sync: 1.") },
+    "/stripe/payment-links": { post: { ...sessionOperation("Create a Stripe Checkout link for an existing sent invoice", "Shared/personal API token only; OAuth excluded. Requires configured Stripe account and encryption. Creating a payment link does not execute a payment."), "x-authentication": "api_token", parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["invoiceId"], properties: { invoiceId: { type: "string", minLength: 1 }, cancelUrl: { type: "string", format: "uri" } } } } } } } },
+    "/stripe/webhook": { post: { summary: "Receive a signed Stripe provider webhook", "x-authentication": "provider_signature", security: [], description: "Requires verified stripe-signature; not a caller workspace operation.", responses: { "200": { description: "Webhook processed" }, "400": { description: "Invalid signature or webhook" } } } },
+    "/sync/status": { get: { summary: "Probe encrypted sync availability", security: [], description: "Public availability probe; private session details only for the caller's own session.", responses: { "200": { description: "{ data: { signedIn, storage, syncSupported, userId?, cloudCount?, vaultError? } }" } } } },
+    "/sync/pull": { get: { ...sessionOperation("Pull encrypted workspace entities", "Encrypted-sync backend required. Accepts session or shared/personal API token; OAuth excluded."), "x-authentication": "session_or_api_token", parameters: [{ name: "since", in: "query", schema: { type: "number" } }, { name: "types", in: "query", schema: { type: "string" } }, { name: "afterId", in: "query", schema: { type: "string" } }] } },
+    "/sync/push": { post: { ...sessionOperation("Push validated encrypted workspace entities", "Encrypted-sync backend required. Session or shared/personal API token; OAuth excluded. Requires x-tallyhand-sync: 1; viewers cannot write."), "x-authentication": "session_or_api_token", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["entities"], properties: { entities: { type: "array", maxItems: 5000, items: { type: "object", description: "Encrypted entity validated by the sync route" } } } } } } } } },
     "/health": {
       get: {
         tags: ["meta"],
@@ -1110,7 +1158,7 @@ export const OPENAPI_V1 = {
       patch: {
         tags: ["settings"],
         summary: "Update server settings",
-        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }, { $ref: "#/components/parameters/DryRun" }],
         requestBody: {
           required: true,
           content: {
@@ -1128,6 +1176,7 @@ export const OPENAPI_V1 = {
   },
   components: {
     securitySchemes: {
+      sessionCookie: { type: "apiKey", in: "cookie", name: "tally_session", description: "Authenticated browser session (builtin cookie or Clerk-managed session); bearer credentials do not substitute." },
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque", description: "Personal API key or resource-bound OAuth access token. Hosted OAuth requires resource <origin>/api/mcp and tally:read/write/manage scopes. Browser-session JWTs are not OAuth access tokens." },
     },
     parameters: {
@@ -1669,6 +1718,27 @@ export const OPENAPI_V1 = {
           notes: { type: "string" },
         },
       },
+      OnboardingReadiness: {
+        type: "object", required: ["intent", "ready", "readinessByIntent", "missingConfiguration", "nextSteps", "defaults", "note"],
+        properties: {
+          intent: { type: "string", enum: ["time_tracking", "invoicing"] }, ready: { type: "boolean" },
+          readinessByIntent: { type: "object", properties: { time_tracking: { type: "boolean" }, invoicing: { type: "boolean" } } },
+          missingConfiguration: { type: "array", items: { type: "object", properties: { field: { type: "string" }, reason: { type: "string" }, blocking: { type: "boolean" }, step: { type: "string" } } } },
+          nextSteps: { type: "array", items: { type: "object", properties: { id: { type: "string" }, method: { type: "string" }, path: { type: "string" }, bodyTemplate: { type: "object" }, requiresInput: { type: "array", items: { type: "string" } }, requiredScope: { type: "string" } } } },
+          defaults: { type: "object", properties: { currency: { type: "string" }, invoicePrefix: { type: "string" }, paymentTermsDays: { type: "number" } } }, note: { type: "string" },
+        },
+      },
+      AgentCapabilities: {
+        type: "object", required: ["workspaceApi", "extensions", "paymentExecution", "secureControls", "surfaces", "caller", "backend", "operations", "note"],
+        properties: {
+          workspaceApi: { const: true }, paymentExecution: { const: false }, extensions: { type: "object", additionalProperties: { type: "boolean" } }, secureControls: { type: "object", additionalProperties: { $ref: "#/components/schemas/AgentControl" } },
+          surfaces: { type: "object", additionalProperties: { type: "string" } },
+          caller: { type: "object", properties: { authentication: { type: "string", enum: ["oauth", "api_token"] }, scopes: { type: "array", items: { type: "string" } }, role: { type: "string" }, canWriteWorkspace: { type: "boolean" }, canManageWorkspace: { type: "boolean" } } },
+          backend: { type: "object", properties: { storage: { type: "string" }, browserLocalDataAccessible: { const: false }, paymentExecution: { const: false }, extensions: { type: "object" } } },
+          operations: { type: "array", items: { type: "object", properties: { operationId: { type: "string" }, method: { type: "string" }, path: { type: "string" }, summary: { type: "string" }, requiredScope: { type: "string" }, authentication: { type: "string", enum: ["workspace", "public", "session", "api_token", "session_or_api_token", "provider_signature"] }, dryRun: { type: "boolean" }, dryRunRequiredScope: { type: ["string", "null"] }, dryRunAllowedNow: { type: "boolean" }, idempotency: { type: "boolean" }, allowedNow: { type: "boolean" }, supportedByBackend: { type: "boolean" }, authorizationReason: { type: "string" } } } }, note: { type: "string" },
+        },
+      },
+      AgentControl: { type: "object", properties: { path: { type: "string" }, reason: { type: "string" }, interaction: { type: "string", enum: ["agent_browser", "external_consent", "device_permission"] }, permission: { type: "string" }, requiresHumanConsent: { type: "boolean" }, bearerApiAvailable: { type: "boolean" }, agentCanNavigate: { const: true }, instructions: { type: "string" } } },
       SettingsPatch: settingsPatchJsonSchema,
     },
   },

@@ -131,8 +131,8 @@ describe("resolveConfig", () => {
     expect(rc({}).baseUrl).toBe("http://env:4000");
     delete process.env.TALLYHAND_API_URL;
     // default
-    expect(rc({}).baseUrl).toBe("http://localhost:3000");
-    expect(rc({}).token).toBeUndefined();
+    expect(rc({}, "/nonexistent-tallyhand-test/config.json").baseUrl).toBe("http://localhost:3000");
+    expect(rc({}, "/nonexistent-tallyhand-test/config.json").token).toBeUndefined();
   });
 
   it("picks up token from env", () => {

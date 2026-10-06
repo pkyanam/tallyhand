@@ -48,7 +48,7 @@ export function ClerkLogin({ mode, redirectUrlComplete, agentIdEnabled }: {
         <p className="mb-6 mt-5 text-xs leading-5 text-muted-foreground">By continuing, you agree to the <Link href="/terms" className="underline underline-offset-4">Terms of Service</Link> and acknowledge the <Link href="/privacy" className="underline underline-offset-4">Privacy Policy</Link>.</p>
         {agentIdEnabled && <div className="mb-3"><AgentIdSignInButton redirectUrlComplete={redirectUrlComplete} /></div>}
       </>}
-      {signingUp ? <SignUp forceRedirectUrl={redirectUrlComplete} appearance={appearance} /> : <SignIn forceRedirectUrl={redirectUrlComplete} appearance={appearance} />}
+      {signingUp ? <SignUp signInUrl={`/login?next=${encodeURIComponent(redirectUrlComplete)}`} forceRedirectUrl={redirectUrlComplete} appearance={appearance} /> : <SignIn signUpUrl={`/login?mode=sign-up&next=${encodeURIComponent(redirectUrlComplete)}`} forceRedirectUrl={redirectUrlComplete} appearance={appearance} />}
       <div className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
         <Link href="/docs" className="underline underline-offset-4">Documentation</Link>
       </div>

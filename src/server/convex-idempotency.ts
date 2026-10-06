@@ -8,6 +8,11 @@ type Claim = { state: "claimed" | "pending" | "conflict" } |
 const errorResponse = (code: string, message: string, status: number) =>
   Response.json({ error: { code, message } }, { status });
 
+/** Shared by write claims and metadata lookup; raw keys never reach Convex. */
+export function convexReceiptKey(owner: string, key: string): string {
+  return createHash("sha256").update(JSON.stringify([owner, key])).digest("hex");
+}
+
 /** Fail closed: uncertainty must never silently repeat a financial write. */
 export async function withConvexIdempotency(req: Request, key: string, handler: () => Promise<Response>): Promise<Response> {
   let owner: string | null;
@@ -15,7 +20,7 @@ export async function withConvexIdempotency(req: Request, key: string, handler: 
   if (!owner) return errorResponse("UNAUTHORIZED", "Sign in required", 401);
   if (key.length > 256) return errorResponse("BAD_REQUEST", "Idempotency-Key must not exceed 256 characters", 400);
   const url = new URL(req.url);
-  const scopedKey = createHash("sha256").update(JSON.stringify([owner, key])).digest("hex");
+  const scopedKey = convexReceiptKey(owner, key);
   const fingerprint = createHash("sha256").update(JSON.stringify([req.method, url.pathname, url.search, await req.clone().text()])).digest("hex");
   const claimId = randomUUID();
   let client: ReturnType<typeof createConvexRequestClient>;

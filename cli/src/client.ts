@@ -22,7 +22,7 @@ import { extensionModels, type ExtensionEntity } from "./extension-models.js";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync } from "node:fs";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -46,6 +46,7 @@ export const CONFIG_PATH = join(homedir(), ".tallyhand", "config.json");
 export interface FileConfig {
   apiUrl?: string;
   token?: string;
+  oauth?: import("./oauth-login.js").OAuthCredentials;
 }
 
 export function readFileConfig(path = CONFIG_PATH): FileConfig {
@@ -55,6 +56,7 @@ export function readFileConfig(path = CONFIG_PATH): FileConfig {
     return {
       apiUrl: typeof raw.apiUrl === "string" ? raw.apiUrl : undefined,
       token: typeof raw.token === "string" ? raw.token : undefined,
+      oauth: raw.oauth && typeof raw.oauth === "object" ? raw.oauth : undefined,
     };
   } catch {
     return {};
@@ -63,7 +65,7 @@ export function readFileConfig(path = CONFIG_PATH): FileConfig {
 
 export function writeFileConfig(patch: FileConfig, path = CONFIG_PATH): void {
   const cur = readFileConfig(path);
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.${randomUUID()}.tmp`;
   writeFileSync(
     temp,
@@ -71,18 +73,20 @@ export function writeFileConfig(patch: FileConfig, path = CONFIG_PATH): void {
     { mode: 0o600, flag: "wx" },
   );
   renameSync(temp, path);
+  chmodSync(path, 0o600);
 }
 
 export interface ResolvedConfig {
   baseUrl: string;
   token?: string;
+  tokenProvider?: (forceRefresh?: boolean) => Promise<string>;
 }
 
 export function resolveConfig(flags: {
   apiUrl?: string;
   token?: string;
-}): ResolvedConfig {
-  const file = readFileConfig();
+}, configPath = CONFIG_PATH): ResolvedConfig {
+  const file = readFileConfig(configPath);
   const apiUrl =
     flags.apiUrl ??
     process.env.TALLYHAND_API_URL ??
@@ -90,6 +94,13 @@ export function resolveConfig(flags: {
     "http://localhost:3000";
   const token =
     flags.token ?? process.env.TALLYHAND_API_TOKEN ?? file.token ?? undefined;
+  const oauth = file.oauth;
+  if (!token && oauth && oauth.origin === new URL(apiUrl).origin) {
+    return { baseUrl: apiUrl, token: oauth.accessToken, tokenProvider: async force => {
+      const { oauthAccessToken } = await import("./oauth-login.js");
+      return oauthAccessToken(apiUrl, force, configPath);
+    } };
+  }
   return { baseUrl: apiUrl, token };
 }
 
@@ -115,13 +126,15 @@ function pathId(id: string): string {
 export class TallyhandClient {
   readonly baseUrl: string;
   private readonly token?: string;
+  private readonly tokenProvider?: (forceRefresh?: boolean) => Promise<string>;
   private readonly timing: boolean;
   private readonly signal?: AbortSignal;
   private readonly fetcher: typeof fetch;
 
-  constructor(opts: { baseUrl: string; token?: string; timing?: boolean; signal?: AbortSignal; fetcher?: typeof fetch }) {
+  constructor(opts: { baseUrl: string; token?: string; timing?: boolean; signal?: AbortSignal; fetcher?: typeof fetch; tokenProvider?: (forceRefresh?: boolean) => Promise<string> }) {
     this.baseUrl = normalizeBaseUrl(opts.baseUrl);
     this.token = opts.token;
+    this.tokenProvider = opts.tokenProvider;
     this.timing = opts.timing ?? false;
     this.signal = opts.signal;
     this.fetcher = opts.fetcher ?? fetch;
@@ -129,6 +142,17 @@ export class TallyhandClient {
 
   get hasToken(): boolean {
     return !!this.token;
+  }
+
+  private async authorizedFetch(url: URL, init: RequestInit): Promise<Response> {
+    let response = await this.fetcher(url, { ...init, redirect: "error" });
+    if (response.status === 401 && this.tokenProvider) {
+      const token = await this.tokenProvider(true);
+      const headers = new Headers(init.headers);
+      headers.set("Authorization", `Bearer ${token}`);
+      response = await this.fetcher(url, { ...init, headers, redirect: "error" });
+    }
+    return response;
   }
 
   private dryRunQuery(opts?: { dryRun?: boolean }): Record<string, string> | undefined {
@@ -141,6 +165,7 @@ export class TallyhandClient {
     body?: unknown,
     query?: Record<string, string | number | boolean | undefined>,
     envelope = false,
+    idempotencyKey?: string,
   ): Promise<any> {
     const url = new URL(this.baseUrl + path);
     if (query) {
@@ -154,22 +179,23 @@ export class TallyhandClient {
       "Content-Type": "application/json",
       "User-Agent": "tallyhand-cli/0.1.0",
     };
-    if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+    const token = this.tokenProvider ? await this.tokenProvider() : this.token;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     if (method === "POST" || method === "PATCH" || method === "PUT") {
-      headers["Idempotency-Key"] = randomUUID();
+      headers["Idempotency-Key"] = idempotencyKey ?? randomUUID();
     }
 
     const started = performance.now();
     let res: Response;
     try {
-      res = await this.fetcher(url, {
+      res = await this.authorizedFetch(url, {
         method,
         signal: this.signal,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = "network request failed";
       throw new ApiError(
         0,
         "connection_failed",
@@ -178,6 +204,10 @@ export class TallyhandClient {
     }
 
     const headersReceived = performance.now();
+    if (res.ok && res.headers.get("content-type")?.split(";")[0].trim() === "application/pdf") {
+      await res.body?.cancel();
+      return { contentType: "application/pdf", downloadUrl: url.toString() };
+    }
     const text = await res.text();
     if (this.timing) console.error(JSON.stringify({ timing: { method, path, status: res.status,
       roundTripMs: Math.round(performance.now() - started), responseHeadersMs: Math.round(headersReceived - started), bodyReadMs: Math.round(performance.now() - headersReceived), serverTiming: res.headers.get("server-timing") } }));
@@ -223,13 +253,14 @@ export class TallyhandClient {
       const headers: Record<string, string> = {
         "User-Agent": "tallyhand-cli/0.1.0",
       };
-      if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+      const token = this.tokenProvider ? await this.tokenProvider() : this.token;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
       const started = performance.now();
       let res: Response;
       try {
-        res = await this.fetcher(url, { headers, signal: this.signal });
+        res = await this.authorizedFetch(url, { headers, signal: this.signal });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = "network request failed";
         throw new ApiError(
           0,
           "connection_failed",
@@ -266,6 +297,21 @@ export class TallyhandClient {
   extensionUpdate(entity: ExtensionEntity, id: string, input: unknown) { return this.request("PATCH", `/${extensionModels[entity].path}/${pathId(id)}`, input); }
   extensionDelete(entity: ExtensionEntity, id: string, dryRun = true) { return this.request("DELETE", `/${extensionModels[entity].path}/${pathId(id)}`, undefined, { dry_run: dryRun }); }
   extensionBulk(entity: ExtensionEntity, items: unknown[]) { return this.request("POST", `/${extensionModels[entity].path}/bulk`, { items }); }
+  requestWorkspaceOperation(input: { method: string; path: string; body?: unknown; idempotencyKey?: string; dryRun?: boolean; query?: Record<string, string | number | boolean> }) {
+    const method = input.method.toUpperCase();
+    if (!["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD"].includes(method)) throw new Error("Unsupported workspace method");
+    const path = input.path.replace(/^\/api\/v1(?=\/)/, "");
+    if (!path.startsWith("/") || path.startsWith("//") || /[?#\\]/.test(path)) throw new Error("Invalid workspace path");
+    let decoded: string;
+    try { decoded = decodeURIComponent(path); } catch { throw new Error("Invalid workspace path"); }
+    if (/[?#\\%]/.test(decoded) || decoded.split("/").some(part => part === "." || part === "..")) throw new Error("Invalid workspace path");
+    if (!/^\/(clients|projects|tasks|expenses|invoices|settings|recurring-schedules|retainers|data|mileage|contracts|tax-payments|rate-cards|profile|capabilities|controls|share-links|dunning|scheduler|onboarding|changes|requests)(\/|$)/.test(decoded)) throw new Error("Unsupported workspace resource");
+    if (input.idempotencyKey && (!/^[A-Za-z0-9_-]{1,128}$/.test(input.idempotencyKey))) throw new Error("Invalid idempotency key");
+    return this.request(method, path, input.body, { ...input.query, ...(input.dryRun === undefined ? {} : { dry_run: input.dryRun }) }, false, input.idempotencyKey);
+  }
+
+  onboarding(intent?: "time_tracking" | "invoicing") { return this.request("GET", "/onboarding", undefined, { intent }); }
+  configureOnboarding(input: { settings: Record<string, unknown>; dryRun?: boolean; intent?: "time_tracking" | "invoicing" }) { return this.request("POST", "/onboarding", input); }
   profile() { return this.request("GET", "/profile"); }
   capabilities() { return this.request("GET", "/capabilities"); }
   listShares() { return this.request("GET", "/share-links"); }

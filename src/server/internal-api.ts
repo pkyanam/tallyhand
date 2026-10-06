@@ -1,8 +1,11 @@
 /** Calls the same API handlers without a second public HTTP request. */
 import { oauthConfig } from "@/lib/auth/oauth";
-type Handler = (request: Request, context: { params: { id: string } }) => Promise<Response> | Response;
+type Handler = (request: Request, context: { params: { id: string; key?: string } }) => Promise<Response> | Response;
 type Route = Record<string, unknown>;
-const routes: Array<{ pattern: RegExp; load: () => Promise<Route>; hasId: boolean }> = [
+const routes: Array<{ pattern: RegExp; load: () => Promise<Route>; hasId: boolean; parameter?: "key" }> = [
+  { pattern: /^\/api\/v1\/changes$/, load: () => import("@/app/api/v1/changes/route"), hasId: false },
+  { pattern: /^\/api\/v1\/requests\/([^\/]+)$/, load: () => import("@/app/api/v1/requests/[key]/route"), hasId: true, parameter: "key" },
+  { pattern: /^\/api\/v1\/onboarding$/, load: () => import("@/app/api/v1/onboarding/route"), hasId: false },
   { pattern: /^\/api\/v1\/mileage\/bulk$/, load: () => import("@/app/api/v1/mileage/bulk/route"), hasId: false },
   { pattern: /^\/api\/v1\/mileage\/([^\/]+)$/, load: () => import("@/app/api/v1/mileage/[id]/route"), hasId: true },
   { pattern: /^\/api\/v1\/mileage$/, load: () => import("@/app/api/v1/mileage/route"), hasId: false },
@@ -56,7 +59,7 @@ export const dispatchWorkspaceApi: typeof fetch = async (input, init) => {
     const routeModule = await route.load();
     const handler = routeModule[request.method];
     if (typeof handler !== "function") return new Response(null, { status: 405 });
-    return (handler as Handler)(request, { params: { id: route.hasId ? decodeURIComponent(match[1]) : "" } });
+    return (handler as Handler)(request, { params: route.parameter === "key" ? { id: "", key: decodeURIComponent(match[1]) } : { id: route.hasId ? decodeURIComponent(match[1]) : "" } });
   }
   return Response.json({ error: { code: "not_found", message: "Unsupported workspace API route" } }, { status: 404 });
 };
