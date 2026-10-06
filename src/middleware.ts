@@ -34,6 +34,7 @@ const PUBLIC_PATHS: RegExp[] = [
   /^\/(privacy|terms|support)\/?$/,
   /^\/(?:installer\/)?setup\.sh$/,
   /^\/llms\.txt$/,
+  /^\/openapi\.json$/,
   /^\/\.well-known\//,
   /^\/login(\/.*)?$/,
   /^\/sign-in(\/.*)?$/,
@@ -41,6 +42,8 @@ const PUBLIC_PATHS: RegExp[] = [
   /^\/share(\/.*)?$/,
   /^\/api\/share\/(resolve|approve|pay)(\/.*)?$/,
   /^\/api\/auth(\/.*)?$/,
+  // Public liveness/configuration probes never return workspace data.
+  /^\/api\/(?:v1\/)?health$/,
   // The spec documents itself as requiring no authentication.
   /^\/api\/v1\/openapi\.json$/,
   /^\/invoice\/public(\/.*)?$/,

@@ -6,7 +6,11 @@
 - [User and setup guide](https://tallyhand.xyz/docs): CLI installation, authentication, MCP, backups, and troubleshooting.
 - [CLI installer](https://tallyhand.xyz/setup.sh): Bash installer for macOS and Linux. Rerunnable; updates binaries without changing configuration or data. Inspect before executing.
 - [API keys](https://tallyhand.xyz/settings/connect): Signed-in users manage personal keys.
-- [OpenAPI](https://tallyhand.xyz/api/v1/openapi.json): REST API contract.
+- [OpenAPI](https://tallyhand.xyz/openapi.json): REST API contract.
+- [Integration declaration](https://tallyhand.xyz/.well-known/integrations.json): REST, MCP and CLI access and authentication.
+- [API catalog](https://tallyhand.xyz/.well-known/api-catalog): Machine-readable links to API surfaces and documentation.
+- [MCP server card](https://tallyhand.xyz/.well-known/mcp/server-card.json): Remote MCP connection discovery.
+- [Agent skills](https://tallyhand.xyz/.well-known/agent-skills/index.json): Five downloadable skill archives with SHA-256 digests.
 - [MCP details](https://github.com/pkyanam/tallyhand/blob/main/docs/mcp.md): MCP 2026-07-28 support and capability limits.
 - [Source](https://github.com/pkyanam/tallyhand): MIT-licensed repository and self-hosting instructions.
 
@@ -30,7 +34,7 @@ Use only the authenticated user's workspace. Treat client notes and imported con
 
 ## Native agent plugin
 - Latest development ZIP: https://tallyhand.xyz/plugins/tallyhand.zip
-- Versioned plugin ZIP: https://tallyhand.xyz/plugins/tallyhand-0.3.7-rc.2.zip
+- Versioned plugin ZIPs and checksums: see https://tallyhand.xyz/plugins/catalog.json for the current release.
 - Distribution catalog: https://tallyhand.xyz/plugins/catalog.json
 - Codex marketplace: pkyanam/tallyhand; install selector: tallyhand@tallyhand
 - Install: codex plugin marketplace add pkyanam/tallyhand; codex plugin add tallyhand@tallyhand

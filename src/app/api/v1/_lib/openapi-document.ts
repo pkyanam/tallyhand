@@ -1,4 +1,5 @@
 import { settingsPatchJsonSchema } from "../../../../../cli/src/settings-schema";
+import { WORKSPACE_PATHS } from "./openapi-workspace";
 /**
  * Embedded OpenAPI 3.1 document for Tallyhand API v1.
  *
@@ -7,9 +8,9 @@ import { settingsPatchJsonSchema } from "../../../../../cli/src/settings-schema"
  * dry-run, idempotency, bulk endpoints, errors, and examples in one place.
  *
  * Agent quick-start:
- * - Auth: `Authorization: Bearer <TALLYHAND_API_TOKEN>` on every route
- *   except GET /health and GET /openapi.json. No token configured on the
- *   server -> 503 api_disabled.
+ * - Auth: personal API key or resource-bound OAuth access token in the
+ *   Authorization: Bearer header. Self-hosted single-user servers can use
+ *   TALLYHAND_API_TOKEN. GET /health and /openapi.json are public.
  * - Envelope: success -> `{ data, meta? }`, errors ->
  *   `{ error: { code, message, details? } }`.
  * - Lists: `?limit=` (default 50, max 200) + `?cursor=`; response
@@ -56,6 +57,7 @@ export const OPENAPI_V1 = {
     { name: "meta" },
   ],
   paths: {
+    ...WORKSPACE_PATHS,
     "/health": {
       get: {
         tags: ["meta"],
@@ -1126,7 +1128,7 @@ export const OPENAPI_V1 = {
   },
   components: {
     securitySchemes: {
-      bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque" },
+      bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque", description: "Personal API key or resource-bound OAuth access token. Hosted OAuth requires resource <origin>/api/mcp and tally:read/write/manage scopes. Browser-session JWTs are not OAuth access tokens." },
     },
     parameters: {
       Id: {
