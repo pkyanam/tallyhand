@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
-/** Clerk's v5 widget does not list AgentID yet, but its redirect API supports it. */
+/** Clerk's widget does not list AgentID yet, but its redirect API supports it. */
 export function AgentIdSignInButton({ redirectUrlComplete }: { redirectUrlComplete: string }) {
   const { isLoaded, signIn } = useSignIn();
   const pathname = usePathname();
@@ -24,7 +24,7 @@ export function AgentIdSignInButton({ redirectUrlComplete }: { redirectUrlComple
       await signIn.authenticateWithRedirect({
         // AgentID launched after this SDK's OAuthStrategy type was released.
         strategy: "oauth_agentid" as Parameters<typeof signIn.authenticateWithRedirect>[0]["strategy"],
-        redirectUrl: "/login/sso-callback",
+        redirectUrl: `/login/sso-callback?next=${encodeURIComponent(redirectUrlComplete)}`,
         redirectUrlComplete,
       });
     } catch {

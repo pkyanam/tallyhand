@@ -13,7 +13,7 @@ describe("AgentID sign-in", () => {
   it("uses Clerk's callback and preserves the requested destination", async () => {
     render(<AgentIdSignInButton redirectUrlComplete="/settings/connect" />);
     fireEvent.click(screen.getByRole("button"));
-    await waitFor(() => expect(state.redirect).toHaveBeenCalledWith({ strategy: "oauth_agentid", redirectUrl: "/login/sso-callback", redirectUrlComplete: "/settings/connect" }));
+    await waitFor(() => expect(state.redirect).toHaveBeenCalledWith({ strategy: "oauth_agentid", redirectUrl: "/login/sso-callback?next=%2Fsettings%2Fconnect", redirectUrlComplete: "/settings/connect" }));
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
   });
   it("allows retry after a failed redirect", async () => {
