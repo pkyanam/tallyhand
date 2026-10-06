@@ -86,7 +86,7 @@ describe("middleware", () => {
     expect(await response.json()).toEqual({ error: { code: "unauthorized", message: "Not signed in" } });
   });
 
-  it.each(["/api/v1/openapi.json", "/openapi.json"])("leaves the OpenAPI spec public at %s", async (path) => {
+  it.each(["/api/v1/openapi.json", "/openapi.json", "/openapi.yaml"])("leaves the OpenAPI spec public at %s", async (path) => {
     const response = await invoke(fakeReq(path));
     expect(response.status).toBe(200);
     expect(response.headers.get("x-middleware-next")).toBe("1");

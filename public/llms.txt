@@ -7,6 +7,7 @@
 - [CLI installer](https://tallyhand.xyz/setup.sh): Bash installer for macOS and Linux. Rerunnable; updates binaries without changing configuration or data. Inspect before executing.
 - [API keys](https://tallyhand.xyz/settings/connect): Signed-in users manage personal keys.
 - [OpenAPI](https://tallyhand.xyz/openapi.json): REST API contract.
+- [OpenAPI YAML](https://tallyhand.xyz/openapi.yaml): The same complete contract in YAML for discovery clients that read document prefixes.
 - [Integration declaration](https://tallyhand.xyz/.well-known/integrations.json): REST, MCP and CLI access and authentication.
 - [API catalog](https://tallyhand.xyz/.well-known/api-catalog): Machine-readable links to API surfaces and documentation.
 - [MCP server card](https://tallyhand.xyz/.well-known/mcp/server-card.json): Remote MCP connection discovery.

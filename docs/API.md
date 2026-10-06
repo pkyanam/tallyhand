@@ -7,6 +7,8 @@ isolation. Browser-only IndexedDB data is not accessible through hosted APIs.
 
 Canonical machine-readable spec: `GET /openapi.json`. The existing
 `GET /api/v1/openapi.json` URL serves the same API-owned document.
+`GET /openapi.yaml` provides the identical contract in YAML. Discovery metadata
+links both formats; no endpoints or schemas are omitted from either.
 
 ## Enabling
 

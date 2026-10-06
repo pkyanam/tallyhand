@@ -30,7 +30,7 @@ export function integrationDiscovery() {
     surfaces: [
       {
         slug: "tallyhand-api", name: "Tallyhand REST API", type: "http",
-        url: `${origin}/api/v1`, spec: `${origin}/openapi.json`, docs: `${origin}/docs/integrations`, basis,
+        url: `${origin}/api/v1`, spec: `${origin}/openapi.yaml`, specAlternates: [`${origin}/openapi.json`], docs: `${origin}/docs/integrations`, basis,
         auth: { status: "required", entries: [keyEntry, ...(enabled ? [{ use: [{ id: "tallyhand_oauth", mechanics: bearer }], basis }] : [])] },
         notes: "JSON envelopes, pagination, idempotent mutations and dry-run previews. OAuth access is limited to scoped workspace operations; credential and OAuth-client management requires browser sign-in.",
       },
@@ -64,7 +64,7 @@ export function apiCatalog() {
   return { linkset: [
     { anchor: `${origin}/.well-known/api-catalog`, item: [{ href: `${origin}/api/v1` }, { href: resource }] },
     { anchor: `${origin}/api/v1`,
-      "service-desc": [{ href: `${origin}/openapi.json`, type: "application/json" }],
+      "service-desc": [{ href: `${origin}/openapi.json`, type: "application/json" }, { href: `${origin}/openapi.yaml`, type: "application/yaml" }],
       "service-doc": [{ href: `${origin}/docs/integrations`, type: "text/html" }],
     },
     { anchor: resource,
