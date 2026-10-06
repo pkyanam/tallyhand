@@ -1,6 +1,6 @@
 /** Only the configured issuer's canonical CLI authorization request may continue. */
 export function safeLocalNext(value?: string): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\r\n]/.test(value)) return "/";
+  if (typeof value !== "string" || !value || !value.startsWith("/") || value.startsWith("//") || /[\\\r\n]/.test(value)) return "/";
   try {
     const decoded = decodeURIComponent(value);
     if (decoded.startsWith("//") || /[\\\r\n]/.test(decoded)) return "/";
