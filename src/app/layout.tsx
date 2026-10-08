@@ -75,7 +75,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {clerkKey ? (
-            <ClerkAuthProvider publishableKey={clerkKey} convexUrl={convexUrl}>{children}</ClerkAuthProvider>
+            <ClerkAuthProvider publishableKey={clerkKey} convexUrl={convexUrl} admissionEnabled={Boolean(process.env.AGENTSUB_MERCHANT_ID || process.env.AGENTSUB_OFFER_ID || process.env.AGENTSUB_MERCHANT_KEY)}>{children}</ClerkAuthProvider>
           ) : (
             children
           )}

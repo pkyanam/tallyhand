@@ -19,12 +19,14 @@ export function ClerkAuthProvider({
   children,
   publishableKey,
   convexUrl,
+  admissionEnabled = false,
 }: {
   children: ReactNode;
   publishableKey: string;
   convexUrl?: string;
+  admissionEnabled?: boolean;
 }) {
   return <ClerkProvider publishableKey={publishableKey}>
-    {convexUrl ? <ConvexRealtimeProvider url={convexUrl}>{children}</ConvexRealtimeProvider> : children}
+    {convexUrl ? <ConvexRealtimeProvider url={convexUrl} admissionEnabled={admissionEnabled}>{children}</ConvexRealtimeProvider> : children}
   </ClerkProvider>;
 }

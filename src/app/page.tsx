@@ -2,6 +2,7 @@ import { BrandMark } from "@/components/app/brand-mark";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { tryResolveSessionUserId } from "@/lib/auth/session";
 import { effectiveAuth } from "@/lib/mode";
 import { LandingChoiceScreen } from "./landing-choice";
 
@@ -18,12 +19,12 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
   // Hosted (Clerk) deployments get the first-run choice: sign in with an
   // account, or use the app locally with zero cloud. Every other mode keeps
   // today's landing page byte-for-byte.
   if (effectiveAuth() === "clerk") {
-    return <LandingChoiceScreen />;
+    return <LandingChoiceScreen signedIn={Boolean(await tryResolveSessionUserId())} />;
   }
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">

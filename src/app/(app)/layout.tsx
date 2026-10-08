@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
 import { StopPrompt } from "@/components/app/stop-prompt";
 import { TimerHotkey } from "@/components/app/timer-hotkey";
-import { DataProviderBootstrap } from "@/components/app/data-provider-bootstrap";
 import { LOCAL_USER_ID, tryResolveUserId } from "@/lib/auth/session";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -19,8 +18,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const dataMode = showLocalNotice ? "local" : "cloud";
 
   return (
-    <AppChrome dataMode={dataMode}>
-      <DataProviderBootstrap />
+    <AppChrome key={userId ?? "local"} dataMode={dataMode}>
       <div className="flex min-h-[100dvh]">
         <Sidebar authMode={effectiveAuth()} />
         <div className="flex min-w-0 flex-1 flex-col">

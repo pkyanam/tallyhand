@@ -1,23 +1,6 @@
 "use client";
 
-/**
- * First-run choice for the hosted (Clerk) deployment, rendered by the
- * landing page when the effective auth mode is `clerk`.
- *
- * - "Sign in / Create account" → the Clerk flow at /login (the choice is
- *   remembered, so returning users go straight to /dashboard and Clerk's
- *   session handles the rest).
- * - "Use locally" → today's Dexie/offline behavior, zero cloud: a plain
- *   `tallyhand_local` cookie lets the middleware pass app routes through
- *   without a Clerk session. API routes stay protected.
- *
- * The choice persists in localStorage (`tallyhand.landingChoice`) so
- * returning users skip this screen; it can be changed later in
- * Settings → Account.
- *
- * Deliberately imports nothing from @clerk/nextjs: /login renders Clerk's
- * own <SignIn>/<SignUp> components, so this screen stays light.
- */
+/** Hosted entry screen: only an active session or explicit local choice skips it. */
 import { BrandMark } from "@/components/app/brand-mark";
 import * as React from "react";
 import Link from "next/link";
@@ -73,13 +56,13 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function LandingChoiceScreen() {
+export function LandingChoiceScreen({ signedIn = false }: { signedIn?: boolean }) {
   const [resolved, setResolved] = React.useState(false);
 
   React.useEffect(() => {
     const choice = readLandingChoice();
-    if (choice === "cloud") {
-      // Returning account user: the app (or Clerk sign-in) takes it over.
+    if (signedIn) {
+      // A remembered cloud choice is not proof of a current session.
       window.location.replace("/dashboard");
       return;
     }
@@ -90,8 +73,9 @@ export function LandingChoiceScreen() {
       window.location.replace("/dashboard");
       return;
     }
+    if (choice === "cloud") clearLandingChoice();
     setResolved(true);
-  }, []);
+  }, [signedIn]);
 
   const choose = (next: LandingChoice, href: string) => {
     writeLandingChoice(next);

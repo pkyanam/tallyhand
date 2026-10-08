@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { DataProviderBootstrap } from "./data-provider-bootstrap";
 import { AppChromeProvider } from "@/components/app/app-chrome-provider";
 import { CommandHotkey } from "@/components/app/command-hotkey";
 import { CommandPalette } from "@/components/app/command-palette";
@@ -18,12 +19,14 @@ export function AppChrome({
 }) {
   return (
     <AppChromeProvider dataMode={dataMode}>
-      <SettingsThemeSync />
-      <ReckoningAutoOpen />
-      <RecurringSchedulerCheck />
-      {children}
-      <CommandPalette />
-      <CommandHotkey />
+      <DataProviderBootstrap>
+        <SettingsThemeSync />
+        <ReckoningAutoOpen />
+        <RecurringSchedulerCheck />
+        {children}
+        <CommandPalette />
+        <CommandHotkey />
+      </DataProviderBootstrap>
     </AppChromeProvider>
   );
 }
