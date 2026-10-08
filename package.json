@@ -15,7 +15,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prebuild": "node scripts/configure-mcp-oauth.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

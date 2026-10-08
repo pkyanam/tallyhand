@@ -44,3 +44,17 @@ it("still rejects a provider-rejected token", async () => {
   verify.mockRejectedValue({ status: 401 });
   expect(await verifyTallyOAuth("oat_synthetic_fixture")).toBeNull();
 });
+
+it.each([['PATCH', ['tally:read', 'tally:write']], ['DELETE', ['tally:read', 'tally:manage']]] as const)("accepts a consented %s grant at the REST boundary", async (method, scopes) => {
+  verify.mockResolvedValue({ ...fixture(), scopes: [...scopes] });
+  const { requireApiToken } = await import('@/server/auth');
+  const result = await requireApiToken(new Request('https://tally.example/api/v1/clients/client_fixture', {method, headers: {authorization: 'Bearer oat_synthetic_fixture'}}));
+  expect(result).toBeNull();
+});
+it.each([['PATCH', 'tally:write'], ['DELETE', 'tally:manage']])("keeps a read-only token from authorizing %s", async (method, scope) => {
+  verify.mockResolvedValue(fixture());
+  const { requireApiToken } = await import('@/server/auth');
+  const result = await requireApiToken(new Request('https://tally.example/api/v1/clients/client_fixture', {method, headers: {authorization: 'Bearer oat_synthetic_fixture'}}));
+  expect(result?.status).toBe(403);
+  expect(result?.headers.get('www-authenticate')).toContain(`tally:read ${scope}`);
+});

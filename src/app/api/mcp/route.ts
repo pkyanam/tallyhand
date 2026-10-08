@@ -58,18 +58,18 @@ async function handleRequest(req: Request): Promise<Response> {
   const started = performance.now();
   if (!allowedOrigin(req)) return new Response("Origin not allowed", { status: 403 });
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get("authorization") ?? "")?.[1]?.trim();
-  if (!token) { console.info("mcp_auth", { outcome: "missing_bearer", method: req.method }); return cors(req, oauthChallenge()); }
+  if (!token) { console.info("mcp_auth", { outcome: "missing_bearer", method: req.method }); return cors(req, oauthChallenge(401, [...TALLY_SCOPES])); }
   let authInfo: AuthInfo;
   if (isOAuthToken(token)) {
     let identity;
     try { identity = await verifyTallyOAuth(token); } catch { console.warn("mcp_auth", { outcome: "verification_unavailable", method: req.method }); return cors(req, oauthUnavailableResponse()); }
-    if (!identity) { console.info("mcp_auth", { outcome: "invalid_oauth_token", method: req.method }); return cors(req, oauthChallenge()); }
+    if (!identity) { console.info("mcp_auth", { outcome: "invalid_oauth_token", method: req.method }); return cors(req, oauthChallenge(401, [...TALLY_SCOPES])); }
     if (!identity.scopes.includes("tally:read")) { console.info("mcp_auth", { outcome: "missing_read_scope", method: req.method }); return cors(req, oauthChallenge(403)); }
     authInfo = { token, clientId: identity.clientId, scopes: identity.scopes, expiresAt: identity.expiresAt,
       resource: new URL(oauthConfig().resource), resourceMetadataUrl: oauthConfig().metadataUrl, extra: { kind: "oauth", userId: identity.userId } };
   } else {
     const denied = await requireApiToken(req);
-    if (denied) return cors(req, oauthChallenge());
+    if (denied) return cors(req, oauthChallenge(401, [...TALLY_SCOPES]));
     authInfo = { token, clientId: "tallyhand-api-key", scopes: [...TALLY_SCOPES], extra: { kind: "api-key" } };
   }
   const authenticated = performance.now();

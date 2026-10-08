@@ -76,3 +76,9 @@ for (const [name, args, scope] of [
     expect(JSON.stringify(body)).not.toContain("oat_synthetic_fixture");
   });
 }
+
+it("requests complete workspace grants during initial MCP connection, before any token is issued", async () => {
+  const response = await POST(new Request("https://tally.example/api/mcp", {method: "POST"}));
+  expect(response.status).toBe(401);
+  expect(response.headers.get("www-authenticate")).toContain('scope="tally:read tally:write tally:manage"');
+});
