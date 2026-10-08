@@ -1,2 +1,6 @@
 User-agent: *
 Allow: /
+
+# All crawlers, including AI agents, may access public site content.
+# Workspace data continues to require authentication.
+Sitemap: https://tallyhand.xyz/sitemap.xml

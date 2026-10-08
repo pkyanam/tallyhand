@@ -1,0 +1,30 @@
+# Deployment input must contain application sources, not local credentials,
+# caches, generated workers, or investigation checkouts.
+.git/
+.vercel/
+node_modules/
+.next/
+out/
+build/
+coverage/
+.playwright-mcp/
+investigation-tmp/
+.env*
+!.env.example
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+public/worker-*.js.map
+public/fallback-*.js
+.pnp
+.pnp.js
+.yarn/install-state.gz

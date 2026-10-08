@@ -34,6 +34,7 @@ const PUBLIC_PATHS: RegExp[] = [
   /^\/(privacy|terms|support)\/?$/,
   /^\/(?:installer\/)?setup\.sh$/,
   /^\/llms\.txt$/,
+  /^\/(?:SKILL\.md|robots\.txt|sitemap\.xml)$/,
   /^\/openapi\.(?:json|yaml)$/,
   /^\/\.well-known\//,
   /^\/login(\/.*)?$/,

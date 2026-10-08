@@ -6,7 +6,7 @@ const withPWA = require("next-pwa")({
   register: true,
   skipWaiting: true,
   runtimeCaching: [
-    { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|openapi\.(?:json|yaml)|plugins\/|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
+    { urlPattern: /\/(?:setup\.sh|installer\/setup\.sh|llms\.txt|SKILL\.md|robots\.txt|sitemap\.xml|openapi\.(?:json|yaml)|plugins\/|\.well-known\/)/, handler: "NetworkOnly", method: "GET" },
     // Authenticated data must never come from a previous session's SW cache.
     { urlPattern: /\/(?:api|share)\//, handler: "NetworkOnly", method: "GET" },
     ...require("next-pwa/cache"),
@@ -24,6 +24,12 @@ const nextConfig = {
   async headers() {
     return [
       ...["/setup.sh", "/installer/setup.sh", "/llms.txt"].map(source => ({ source, headers: [{ key: "Content-Type", value: "text/plain; charset=utf-8" }, { key: "Cache-Control", value: "public, max-age=0, must-revalidate" }, { key: "X-Content-Type-Options", value: "nosniff" }] })),
+      { source: "/SKILL.md", headers: [
+        { key: "Content-Type", value: "text/markdown; charset=utf-8" },
+        { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        { key: "Access-Control-Allow-Origin", value: "*" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+      ] },
       { source: "/.well-known/agent-skills/:path*", headers: [
         { key: "Cache-Control", value: "public, max-age=300" },
         { key: "Access-Control-Allow-Origin", value: "*" },

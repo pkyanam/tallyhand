@@ -3,6 +3,7 @@
 > Open-source time tracking, invoicing, expenses, and project management for independent contractors. Hosted at https://tallyhand.xyz, with local/offline and self-hosted options.
 
 ## Start here
+- [Standalone agent skill](https://tallyhand.xyz/SKILL.md): One SKILL.md for Grok Bots and other agents; account setup, time tracking, invoice drafting, reviews, and authorization boundaries. No plugin bundle required.
 - [User and setup guide](https://tallyhand.xyz/docs): CLI installation, authentication, MCP, backups, and troubleshooting.
 - [CLI installer](https://tallyhand.xyz/setup.sh): Bash installer for macOS and Linux. Rerunnable; updates binaries without changing configuration or data. Inspect before executing.
 - [API keys](https://tallyhand.xyz/settings/connect): Signed-in users manage personal keys.

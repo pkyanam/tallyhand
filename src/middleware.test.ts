@@ -194,7 +194,7 @@ it("avoids browser-session processing for machine workspace requests", async () 
 
 
 describe("public policy and support pages", () => {
-  it.each(["/privacy", "/terms", "/support", "/privacy/", "/terms/", "/support/"])("does not require sign-in for %s", async path => {
+  it.each(["/privacy", "/terms", "/support", "/privacy/", "/terms/", "/support/", "/SKILL.md", "/robots.txt", "/sitemap.xml"])("does not require sign-in for %s", async path => {
     for (const authMode of ["clerk", "builtin", "none"] as const) {
       modeState.authMode = authMode;
       const response = await invoke(fakeReq(path));
