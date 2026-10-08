@@ -36,7 +36,7 @@ export default async function LoginPage({
     // ?mode=sign-up renders the registration form; default is sign-in.
     // Clerk's <SignIn> also links to sign-up on its own.
     const { ClerkLogin } = await import("../clerk-login");
-    return <ClerkLogin mode={mode} redirectUrlComplete={safeLocalNext(next)} agentIdEnabled={Boolean(process.env.AGENTID_CLIENT_ID)} />;
+    return <ClerkLogin mode={mode} redirectUrlComplete={safeLocalNext(next ?? "/dashboard")} agentIdEnabled={Boolean(process.env.AGENTID_CLIENT_ID)} />;
   }
 
   if (auth === "builtin") {

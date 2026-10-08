@@ -39,7 +39,7 @@ vi.mock("@clerk/nextjs/server", () => ({
       });
       const out = await handler(auth, req, event);
       return out === undefined
-        ? new Response(null, { status: 200, headers: { "x-mw": "next" } })
+        ? new Response(null, { status: 200, headers: { "x-mw": "next", "x-middleware-next": "1" } })
         : (out as Response);
     },
 }));
@@ -77,6 +77,13 @@ beforeEach(() => {
 });
 
 describe("middleware", () => {
+  it.each(["/", "/login", "/login/sso-callback", "/login/oauth/continue"])("initializes Clerk session context without protecting public browser route %s", async path => {
+    clerkState.userId = "user_google";
+    expect((await invoke(fakeReq(path))).status).toBe(200);
+    expect(clerkState.middlewareCalls).toBe(1);
+    expect(clerkState.protectCalls).toBe(0);
+  });
+
   it.each(["/projects", "/timesheet", "/analytics", "/tax"])("requires a session or explicit local choice for %s", async (path) => {
     await expect(invoke(fakeReq(path))).rejects.toMatchObject({ digest: "NEXT_REDIRECT" });
     expect(clerkState.protectCalls).toBe(1);

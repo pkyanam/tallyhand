@@ -17,3 +17,13 @@ describe("AgentID catalog login entry",()=>{
   it("does not auto-start without configured Clerk AgentID",async()=>{vi.stubEnv("AGENTID_CLIENT_ID","");await LoginPage({searchParams:Promise.resolve(hint)});expect(state.redirect).not.toHaveBeenCalled();state.auth="builtin";vi.stubEnv("AGENTID_CLIENT_ID","configured");await LoginPage({searchParams:Promise.resolve(hint)});expect(state.redirect).not.toHaveBeenCalled();});
   it("sanitizes an external next before provider entry",async()=>{await expect(LoginPage({searchParams:Promise.resolve({...hint,next:"https://evil.test"})})).rejects.toThrow("NEXT_REDIRECT");expect(state.redirect).toHaveBeenCalledWith("/login/agentid?next=%2F");});
 });
+
+it("returns ordinary Clerk sign-in to dashboard instead of the landing screen", async () => {
+  const element = await LoginPage({searchParams: Promise.resolve({})});
+  expect(element.props.redirectUrlComplete).toBe("/dashboard");
+});
+it("preserves an explicit OAuth continuation destination", async () => {
+  const next = "/login/oauth/continue?authorization_url=canonical";
+  const element = await LoginPage({searchParams: Promise.resolve({next})});
+  expect(element.props.redirectUrlComplete).toBe(next);
+});

@@ -1,6 +1,7 @@
 "use client";
 
 /** Hosted entry screen: only an active session or explicit local choice skips it. */
+import { useAuth } from "@clerk/nextjs";
 import { BrandMark } from "@/components/app/brand-mark";
 import * as React from "react";
 import Link from "next/link";
@@ -56,12 +57,14 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function LandingChoiceScreen({ signedIn = false }: { signedIn?: boolean }) {
+export function LandingChoiceScreen() {
+  const { isLoaded, isSignedIn } = useAuth();
   const [resolved, setResolved] = React.useState(false);
 
   React.useEffect(() => {
+    if (!isLoaded) return;
     const choice = readLandingChoice();
-    if (signedIn) {
+    if (isSignedIn) {
       // A remembered cloud choice is not proof of a current session.
       window.location.replace("/dashboard");
       return;
@@ -75,7 +78,7 @@ export function LandingChoiceScreen({ signedIn = false }: { signedIn?: boolean }
     }
     if (choice === "cloud") clearLandingChoice();
     setResolved(true);
-  }, [signedIn]);
+  }, [isLoaded, isSignedIn]);
 
   const choose = (next: LandingChoice, href: string) => {
     writeLandingChoice(next);
@@ -116,7 +119,7 @@ export function LandingChoiceScreen({ signedIn = false }: { signedIn?: boolean }
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => choose("cloud", "/login")}
+                onClick={() => choose("cloud", "/login?next=/dashboard")}
                 className="group rounded-xl border border-border bg-card p-6 text-left transition-colors hover:border-foreground"
               >
                 <Cloud className="h-6 w-6" />

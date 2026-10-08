@@ -87,7 +87,15 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   });
   const { pathname } = req.nextUrl;
 
-  if (isPublic(pathname)) return NextResponse.next();
+  if (isPublic(pathname)) {
+    // Public auth pages still need Clerk's request context. Skipping the
+    // middleware makes server auth() throw even with a valid browser session.
+    if (authMode === "clerk" && (pathname === "/" || /^\/(login|sign-in|sign-up)(\/|$)/.test(pathname))) {
+      const mod = await import("@clerk/nextjs/server");
+      return mod.clerkMiddleware(() => {})(req, event);
+    }
+    return NextResponse.next();
+  }
   // MCP owns its OAuth/API-key gate and challenges; browser-session middleware
   // must not replace them with a Clerk-session handshake. No data is served here.
   if (pathname === "/api/mcp") return NextResponse.next();

@@ -4,11 +4,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LandingChoiceScreen } from "./landing-choice";
 import { LANDING_CHOICE_KEY } from "@/lib/landing";
 vi.mock("@/components/app/brand-mark", () => ({ BrandMark: () => null }));
+const auth = vi.hoisted(() => ({ isLoaded: true, isSignedIn: false }));
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => auth }));
 const replace = vi.fn();
 const values = new Map<string, string>();
 const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), clear: () => values.clear(), removeItem: (k: string) => values.delete(k) };
 const actualWindow = window;
-afterEach(() => { cleanup(); storage.clear(); vi.unstubAllGlobals(); replace.mockClear(); });
+afterEach(() => { cleanup(); storage.clear(); vi.unstubAllGlobals(); replace.mockClear(); auth.isLoaded = true; auth.isSignedIn = false; });
 function setup(choice?: string) {
   if (choice) storage.setItem(LANDING_CHOICE_KEY, choice);
   vi.stubGlobal("window", new Proxy(actualWindow, { get(target, key) { return key === "localStorage" ? storage : key === "location" ? { replace, assign: vi.fn() } : Reflect.get(target, key); } }));
@@ -29,6 +31,15 @@ it("resumes an explicitly selected local workspace", () => {
   expect(replace).toHaveBeenCalledWith("/dashboard");
 });
 it("sends an active session to its workspace even without a saved choice", () => {
-  setup(); render(<LandingChoiceScreen signedIn />);
+  setup(); auth.isSignedIn = true; render(<LandingChoiceScreen />);
+  expect(replace).toHaveBeenCalledWith("/dashboard");
+});
+
+it("uses the live Clerk session when sign-in completes after the landing page was cached", () => {
+  setup(); auth.isLoaded = false;
+  const view = render(<LandingChoiceScreen />);
+  expect(replace).not.toHaveBeenCalled();
+  auth.isLoaded = true; auth.isSignedIn = true;
+  view.rerender(<LandingChoiceScreen />);
   expect(replace).toHaveBeenCalledWith("/dashboard");
 });
