@@ -10,13 +10,21 @@ export async function configureMcpOAuth(key, fetcher = fetch) {
       method, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000),
     });
-    if (!response.ok) throw new Error(`Clerk OAuth configuration failed (${response.status})`);
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      const codes = (failure.errors ?? []).map(error => ({code: error.code, parameter: error.meta?.param_name}));
+      throw new Error(`Clerk OAuth configuration failed: ${method} ${path} (${response.status}) ${JSON.stringify(codes)}`);
+    }
     return response.json();
   };
   const settings = await request('instance/oauth_application_settings');
-  const defaults = [...new Set([...scopesOf(settings.default_scopes), ...workspaceScopes])];
+  // Clerk permits custom workspace defaults but rejects offline_access here.
+  // Refresh-token permission must be requested explicitly by the OAuth client.
+  const connectionDefaults = workspaceScopes.filter(scope => scope !== 'offline_access');
+  const defaults = [...new Set([...scopesOf(settings.default_scopes), ...connectionDefaults])];
+  console.log('MCP default scopes requested:', JSON.stringify(defaults.map(scope => typeof scope === 'string' ? scope : typeof scope)));
   const updated = await request('instance/oauth_application_settings', 'PATCH', { default_scopes: defaults, pkce_required: true });
-  if (workspaceScopes.some(scope => !scopesOf(updated.default_scopes).includes(scope)) || updated.pkce_required !== true)
+  if (connectionDefaults.some(scope => !scopesOf(updated.default_scopes).includes(scope)) || updated.pkce_required !== true)
     throw new Error('Clerk did not confirm MCP defaults and PKCE');
   let offset = 0, count = 0, updatedClients = 0;
   do {

@@ -11,7 +11,8 @@ it('configures scope-omitting clients and known MCP connectors without upgrading
   });
   const result = await configureMcpOAuth('sk_live_synthetic_fixture', fetcher);
   expect(result.updatedClients).toBe(1);
-  expect(result.defaults).toEqual(workspaceScopes);
+  expect(result.defaults).toEqual(workspaceScopes.filter(scope => scope !== 'offline_access'));
+  expect(JSON.parse(String(fetcher.mock.calls[1][1].body)).default_scopes).not.toContain('offline_access');
   const updates = fetcher.mock.calls.filter(([, options]) => options.method === 'PATCH');
   expect(updates).toHaveLength(2);
   expect(updates[1][0].endsWith('/oauth_applications/oa_cursor')).toBe(true);
@@ -20,5 +21,5 @@ it('configures scope-omitting clients and known MCP connectors without upgrading
 });
 it('fails without printing the provider body if configuration cannot be confirmed', async () => {
   const fetcher = vi.fn(async () => new Response('sensitive upstream body', {status: 503}));
-  await expect(configureMcpOAuth('sk_live_synthetic_fixture', fetcher)).rejects.toThrow('configuration failed (503)');
+  await expect(configureMcpOAuth('sk_live_synthetic_fixture', fetcher)).rejects.toThrow('Clerk OAuth configuration failed: GET instance/oauth_application_settings (503)');
 });
