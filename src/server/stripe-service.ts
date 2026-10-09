@@ -4,11 +4,19 @@
  * Stripe orchestration shared by the stripe-payments plugin (portal pay
  * flow) and the `/api/v1/stripe/payment-links` route.
  *
- * The secret key comes from the `STRIPE_SECRET_KEY` environment variable
- * ONLY — it is never read from plugin settings, never logged, and never
- * persisted.
+ * Credentials come from an explicit encrypted account connection, or a
+ * configured self-hosted environment key. They are never read from browser
+ * plugin settings or logged.
  */
 
+import { createHash, randomUUID } from "node:crypto";
+import { snapshotInvoice, invoiceFingerprint } from "@/core/financial/snapshot";
+import { getFinancialStore } from "./financial-store";
+import {
+  authorizeFinancial,
+  type FinancialAuthority,
+} from "./financial-authority";
+import type { FinancialScope } from "@/core/financial/types";
 import type { Invoice } from "@/core/entities";
 import type { StorageProvider } from "@/core/storage";
 import { shareUrl } from "@/lib/share/service";
@@ -49,7 +57,9 @@ export interface InvoiceCheckoutOptions {
   shareToken?: string;
   /** Override the cancel redirect (defaults to the portal/invoice page). */
   cancelUrl?: string;
-  userId?: string;
+  userId: string;
+  authority: FinancialAuthority;
+  operationId: string;
 }
 
 export interface InvoiceCheckout {
@@ -69,9 +79,15 @@ export interface InvoiceCheckout {
 export async function createInvoiceCheckoutSession(
   provider: StorageProvider,
   invoiceId: string,
-  opts: InvoiceCheckoutOptions = {},
+  opts: InvoiceCheckoutOptions,
 ): Promise<InvoiceCheckout> {
-  const { resolveCheckoutStripeKey } = await import("./stripe-connect");
+  if (!opts?.userId || !opts.authority || !opts.operationId)
+    throw new StripeError(
+      "Financial authority and operation identity required",
+      403,
+    );
+  const { resolveCheckoutStripeKey, getConnectAccount } =
+    await import("./stripe-connect");
   const resolved = await resolveCheckoutStripeKey(opts.userId);
   // appUrl is derived from the environment independently of which secret
   // key resolved: a Connect-only deployment (no STRIPE_SECRET_KEY) still
@@ -114,7 +130,8 @@ export async function createInvoiceCheckoutSession(
     throw err;
   }
 
-  const amountCents = Math.round(invoice.total * 100);
+  const frozen = snapshotInvoice(invoice);
+  const amountCents = frozen.money.minorUnits;
   if (amountCents <= 0) {
     throw new Error(
       `Invoice ${invoice.invoiceNumber} has no balance to collect`,
@@ -141,8 +158,81 @@ export async function createInvoiceCheckoutSession(
   const successUrl = base + (opts.shareToken ? "?paid=1" : "");
   const cancelUrl = opts.cancelUrl ?? base;
 
+  const accountId =
+    resolved.stripeAccount ?? (await getConnectAccount(resolved.secretKey)).id;
+  const scope: FinancialScope = {
+    userId: opts.userId,
+    workspaceId: opts.userId,
+    provider: "stripe",
+    accountId,
+    mode: resolved.mode as "test" | "live",
+  };
+  const resource = { invoiceId, money: frozen.money };
+  const authorization = await authorizeFinancial(
+    "collect",
+    opts.authority,
+    scope,
+    resource,
+  );
+  const store = await persistence(() => getFinancialStore(opts.userId));
+  const prepared = await persistence(() =>
+    store.prepareAttempt({
+      scope,
+      invoice: frozen,
+      operationId: opts.operationId,
+      requestFingerprint: invoiceFingerprint({ frozen, successUrl, cancelUrl }),
+      actor: authorization.actor,
+      authorityProof: authorization.proof,
+      capabilityProof: authorization.capabilityProof,
+      now: Date.now(),
+    }),
+  );
+  const checkout = (a: typeof prepared.attempt): InvoiceCheckout => {
+    if (a.state === "failed")
+      throw new StripeError(
+        "Payment attempt is terminal; use a new operation identity",
+        409,
+      );
+    if (!a.checkoutUrl || !a.checkoutSessionId)
+      throw new StripeError("Payment attempt is awaiting reconciliation", 202);
+    return {
+      sessionId: a.checkoutSessionId,
+      url: a.checkoutUrl,
+      invoiceId,
+      invoiceNumber: invoice.invoiceNumber,
+      amountCents,
+      currency,
+    };
+  };
+  if (prepared.attempt.state !== "prepared") return checkout(prepared.attempt);
+  const dispatchAuthorization = await authorizeFinancial(
+    "collect",
+    opts.authority,
+    scope,
+    resource,
+  );
+  const current = await provider.getInvoice(invoiceId);
+  if (!current || snapshotInvoice(current).fingerprint !== frozen.fingerprint)
+    throw new StripeError("Invoice changed before payment dispatch", 409);
+  const now = Date.now(),
+    lease = { token: randomUUID(), expiresAt: now + 30_000 };
+  const claim = {
+    scope,
+    id: prepared.attempt.id,
+    now,
+    lease,
+    dispatchActor: dispatchAuthorization.actor,
+    authorityProof: dispatchAuthorization.proof,
+    capabilityProof: dispatchAuthorization.capabilityProof,
+  };
+  const attempt = await persistence(() => store.claimAttemptDispatch(claim));
+  if (!attempt)
+    return checkout(
+      (await store.getAttempt(scope, prepared.attempt.id)) ?? prepared.attempt,
+    );
   try {
     const session = await createCheckoutSession(config.secretKey, {
+      idempotencyKey: attempt.providerIdempotencyKey,
       amountCents,
       currency,
       stripeAccount: resolved.stripeAccount ?? undefined,
@@ -152,6 +242,11 @@ export async function createInvoiceCheckoutSession(
       successUrl,
       cancelUrl,
       metadata: {
+        attemptId: attempt.id,
+        invoiceFingerprint: createHash("sha256")
+          .update(frozen.fingerprint)
+          .digest("hex"),
+        accountId,
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         ...(opts.shareToken ? { shareToken: opts.shareToken } : {}),
@@ -164,19 +259,46 @@ export async function createInvoiceCheckoutSession(
       },
       statementDescriptor: pluginSettings.statementDescriptor,
     });
-    return {
-      sessionId: session.id,
-      url: session.url,
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      amountCents,
-      currency,
-    };
-  } catch (err) {
-    if (err instanceof StripeError) throw err;
-    throw new StripeError(
-      err instanceof Error ? err.message : "Stripe request failed",
-      502,
-    );
+    const saved = await store.recordAttemptDispatch({
+      ...claim,
+      result: {
+        state: "pending",
+        checkoutSessionId: session.id,
+        checkoutUrl: session.url,
+      },
+    });
+    return checkout(saved);
+  } catch {
+    // A timeout, malformed response or provider error may follow successful creation.
+    try {
+      await store.recordAttemptDispatch({
+        ...claim,
+        result: {
+          state: "unknown",
+          failure: "Stripe dispatch outcome uncertain",
+        },
+      });
+    } catch {
+      throw new StripeError(
+        "Payment persistence unavailable; reconciliation required",
+        503,
+      );
+    }
+    throw new StripeError("Payment attempt is awaiting reconciliation", 202);
+  }
+}
+
+async function persistence<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /conflict|mismatch|must be sent|missing|denied|revoked|expired/i.test(
+        error.message,
+      )
+    )
+      throw new StripeError(error.message, 409);
+    throw new StripeError("Financial persistence unavailable", 503);
   }
 }

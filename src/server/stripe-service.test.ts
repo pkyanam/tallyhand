@@ -1,158 +1,254 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { receiveStripeEvent, processFinancialEvent } from "./financial-events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StorageProvider } from "@/core/storage";
-import {
-  createInvoiceCheckoutSession,
-  getStripeConfig,
-  stripeKeyMode,
-} from "./stripe-service";
-
-const sentInvoice = {
-  id: "inv_1",
-  invoiceNumber: "INV-001",
+import { SqliteFinancialStore } from "@/lib/financial/sqlite-store";
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  auth: vi.fn(),
+  create: vi.fn(),
+}));
+vi.mock("./financial-store", () => ({ getFinancialStore: mocks.get }));
+vi.mock("./financial-authority", () => ({ authorizeFinancial: mocks.auth }));
+vi.mock("./stripe-connect", () => ({
+  getConnectAccount: vi.fn(),
+  resolveCheckoutStripeKey: async () => ({
+    secretKey: "sk_test_x",
+    stripeAccount: "acct",
+    mode: "test",
+    source: "connected",
+  }),
+}));
+vi.mock("@/plugins/stripe/stripe-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/plugins/stripe/stripe-client")>()),
+  createCheckoutSession: mocks.create,
+}));
+import { createInvoiceCheckoutSession } from "./stripe-service";
+const invoice = {
+  id: "i",
+  invoiceNumber: "INV",
   status: "sent",
-  total: 123.45,
+  total: 1,
   currency: "USD",
-  clientId: null,
+  updatedAt: 1,
 };
-
-function providerFor(invoice: unknown): StorageProvider {
-  return {
-    getInvoice: vi.fn().mockResolvedValue(invoice),
-    getClient: vi.fn(),
-    getSettings: vi.fn().mockResolvedValue({}),
-  } as unknown as StorageProvider;
-}
-
-describe("stripeKeyMode", () => {
-  it("classifies test, live, and unknown keys", () => {
-    expect(stripeKeyMode("sk_test_abc")).toBe("test");
-    expect(stripeKeyMode("rk_test_abc")).toBe("test");
-    expect(stripeKeyMode("sk_live_abc")).toBe("live");
-    expect(stripeKeyMode("rk_live_abc")).toBe("live");
-    expect(stripeKeyMode("whsec_abc")).toBe("unknown");
-    expect(stripeKeyMode("")).toBe("unknown");
-  });
+const opts = {
+  userId: "local",
+  operationId: "op",
+  authority: { kind: "owner" as const, userId: "local" },
+};
+const provider = {
+  getInvoice: async () => invoice,
+  getClient: vi.fn(),
+  getSettings: async () => ({}),
+} as unknown as StorageProvider;
+let store: SqliteFinancialStore;
+let directory: string, path: string;
+beforeEach(() => {
+  vi.stubEnv("TALLYHAND_APP_URL", "https://test.example");
+  directory = mkdtempSync(join(tmpdir(), "checkout-"));
+  path = join(directory, "financial.sqlite");
+  store = new SqliteFinancialStore(path);
+  const db = (store as unknown as { db: DatabaseSync }).db;
+  db.exec(
+    "CREATE TABLE invoices(id TEXT,status TEXT,updated_at INTEGER,data TEXT)",
+  );
+  db.prepare("INSERT INTO invoices VALUES(?,?,?,?)").run(
+    "i",
+    "sent",
+    1,
+    JSON.stringify(invoice),
+  );
+  mocks.get.mockResolvedValue(store);
+  mocks.auth.mockResolvedValue({ actor: { kind: "owner", id: "local" } });
+  mocks.create.mockReset();
 });
-
-describe("getStripeConfig", () => {
-  it("returns null without STRIPE_SECRET_KEY (payments stay disabled)", () => {
-    expect(getStripeConfig({})).toBeNull();
-    expect(getStripeConfig({ STRIPE_SECRET_KEY: "" })).toBeNull();
-  });
-
-  it("exposes the key mode", () => {
-    expect(
-      getStripeConfig({ STRIPE_SECRET_KEY: "sk_test_x" })?.mode,
-    ).toBe("test");
-    expect(
-      getStripeConfig({ STRIPE_SECRET_KEY: "sk_live_x" })?.mode,
-    ).toBe("live");
-  });
-
-  it("prefers TALLYHAND_APP_URL over NEXT_PUBLIC_APP_URL", () => {
-    const cfg = getStripeConfig({
-      STRIPE_SECRET_KEY: "sk_test_x",
-      TALLYHAND_APP_URL: "https://tally.example.com/",
-      NEXT_PUBLIC_APP_URL: "https://other.example.com",
-    });
-    expect(cfg?.appUrl).toBe("https://tally.example.com");
-  });
-
-  it("falls back to VERCEL_URL so fresh Vercel deploys work", () => {
-    const cfg = getStripeConfig({
-      STRIPE_SECRET_KEY: "sk_test_x",
-      VERCEL_URL: "tallyhand-abc.vercel.app",
-    });
-    expect(cfg?.appUrl).toBe("https://tallyhand-abc.vercel.app");
-    // Tolerates an already-absolute VERCEL_URL.
-    const cfg2 = getStripeConfig({
-      STRIPE_SECRET_KEY: "sk_test_x",
-      VERCEL_URL: "https://tallyhand-abc.vercel.app",
-    });
-    expect(cfg2?.appUrl).toBe("https://tallyhand-abc.vercel.app");
-  });
+afterEach(() => {
+  store.close();
+  rmSync(directory, { recursive: true, force: true });
+  vi.unstubAllEnvs();
 });
-
-describe("createInvoiceCheckoutSession", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_123");
-    vi.stubEnv("TALLYHAND_APP_URL", "https://tally.example.com");
-    fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        id: "cs_test_1",
-        url: "https://checkout.stripe.com/pay/cs_test_1",
-      }),
+describe("durable checkout", () => {
+  it("persists before dispatch and reuses the checkout URL", async () => {
+    mocks.create.mockResolvedValue({
+      id: "cs",
+      url: "https://checkout.stripe.com/cs",
     });
-    vi.stubGlobal("fetch", fetchMock);
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const first = await createInvoiceCheckoutSession(provider, "i", opts);
+    const second = await createInvoiceCheckoutSession(provider, "i", {
+      ...opts,
+      operationId: "another",
+    });
+    expect(second).toEqual(first);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.create.mock.calls[0][1].idempotencyKey).toBeTruthy();
+  });
+  it("uncertain timeout is never dispatched again", async () => {
+    mocks.create.mockRejectedValue(new Error("timeout"));
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 202 });
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 202 });
+    store.close();
+    store = new SqliteFinancialStore(path);
+    mocks.get.mockResolvedValue(store);
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 202 });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+  it("an event arriving before the create response cannot be overwritten", async () => {
+    mocks.create.mockImplementationOnce(async (_key, params) => {
+      const metadata = params.metadata;
+      const scope = {
+        userId: "local",
+        workspaceId: "local",
+        provider: "stripe" as const,
+        accountId: "acct",
+        mode: "test" as const,
+      };
+      const receipt = await receiveStripeEvent(store, scope, {
+        id: "evt",
+        type: "checkout.session.completed",
+        account: "acct",
+        livemode: false,
+        data: {
+          object: {
+            id: "cs",
+            livemode: false,
+            payment_intent: "pi",
+            payment_status: "paid",
+            amount_total: 100,
+            currency: "usd",
+            metadata,
+          },
+        },
+      });
+      await processFinancialEvent(store, receipt.event);
+      return { id: "cs", url: "https://checkout.stripe.com/cs" };
+    });
+    // Confirmed state is retained even when a response has no persisted URL.
+    try {
+      await createInvoiceCheckoutSession(provider, "i", opts);
+    } catch (error) {
+      expect(error).toMatchObject({ status: 202 });
+    }
+    const metadata = mocks.create.mock.calls[0][1].metadata;
+    expect(
+      (
+        await store.getAttempt(
+          {
+            userId: "local",
+            workspaceId: "local",
+            provider: "stripe",
+            accountId: "acct",
+            mode: "test",
+          },
+          metadata.attemptId,
+        )
+      )?.state,
+    ).toBe("confirmed");
+    expect(
+      (
+        await store.listPayments(
+          { userId: "local", workspaceId: "local" },
+          { limit: 10 },
+        )
+      ).items,
+    ).toHaveLength(1);
+  });
+  it("lost dispatch-result persistence retains the original durable key", async () => {
+    mocks.create.mockResolvedValueOnce({
+      id: "cs",
+      url: "https://checkout.stripe.com/cs",
+    });
+    const spy = vi
+      .spyOn(store, "recordAttemptDispatch")
+      .mockRejectedValue(new Error("database offline"));
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 503 });
+    const key = mocks.create.mock.calls[0][1].idempotencyKey;
+    spy.mockRestore();
+    store.close();
+    store = new SqliteFinancialStore(path);
+    mocks.get.mockResolvedValue(store);
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 202 });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    const timeline = await store.getInvoiceTimeline(
+      { userId: "local", workspaceId: "local" },
+      "i",
+      { limit: 10 },
+    );
+    expect(timeline.attempts[0].providerIdempotencyKey).toBe(key);
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    warnSpy.mockRestore();
-  });
-
-  it("throws a clear error when Stripe is not configured", async () => {
-    vi.stubEnv("STRIPE_SECRET_KEY", "");
+  it("expired unpaid checkout requires a new operation and never returns the dead URL", async () => {
+    mocks.create
+      .mockResolvedValueOnce({
+        id: "expired_cs",
+        url: "https://checkout.stripe.com/dead",
+      })
+      .mockResolvedValueOnce({
+        id: "fresh_cs",
+        url: "https://checkout.stripe.com/fresh",
+      });
+    await createInvoiceCheckoutSession(provider, "i", opts);
+    const metadata = mocks.create.mock.calls[0][1].metadata;
+    const scope = {
+      userId: "local",
+      workspaceId: "local",
+      provider: "stripe" as const,
+      accountId: "acct",
+      mode: "test" as const,
+    };
+    const receipt = await receiveStripeEvent(store, scope, {
+      id: "expired_event",
+      type: "checkout.session.expired",
+      account: "acct",
+      livemode: false,
+      data: {
+        object: {
+          id: "expired_cs",
+          status: "expired",
+          payment_status: "unpaid",
+          livemode: false,
+          amount_total: 100,
+          currency: "usd",
+          metadata,
+        },
+      },
+    });
+    await processFinancialEvent(store, receipt.event);
     await expect(
-      createInvoiceCheckoutSession(providerFor(sentInvoice), "inv_1"),
-    ).rejects.toThrow(/not configured/);
-  });
-
-  it("throws 404 / 409 for missing or non-sent invoices", async () => {
-    await expect(
-      createInvoiceCheckoutSession(providerFor(undefined), "nope"),
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      createInvoiceCheckoutSession(
-        providerFor({ ...sentInvoice, status: "paid" }),
-        "inv_1",
-      ),
+      createInvoiceCheckoutSession(provider, "i", opts),
     ).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("honors the invoice currency and full balance", async () => {
-    const checkout = await createInvoiceCheckoutSession(
-      providerFor({ ...sentInvoice, currency: "EUR", total: 99.0 }),
-      "inv_1",
-    );
-    expect(checkout.amountCents).toBe(9900);
-    expect(checkout.currency).toBe("eur");
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = String(init.body);
-    expect(body).toContain(encodeURIComponent("line_items[0][price_data][currency]") + "=eur");
-  });
-
-  it("warns loudly when a live key is used (test mode is the default)", async () => {
-    vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_123");
-    await createInvoiceCheckoutSession(providerFor(sentInvoice), "inv_1");
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/LIVE key/i),
+    expect(
+      (
+        await createInvoiceCheckoutSession(provider, "i", {
+          ...opts,
+          operationId: "new_op",
+        })
+      ).sessionId,
+    ).toBe("fresh_cs");
+    expect(mocks.create.mock.calls[1][1].idempotencyKey).not.toBe(
+      mocks.create.mock.calls[0][1].idempotencyKey,
     );
   });
-
-  it("does not warn for test keys", async () => {
-    await createInvoiceCheckoutSession(providerFor(sentInvoice), "inv_1");
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      expect.stringMatching(/LIVE key/i),
+  it("requires authority and denies before preparing", async () => {
+    mocks.auth.mockRejectedValueOnce(
+      Object.assign(new Error("denied"), { status: 403 }),
     );
-  });
-
-  it("builds portal redirects from the share token", async () => {
-    await createInvoiceCheckoutSession(providerFor(sentInvoice), "inv_1", {
-      shareToken: "tok_abc",
-    });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = String(init.body);
-    expect(body).toContain(encodeURIComponent("success_url") + "=");
-    expect(body).toContain(
-      encodeURIComponent("https://tally.example.com/share/tok_abc?paid=1"),
-    );
+    await expect(
+      createInvoiceCheckoutSession(provider, "i", opts),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

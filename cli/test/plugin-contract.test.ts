@@ -45,9 +45,9 @@ describe('published plugin contract', () => {
     expect(props.patch.properties.invoice.properties.defaultPaymentMethod).toBeDefined();
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: false });
     for (const skill of AGENT_SKILLS) {
-      for (const match of skill.text.matchAll(/\b((?:get|list|create|update|delete|run|export|import|reset|send|mark|log|bulk|timer|revenue|preview|revoke)_[a-z_]+)\b/g)) {
+      for (const match of skill.text.matchAll(/\b((?:get|list|create|update|delete|run|export|import|reset|send|mark|log|bulk|timer|revenue|preview|revoke|request)_[a-z_]+)\b/g)) {
         // Domain values and field names are not tool references.
-        if (/^(get|list|create|update|delete|run|export|import|reset|send|mark|log|bulk|timer|revenue|preview|revoke)_/.test(match[1]))
+        if (/^(get|list|create|update|delete|run|export|import|reset|send|mark|log|bulk|timer|revenue|preview|revoke|request)_/.test(match[1]))
           expect(names.has(match[1]), `${skill.frontmatter.name}: ${match[1]}`).toBe(true);
       }
       expect(skill.files.some(file => file.uri.endsWith('/agents/openai.yaml') && file.text.includes('value: "tallyhand"'))).toBe(true);

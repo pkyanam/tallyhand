@@ -201,6 +201,29 @@ describe("SqliteStorageProvider (StorageProvider conformance)", () => {
       expect(billedExpense?.invoiceId).toBe(invoice.id);
     });
 
+    it("records immutable manual attribution with the actual invoice amount in any currency", async () => {
+      const invoice = await provider.createInvoice({
+        clientId: "client", invoiceNumber: "INV-MANUAL", issueDate: 1, dueDate: 2,
+        status: "sent", lineItems: [], subtotal: 123, total: 123, currency: "JPY",
+        manualPaymentAssertion: { source: "manual", actorId: "spoofed", recordedAt: 1, total: 1, currency: "USD" },
+      });
+      expect(invoice.manualPaymentAssertion).toBeUndefined();
+      await provider.markInvoicePaid(invoice.id);
+      const recorded = await provider.getInvoice(invoice.id);
+      expect(recorded?.manualPaymentAssertion).toEqual({ source: "manual", actorId: "local", recordedAt: recorded?.updatedAt, total: 123, currency: "JPY" });
+      await provider.markInvoicePaid(invoice.id);
+      expect(await provider.getInvoice(invoice.id)).toEqual(recorded);
+      await provider.updateInvoice(invoice.id, { manualPaymentAssertion: { source: "manual", actorId: "spoofed", recordedAt: 1, total: 1, currency: "USD" } });
+      expect((await provider.getInvoice(invoice.id))?.manualPaymentAssertion).toEqual(recorded?.manualPaymentAssertion);
+    });
+
+    it("leaves historical paid invoices without invented manual provenance", async () => {
+      const invoice = await provider.createInvoice({ clientId: "client", invoiceNumber: "INV-HISTORICAL", issueDate: 1, dueDate: 2, status: "paid", lineItems: [], subtotal: 100, total: 100 });
+      await provider.markInvoicePaid(invoice.id);
+      expect(await provider.getInvoice(invoice.id)).toEqual(invoice);
+      expect((await provider.getInvoice(invoice.id))?.manualPaymentAssertion).toBeUndefined();
+    });
+
     it("markInvoicePaid flips status; missing id is a no-op", async () => {
       const client = await provider.createClient({ name: "Acme" });
       const invoice: Invoice = await provider.createInvoice({

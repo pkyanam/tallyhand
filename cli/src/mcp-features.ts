@@ -1,7 +1,7 @@
 /** MCP-native resources, prompts and missing CLI data operations. */
 import { McpServer, ResourceTemplate, completable, inputRequired, acceptedContent, requireScopes, type CallToolResult } from "@modelcontextprotocol/server";
 import { toolAuthPolicy, toolAuthError, type McpAuthOptions } from "./mcp-auth.js";
-import { operationInputSchema, requestOperation } from "./workspace-operations.js";
+import { financialOperationSchema, requestFinancialOperation, operationInputSchema, requestOperation } from "./workspace-operations.js";
 import { getOnboarding, setupWorkspace, workspaceSetupSchema, setupIntentSchema } from "./onboarding.js";
 import { z } from "zod";
 import { CLI_MCP_PARITY, LOCAL_ONLY_COMMANDS } from "./mcp-parity.js";
@@ -13,28 +13,40 @@ const result = (data: unknown): CallToolResult => ({
 });
 
 export function registerWorkspaceFeatures(server: McpServer, api: Api, options: McpAuthOptions) {
+  server.registerTool("request_financial_operation", {
+    title: "Financial records and checkout",
+    description: "Read/reconcile records or prepare sent-invoice checkout with stable operationId. Explicit grant required; broad workspace scopes do not grant financial authority. No refunds. Collections are not bank balances.",
+    inputSchema: financialOperationSchema,
+    outputSchema: z.object({ data: z.unknown() }),
+    ...toolAuthPolicy(options, "tally:read"),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async (args, ctx) => {
+    const denied = toolAuthError(options, "tally:read", ctx);
+    if (denied) return denied;
+    return result(await requestFinancialOperation(api, args));
+  });
   const scope = (name: string) => options.oauth ? requireScopes(name) : undefined;
   for (const [suffix, permission] of [["read", "tally:read"], ["write", "tally:write"], ["manage", "tally:manage"]] as const) {
     server.registerTool(`request_workspace_${suffix}`, {
-      title: `Request workspace ${suffix} operation`, description: `Call capabilities.operations by operationId; requires ${permission}. params substitutes path variables. Preview supported mutations and obtain approval. REST permissions and validation apply.`,
+      title: `Request workspace ${suffix} operation`, description: `Call capabilities.operations (${permission}); params fills paths. Preview before approved mutations.`,
       inputSchema: operationInputSchema, outputSchema: z.object({ data: z.unknown() }), ...toolAuthPolicy(options, permission),
       annotations: { readOnlyHint: suffix === "read", destructiveHint: suffix === "manage", idempotentHint: suffix === "read", openWorldHint: suffix !== "read" },
     }, async (args, ctx) => { const denied = toolAuthError(options, permission, ctx); if (denied) return denied; return result(await requestOperation(api, args, permission)); });
   }
   server.registerTool("get_onboarding", {
-    title: "Workspace setup readiness", description: "Inspect authenticated workspace readiness, missing configuration and actionable next steps. No changes are made.",
+    title: "Workspace setup readiness", description: "Read setup readiness, missing settings and next steps.",
     inputSchema: z.object({ intent: setupIntentSchema.default("time_tracking") }).strict(), outputSchema: z.object({ data: z.unknown() }),
     ...toolAuthPolicy(options, "tally:read"), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, ctx) => { const denied = toolAuthError(options, "tally:read", ctx); if (denied) return denied; return result(await getOnboarding(api, args.intent)); });
   server.registerTool("setup_workspace", {
-    title: "Configure workspace setup", description: "Validate or apply a business/invoice settings patch. dryRun defaults to true; inspect get_onboarding and preview the patch first. Apply only after the user approves the configuration. Does not grant permissions or execute payments.",
+    title: "Configure workspace setup", description: "Preview settings (dryRun defaults true); apply after user approval. Inspect get_onboarding first. Grants no permissions and executes no payments.",
     inputSchema: workspaceSetupSchema, outputSchema: z.object({ data: z.unknown() }),
     ...toolAuthPolicy(options, "tally:write"), annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, ctx) => { const denied = toolAuthError(options, "tally:write", ctx); if (denied) return denied; return result(await setupWorkspace(api, args)); });
   const entities = ["clients", "projects", "tasks", "expenses", "invoices", "all"] as const;
   const chooseExport = z.object({ entity: z.enum(entities) });
   server.registerTool("export_data", {
-    title: "Export workspace data", description: "Export the same JSON or CSV as tally export. Returns content, never writes files on the server. The client may save it locally. Omit entity to ask the user which data to export through MCP elicitation.",
+    title: "Export workspace data", description: "Return JSON/CSV content for the client to save. Omit entity to elicit the user's selection.",
     inputSchema: z.object({ entity: z.enum(entities).optional(), format: z.enum(["json", "csv"]).default("json") }),
     outputSchema: z.object({ data: z.unknown() }),
     ...toolAuthPolicy(options, "tally:read"),

@@ -9,8 +9,10 @@ async function save(user="u",account="acct_1",token="tok") { const {encryptSecre
 describe("stripe connection store",()=>{
 it("returns metadata without envelope or plaintext",async()=>{await save();const m=await getStripeConnectionMeta("u");expect(m).toMatchObject({accountId:"acct_1"});expect(JSON.stringify(m)).not.toContain("tok");expect(JSON.stringify(m)).not.toContain("secretEnvelope");});
 it("decrypts stored secret transiently",async()=>{await save();expect(await getStripeConnectionSecret("u")).toBe("tok");});
-it("routes webhook by account",async()=>{await save();expect(await findUserIdByStripeAccount("acct_1")).toBe("u");});
-it("upserts reconnect",async()=>{await save("u","acct_1","old");await save("u","acct_2","new");expect(await findUserIdByStripeAccount("acct_1")).toBeNull();expect(await getStripeConnectionSecret("u")).toBe("new");});
+it("routes webhook by account",async()=>{await save();expect(await findUserIdByStripeAccount("acct_1", true)).toBe("u");});
+it("requires mode and refuses wrong-mode routing", async()=>{await save();expect(await findUserIdByStripeAccount("acct_1")).toBeNull();expect(await findUserIdByStripeAccount("acct_1", false)).toBeNull();expect(await getStripeConnectionSecret("u",{accountId:"acct_other",livemode:true})).toBeNull();});
+it("fails closed on duplicate owners", async()=>{await save("u");await save("other");expect(await findUserIdByStripeAccount("acct_1",true)).toBeNull();});
+it("upserts reconnect",async()=>{await save("u","acct_1","old");await save("u","acct_2","new");expect(await findUserIdByStripeAccount("acct_1", true)).toBeNull();expect(await getStripeConnectionSecret("u")).toBe("new");});
 it("deletes on disconnect",async()=>{await save();await deleteStripeConnection("u");expect(await getStripeConnectionMeta("u")).toBeNull();});
 it("fails closed without encryption key",async()=>{await save();delete process.env.TALLY_ENCRYPTION_KEY;await expect(getStripeConnectionSecret("u")).rejects.toThrow();});
 it("returns null for unknown user",async()=>expect(await getStripeConnectionMeta("nobody")).toBeNull());

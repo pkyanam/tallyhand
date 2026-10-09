@@ -119,6 +119,7 @@ export const invoices = pgTable(
     issueDate: bigint("issue_date", { mode: "number" }).notNull(),
     dueDate: bigint("due_date", { mode: "number" }).notNull(),
     status: text("status").notNull(),
+    manualPaymentAssertion: jsonb("manual_payment_assertion").$type<import("@/core/entities").InvoiceManualPaymentAssertion>(),
     lineItems: jsonb("line_items").notNull().default([]),
     subtotal: doublePrecision("subtotal").notNull(),
     total: doublePrecision("total").notNull(),

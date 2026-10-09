@@ -11,6 +11,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
 export interface CheckoutSessionParams {
+  idempotencyKey: string;
   amountCents: number;
   currency: string;
   productName: string;
@@ -47,14 +48,19 @@ export async function createCheckoutSession(
   secretKey: string,
   params: CheckoutSessionParams,
 ): Promise<CheckoutSession> {
+  if (!params.idempotencyKey)
+    throw new StripeError("Durable idempotency key required", 400);
   const form = new URLSearchParams();
   form.set("mode", "payment");
-  form.set("line_items[0][price_data][currency]", params.currency.toLowerCase());
-  form.set("line_items[0][price_data][unit_amount]", String(params.amountCents));
   form.set(
-    "line_items[0][price_data][product_data][name]",
-    params.productName,
+    "line_items[0][price_data][currency]",
+    params.currency.toLowerCase(),
   );
+  form.set(
+    "line_items[0][price_data][unit_amount]",
+    String(params.amountCents),
+  );
+  form.set("line_items[0][price_data][product_data][name]", params.productName);
   form.set("line_items[0][quantity]", "1");
   form.set("success_url", params.successUrl);
   form.set("cancel_url", params.cancelUrl);
@@ -78,10 +84,14 @@ export async function createCheckoutSession(
     method: "POST",
     headers: {
       authorization: `Bearer ${secretKey}`,
+      "Idempotency-Key": params.idempotencyKey,
       "content-type": "application/x-www-form-urlencoded",
-      ...(params.stripeAccount ? { "stripe-account": params.stripeAccount } : {}),
+      ...(params.stripeAccount
+        ? { "stripe-account": params.stripeAccount }
+        : {}),
     },
     body: form.toString(),
+    signal: AbortSignal.timeout(10_000),
   });
 
   const body = (await res.json().catch(() => null)) as {
@@ -147,4 +157,88 @@ export function verifyWebhookSignature(
     const b = Buffer.from(expected, "utf8");
     return a.length === b.length && timingSafeEqual(a, b);
   });
+}
+
+export interface StripeSessionObject {
+  status?: "open" | "complete" | "expired";
+  id: string;
+  url?: string | null;
+  amount_total?: number;
+  currency?: string;
+  payment_status?: string;
+  payment_intent?: string | { id: string } | null;
+  livemode?: boolean;
+  metadata?: Record<string, string>;
+}
+export async function stripeGet<T>(
+  secretKey: string,
+  path: string,
+  stripeAccount?: string,
+): Promise<T> {
+  const response = await fetch(`${STRIPE_API_BASE}${path}`, {
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      ...(stripeAccount ? { "stripe-account": stripeAccount } : {}),
+    },
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => {
+    throw new StripeError("Stripe reconciliation unavailable", 503);
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body)
+    throw new StripeError("Stripe reconciliation unavailable", 503);
+  return body as T;
+}
+export function retrieveCheckoutSession(
+  secretKey: string,
+  id: string,
+  account?: string,
+) {
+  return stripeGet<StripeSessionObject>(
+    secretKey,
+    `/checkout/sessions/${encodeURIComponent(id)}`,
+    account,
+  );
+}
+export function listCheckoutSessions(
+  secretKey: string,
+  createdAfter: number,
+  account?: string,
+  startingAfter?: string,
+) {
+  const query = new URLSearchParams({
+    limit: "100",
+    "created[gte]": String(Math.floor(createdAfter / 1000)),
+  });
+  if (startingAfter) query.set("starting_after", startingAfter);
+  return stripeGet<{ data: StripeSessionObject[]; has_more: boolean }>(
+    secretKey,
+    `/checkout/sessions?${query}`,
+    account,
+  );
+}
+export interface StripeRefundObject {
+  livemode: boolean;
+  id: string;
+  payment_intent: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+export function listPaymentRefunds(
+  secretKey: string,
+  paymentId: string,
+  account?: string,
+  startingAfter?: string,
+) {
+  const query = new URLSearchParams({
+    limit: "100",
+    payment_intent: paymentId,
+  });
+  if (startingAfter) query.set("starting_after", startingAfter);
+  return stripeGet<{ data: StripeRefundObject[]; has_more: boolean }>(
+    secretKey,
+    `/refunds?${query}`,
+    account,
+  );
 }

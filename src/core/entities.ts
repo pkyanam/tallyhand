@@ -81,6 +81,15 @@ export type TaxRegion = "US" | "EU";
 /** PDF template variant for an invoice. */
 export type InvoiceTemplate = "default" | "stripe";
 
+/** A user marked this invoice paid; this is not provider or bank proof. */
+export interface InvoiceManualPaymentAssertion {
+  source: "manual";
+  recordedAt: number;
+  actorId: string;
+  total: number;
+  currency: string;
+}
+
 export interface Invoice extends Timestamped {
   id: ID;
   clientId: ID;
@@ -88,6 +97,7 @@ export interface Invoice extends Timestamped {
   issueDate: number;
   dueDate: number;
   status: InvoiceStatus;
+  manualPaymentAssertion?: InvoiceManualPaymentAssertion;
   lineItems: InvoiceLineItem[];
   subtotal: number;
   total: number;

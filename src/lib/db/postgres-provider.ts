@@ -209,6 +209,7 @@ function toInvoice(r: DbRow): Invoice {
     issueDate: dbNum(r, "issueDate"),
     dueDate: dbNum(r, "dueDate"),
     status: dbStr(r, "status") as Invoice["status"],
+    manualPaymentAssertion: r.manualPaymentAssertion == null ? undefined : r.manualPaymentAssertion as Invoice["manualPaymentAssertion"],
     lineItems: dbJsonArr(r, "lineItems") as Invoice["lineItems"],
     subtotal: dbNum(r, "subtotal"),
     total: dbNum(r, "total"),
@@ -741,6 +742,7 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
     const uid = await this.uid();
     const rest = { ...patch } as Record<string, unknown>;
     delete rest.id;
+    delete rest.manualPaymentAssertion; // written only by the verified manual-payment action
     delete rest.createdAt; // created_at is immutable — never rewrite it
     await (this.db.update(schema.invoices) as unknown as DbQueryBuilder)
       .set({ ...rest, updatedAt: patch.updatedAt ?? now() })
@@ -1065,9 +1067,16 @@ export class PostgresStorageProvider implements StorageProvider, EncryptedSyncSt
 
   async markInvoicePaid(invoiceId: ID): Promise<void> {
     const uid = await this.uid();
+    const ts = now();
+    const { sql } = await import("drizzle-orm");
+    // One UPDATE snapshots current row money and verified actor with the paid
+    // transition. Retries and historical paid rows never invent attribution.
     await (this.db.update(schema.invoices) as unknown as DbQueryBuilder)
-      .set({ status: "paid", updatedAt: Date.now() })
-      .where(this.scopedById(schema.invoices, uid, invoiceId));
+      .set({
+        status:"paid", updatedAt:ts,
+        manualPaymentAssertion:sql`coalesce(${schema.invoices.manualPaymentAssertion}, jsonb_build_object('source','manual','recordedAt',${ts}::bigint,'actorId',${uid}::text,'total',${schema.invoices.total},'currency',coalesce(${schema.invoices.currency},'USD')))`
+      })
+      .where(this.ops.and(this.scopedById(schema.invoices,uid,invoiceId),sql`${schema.invoices.status} <> 'paid'`));
   }
 
   // -- share links (hosted only; scoped like everything else) --------------

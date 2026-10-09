@@ -9,6 +9,13 @@
       "digest": "sha256:6d8f841ef2608b16af283d55beef309c7b09fa7a52e8f301744aa5ede8dcad37"
     },
     {
+      "name": "financial",
+      "description": "Inspect collection records, recover known financial work, or prepare an explicitly authorized invoice checkout.",
+      "type": "archive",
+      "url": "/.well-known/agent-skills/financial.zip",
+      "digest": "sha256:f074b24353668602fe763078380a1f09027bdefd668f2065be0a6f3b1909f3cd"
+    },
+    {
       "name": "manage-workspace",
       "description": "Manage Tallyhand settings, cloud backups/import/reset, public shares and secure account controls; diagnose connection and validation errors.",
       "type": "archive",

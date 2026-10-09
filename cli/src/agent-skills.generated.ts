@@ -31,6 +31,36 @@ export const AGENT_SKILLS = [
     ]
   },
   {
+    "uri": "skill://tallyhand/financial/SKILL.md",
+    "frontmatter": {
+      "name": "financial",
+      "description": "Inspect collection records, recover known financial work, or prepare an explicitly authorized invoice checkout."
+    },
+    "resources": [
+      {
+        "uri": "skill://tallyhand/financial/SKILL.md",
+        "digest": "sha256:a2056f59205c07ee2eaf8490c872ed314e6dbfe33b9de189632376879ad3a36b"
+      },
+      {
+        "uri": "skill://tallyhand/financial/agents/openai.yaml",
+        "digest": "sha256:25006a3f5328411fbff3709eae95ec2f1eaa4e7eb30d27376b596540adf4a4ee"
+      }
+    ],
+    "text": "---\nname: financial\ndescription: \"Inspect collection records, recover known financial work, or prepare an explicitly authorized invoice checkout.\"\n---\n\nUse `request_financial_operation` for `timeline`, `payments`, `reconcile`, or `checkout`.\nRequire an owner-issued financial grant ID for the exact principal, Stripe account,\nmode and action. General `tally:read`, `tally:write` or `tally:manage` consent does\nnot authorize collection. Never mint or broaden a grant through bearer access.\nThe grant ID is a reference, not a credential; do not store bearer credentials.\n\nBefore checkout, review the saved sent invoice and obtain the user's authorization\nto collect its amount. Supply `invoiceId`, an explicit collect grant and a stable\n`operationId`; reuse that ID for retries. Checkout creates a payer link, not proof\nof payment. Do not claim payment until financial history confirms the collection.\n\nHTTP 202 means pending or uncertain work requiring inspection/reconciliation,\nnot confirmed payment. HTTP 501 means unsupported backend; do not invent success\nor bypass authority. For 403, request owner review of the separate grant. Recovery\nonly processes known work and never blindly creates a second checkout.\n\nKeep pending and failed refunds separate from confirmed refunds. Manual payment\nevidence is an owner assertion, not provider confirmation. Stripe collection\nrecords are not bank balances, payouts or settlement verification. Refund\ninitiation is unavailable through this tool. Preserve returned continuation\ncursors when reading or reconciling bounded pages.\n",
+    "files": [
+      {
+        "uri": "skill://tallyhand/financial/SKILL.md",
+        "mimeType": "text/markdown",
+        "text": "---\nname: financial\ndescription: \"Inspect collection records, recover known financial work, or prepare an explicitly authorized invoice checkout.\"\n---\n\nUse `request_financial_operation` for `timeline`, `payments`, `reconcile`, or `checkout`.\nRequire an owner-issued financial grant ID for the exact principal, Stripe account,\nmode and action. General `tally:read`, `tally:write` or `tally:manage` consent does\nnot authorize collection. Never mint or broaden a grant through bearer access.\nThe grant ID is a reference, not a credential; do not store bearer credentials.\n\nBefore checkout, review the saved sent invoice and obtain the user's authorization\nto collect its amount. Supply `invoiceId`, an explicit collect grant and a stable\n`operationId`; reuse that ID for retries. Checkout creates a payer link, not proof\nof payment. Do not claim payment until financial history confirms the collection.\n\nHTTP 202 means pending or uncertain work requiring inspection/reconciliation,\nnot confirmed payment. HTTP 501 means unsupported backend; do not invent success\nor bypass authority. For 403, request owner review of the separate grant. Recovery\nonly processes known work and never blindly creates a second checkout.\n\nKeep pending and failed refunds separate from confirmed refunds. Manual payment\nevidence is an owner assertion, not provider confirmation. Stripe collection\nrecords are not bank balances, payouts or settlement verification. Refund\ninitiation is unavailable through this tool. Preserve returned continuation\ncursors when reading or reconciling bounded pages.\n"
+      },
+      {
+        "uri": "skill://tallyhand/financial/agents/openai.yaml",
+        "mimeType": "text/yaml",
+        "text": "interface:\n  display_name: \"Tallyhand financial records\"\n  short_description: \"Collection history and bounded checkout\"\n  default_prompt: \"Use $financial to inspect my invoice collections or recover known payment work within my financial grant.\"\ndependencies:\n  tools:\n    - type: \"mcp\"\n      value: \"tallyhand\"\n      description: \"Tallyhand financial history, recovery and explicitly granted checkout\"\n      transport: \"streamable_http\"\n      url: \"https://tallyhand.xyz/api/mcp\"\n"
+      }
+    ]
+  },
+  {
     "uri": "skill://tallyhand/manage-workspace/SKILL.md",
     "frontmatter": {
       "name": "manage-workspace",

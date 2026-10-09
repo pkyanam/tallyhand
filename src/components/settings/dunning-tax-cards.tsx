@@ -312,8 +312,8 @@ export function StripeCard({ settings }: { settings: Settings }) {
       <CardHeader>
         <CardTitle>Stripe payments</CardTitle>
         <CardDescription>
-          Online payments for the client portal. Secrets stay in the
-          environment — never in settings.
+          Online invoice payments through your connected Stripe account.
+          Connection credentials are encrypted on the server.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -342,14 +342,13 @@ export function StripeCard({ settings }: { settings: Settings }) {
         </div>
         <div className="rounded-md border p-3 text-xs text-muted-foreground space-y-1">
           <p>
-            Set <code>STRIPE_SECRET_KEY</code> and{" "}
-            <code>STRIPE_WEBHOOK_SECRET</code> in the server environment, then
-            restart. Point Stripe webhooks at{" "}
+            Connect your Stripe account below. Server operators configure
+            Stripe credentials and point signed webhooks at{" "}
             <code>/api/v1/stripe/webhook</code>.
           </p>
           <p>
-            Without a key the plugin stays inert and the portal Pay button
-            shows “payments not configured”.
+            Self-hosted instances can also use a server Stripe key. Online
+            collection currently supports USD and EUR.
           </p>
         </div>
       </CardContent>

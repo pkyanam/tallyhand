@@ -7,14 +7,11 @@
  * - declares a settings section (master switch, statement descriptor).
  *
  * Webhook handling lives in `src/app/api/v1/stripe/webhook/route.ts`, which
- * verifies the Stripe signature, marks the invoice paid, and emits
- * `onInvoicePaid` + `onPaymentReceived`.
+ * verifies the Stripe signature and commits the inbox and financial outcomes
+ * before projecting invoice status and delivering notifications from the outbox.
  *
- * Configuration is environment-only for secrets:
- * - `STRIPE_SECRET_KEY` (required) — test-mode secret key (sk_test_…);
- *   without it the plugin stays inert and the portal shows
- *   "payments not configured". Live keys (sk_live_…) work but are loudly
- *   warned about — test mode is the documented default.
+ * Hosted accounts use explicit Stripe Connect records with encrypted credentials.
+ * Self-hosted collection can use `STRIPE_SECRET_KEY` in the server environment.
  * - `STRIPE_WEBHOOK_SECRET` (required for the webhook route).
  * - `TALLYHAND_APP_URL` (or `NEXT_PUBLIC_APP_URL`) — absolute base URL for
  *   checkout success/cancel redirects. On Vercel this falls back to
@@ -26,7 +23,7 @@
  */
 
 import { onSharePaymentRequested } from "@/lib/share/payment-slot";
-import { getServerProvider, getServerProviderForUser } from "@/server/provider";
+import { getServerProviderForUser } from "@/server/provider";
 import { getShareDeps } from "@/lib/share/server-deps";
 import { resolveShareToken } from "@/lib/share/service";
 import {
@@ -51,7 +48,12 @@ export const stripePlugin: Plugin = {
     // Secrets are env-only. Without a secret key the plugin registers
     // nothing payment-related, so hasSharePaymentHandler() stays false and
     // the portal shows its "payments not configured" state.
-    if (!getStripeConfig()) {
+    if (
+      !getStripeConfig() &&
+      !(
+        process.env.STRIPE_CONNECT_CLIENT_ID && process.env.TALLY_ENCRYPTION_KEY
+      )
+    ) {
       // eslint-disable-next-line no-console
       console.warn(
         "[stripe-payments] STRIPE_SECRET_KEY is not set — portal payments stay disabled.",
@@ -60,13 +62,30 @@ export const stripePlugin: Plugin = {
     }
 
     onSharePaymentRequested(async (req) => {
-      let ownerId: string | undefined;
-      try { ownerId = (await resolveShareToken(getShareDeps(), req.shareToken, "invoice")).link.userId; } catch { /* retain legacy provider scope when share lookup is unavailable */ }
-      const provider = ownerId ? getServerProviderForUser(ownerId) : getServerProvider();
+      const resolved = await resolveShareToken(
+        getShareDeps(),
+        req.shareToken,
+        "invoice",
+      );
+      if (
+        resolved.link.userId !== req.ownerId ||
+        resolved.link.id !== req.shareLinkId ||
+        resolved.invoice?.id !== req.invoiceId
+      ) {
+        throw Object.assign(new Error("Invoice payment capability mismatch"), {
+          status: 403,
+        });
+      }
+      const provider = getServerProviderForUser(req.ownerId);
       const checkout = await createInvoiceCheckoutSession(
         provider,
         req.invoiceId,
-        { shareToken: req.shareToken, userId: ownerId },
+        {
+          shareToken: req.shareToken,
+          userId: req.ownerId,
+          authority: { kind: "customer", shareToken: req.shareToken },
+          operationId: req.operationId,
+        },
       );
       return { checkoutUrl: checkout.url };
     });
@@ -75,7 +94,7 @@ export const stripePlugin: Plugin = {
       id: "stripe-payments.settings",
       title: "Stripe payments",
       description:
-        "Online payments for the client portal. Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in the environment — secrets are never stored in settings.",
+        "Online invoice payments through an explicit Stripe account connection. Connection credentials are encrypted on the server.",
       fields: [
         {
           key: "enabled",

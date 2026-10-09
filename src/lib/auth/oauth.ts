@@ -23,7 +23,7 @@ export function oauthUnavailableResponse(): Response {
 export async function verifyTallyOAuth(token: string): Promise<TallyOAuthIdentity | null> {
   return memoRequestAuth(`oauth:${token}`, () => verifyTallyOAuthUncached(token));
 }
-async function verifyTallyOAuthUncached(token: string): Promise<TallyOAuthIdentity | null> {
+export async function verifyTallyOAuthUncached(token: string): Promise<TallyOAuthIdentity | null> {
   const config = oauthConfig();
   if (!config.enabled || !isOAuthToken(token) || !process.env.CLERK_SECRET_KEY) return null;
   try {

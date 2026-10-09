@@ -79,7 +79,10 @@ export class PluginRegistry {
       if (result instanceof Promise) {
         result.catch((err: unknown) => {
           // eslint-disable-next-line no-console
-          console.error(`[plugins] async deactivate failed for "${name}":`, err);
+          console.error(
+            `[plugins] async deactivate failed for "${name}":`,
+            err,
+          );
         });
       }
     } finally {
@@ -100,13 +103,16 @@ export class PluginRegistry {
   async emit<K extends DomainHookName>(
     name: K,
     payload: DomainHookPayloads[K],
+    options: { retryFailures?: boolean } = {},
   ): Promise<void> {
     const entries = this.hookHandlers.get(name);
     if (!entries || entries.size === 0) return;
+    let failed = false;
     for (const entry of Array.from(entries)) {
       try {
         await entry.handler(payload as never);
       } catch (err) {
+        failed = true;
         // eslint-disable-next-line no-console
         console.error(
           `[plugins] hook "${name}" handler from "${entry.pluginName}" threw:`,
@@ -114,6 +120,8 @@ export class PluginRegistry {
         );
       }
     }
+    if (failed && options.retryFailures)
+      throw new Error(`Plugin delivery failed for ${name}`);
   }
 
   // -- read-only views for host UI ---------------------------------------

@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 describe('release diagnostics', () => {
   it('preserves top-level auth descriptors across the complete bundled catalog', async () => {
     const catalog = await inspectMcpCatalog();
-    expect(catalog.total).toBe(91);
-    expect(catalog.tools).toHaveLength(91);
-    expect(new Set(catalog.tools.map(tool => tool.name)).size).toBe(91);
+    expect(catalog.total).toBe(92);
+    expect(catalog.tools).toHaveLength(92);
+    expect(new Set(catalog.tools.map(tool => tool.name)).size).toBe(92);
     for (const tool of catalog.tools) {
       expect(tool.securitySchemes, tool.name).toEqual(tool._meta?.securitySchemes);
       expect(tool.securitySchemes, tool.name).toEqual(expect.arrayContaining([
@@ -19,6 +19,10 @@ describe('release diagnostics', () => {
     }
     const settings = catalog.tools.find(tool => tool.name === 'update_settings')!;
     expect(settings.securitySchemes).toEqual([{ type: 'oauth2', scopes: ['tally:read', 'tally:write'] }]);
+    const financial = catalog.tools.find(tool => tool.name === 'request_financial_operation')!;
+    expect(financial.securitySchemes).toEqual([{ type: 'oauth2', scopes: ['tally:read'] }]);
+    expect(financial.inputSchema.required).toContain('grant');
+    expect(financial.description).toContain('broad workspace scopes do not grant financial authority');
   });
   it('reports missing tools without echoing private export fields', () => {
     expect(compareToolCatalog(['get_settings', 'update_settings'], { tools: [{ name: 'get_settings', description: 'private' }] }))

@@ -2,6 +2,7 @@ import { extensionModels, extensionEntityNames } from "./extension-models.js";
 /** Public business-feature contract. Local credential/process controls stay local. */
 export const CLI_MCP_PARITY: Record<string, string> = {
   "api request": "request_workspace_read",
+  financial: "request_financial_operation",
   setup: "get_onboarding", "onboarding status": "get_onboarding", "onboarding preview": "setup_workspace", "onboarding configure": "setup_workspace", "invoice overdue": "list_overdue_invoices",
   "timer start": "timer_start", "timer stop": "timer_stop", "timer status": "timer_status", log: "log_time", unbilled: "list_unbilled",
   "clients list": "list_clients", "clients create": "create_client", "clients show": "get_client", "clients update": "update_client", "clients delete": "delete_client",

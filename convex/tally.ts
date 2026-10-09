@@ -73,7 +73,7 @@ async function patchDoc(
   if (!doc) throw new Error(`${table}/${id} not found`);
   const clean: Record<string, unknown> = { updatedAt: Date.now() };
   for (const [k, val] of Object.entries(patch)) {
-    if (k === "id" || k === "_id" || k === "userId") continue;
+    if (k === "id" || k === "_id" || k === "userId" || (table === "invoices" && k === "manualPaymentAssertion")) continue;
     clean[k] = val;
   }
   await ctx.db.patch(doc._id, clean);
@@ -842,7 +842,10 @@ export const markInvoicePaid = mutationGeneric({
     const userId = needUser(args.userId);
     const invoice = await docById(ctx, "invoices", userId, args.invoiceId);
     if (!invoice) throw new Error(`invoices/${args.invoiceId} not found`);
-    await ctx.db.patch(invoice._id, { status: "paid", updatedAt: Date.now() });
+    if(invoice.status!=="paid") {
+      const now=Date.now();
+      await ctx.db.patch(invoice._id, {status:"paid",updatedAt:now,...(!invoice.manualPaymentAssertion?{manualPaymentAssertion:{source:"manual" as const,recordedAt:now,actorId:userId,total:invoice.total,currency:invoice.currency??"USD"}}:{})});
+    }
     return { paid: true };
   },
 });

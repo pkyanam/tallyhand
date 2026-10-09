@@ -166,6 +166,7 @@ export class TallyhandClient {
     query?: Record<string, string | number | boolean | undefined>,
     envelope = false,
     idempotencyKey?: string,
+    financialGrant?: string,
   ): Promise<any> {
     const url = new URL(this.baseUrl + path);
     if (query) {
@@ -181,6 +182,7 @@ export class TallyhandClient {
     };
     const token = this.tokenProvider ? await this.tokenProvider() : this.token;
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (financialGrant) headers["X-Tally-Financial-Grant"] = financialGrant;
     if (method === "POST" || method === "PATCH" || method === "PUT") {
       headers["Idempotency-Key"] = idempotencyKey ?? randomUUID();
     }
@@ -308,6 +310,26 @@ export class TallyhandClient {
     if (!/^\/(clients|projects|tasks|expenses|invoices|settings|recurring-schedules|retainers|data|mileage|contracts|tax-payments|rate-cards|profile|capabilities|controls|share-links|dunning|scheduler|onboarding|changes|requests)(\/|$)/.test(decoded)) throw new Error("Unsupported workspace resource");
     if (input.idempotencyKey && (!/^[A-Za-z0-9_-]{1,128}$/.test(input.idempotencyKey))) throw new Error("Invalid idempotency key");
     return this.request(method, path, input.body, { ...input.query, ...(input.dryRun === undefined ? {} : { dry_run: input.dryRun }) }, false, input.idempotencyKey);
+  }
+
+  requestFinancialOperation(input: { action: "timeline" | "payments" | "reconcile" | "checkout"; invoiceId?: string; grant: string; operationId?: string; cancelUrl?: string; limit?: number; cursor?: string; paymentCursor?: string; providerCursors?: Record<string, string> }) {
+    if (!input.grant.trim()) throw new Error("An explicit financial grant is required");
+    if (input.action === "checkout") {
+      if (!input.invoiceId || !input.operationId || !/^[A-Za-z0-9_-]{1,128}$/.test(input.operationId)) {
+        throw new Error("Checkout requires invoiceId and a stable operationId");
+      }
+      return this.request("POST", "/stripe/payment-links", {
+        invoiceId: input.invoiceId, cancelUrl: input.cancelUrl,
+      }, undefined, false, input.operationId, input.grant);
+    }
+    const path = input.action === "timeline"
+      ? `/financial/invoices/${pathId(input.invoiceId ?? "")}`
+      : `/financial/${input.action}`;
+    const query = {
+      limit: input.limit, cursor: input.cursor, payment_cursor: input.paymentCursor,
+      provider_cursors: input.providerCursors ? JSON.stringify(input.providerCursors) : undefined,
+    };
+    return this.request(input.action === "reconcile" ? "POST" : "GET", path, undefined, query, false, undefined, input.grant);
   }
 
   onboarding(intent?: "time_tracking" | "invoicing") { return this.request("GET", "/onboarding", undefined, { intent }); }

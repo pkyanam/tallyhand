@@ -1,0 +1,11 @@
+interface:
+  display_name: "Tallyhand financial records"
+  short_description: "Collection history and bounded checkout"
+  default_prompt: "Use $financial to inspect my invoice collections or recover known payment work within my financial grant."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "tallyhand"
+      description: "Tallyhand financial history, recovery and explicitly granted checkout"
+      transport: "streamable_http"
+      url: "https://tallyhand.xyz/api/mcp"

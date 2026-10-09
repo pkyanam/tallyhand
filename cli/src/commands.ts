@@ -40,6 +40,7 @@ export const VERSION = RELEASE_VERSION;
 /** Minimal API surface handlers need (TallyhandClient satisfies this). */
 export interface Api {
   hasToken: boolean;
+  requestFinancialOperation?: TallyhandClient["requestFinancialOperation"];
   requestWorkspaceOperation?: TallyhandClient["requestWorkspaceOperation"];
   onboarding?(intent?: "time_tracking" | "invoicing"): Promise<any>;
   configureOnboarding?(input: { settings: Record<string, unknown>; dryRun?: boolean; intent?: "time_tracking" | "invoicing" }): Promise<any>;

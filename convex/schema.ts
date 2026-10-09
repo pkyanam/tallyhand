@@ -15,6 +15,23 @@ const timestamps = {
 };
 
 export default defineSchema({
+  financialMaintenance: defineTable({id:v.string(),progress:v.any(),lease:v.optional(v.object({token:v.string(),expiresAt:v.number()}))}).index("by_job",["id"]),
+  financialGrants: defineTable({id:v.string(),userId:v.string(),workspaceId:v.string(),data:v.any(),revokedAt:v.union(v.number(),v.null())}).index("by_grant_id",["id"]).index("by_owner",["userId"]),
+  financialRecords: defineTable({
+    userId: v.string(), workspaceId: v.string(), scopeKey: v.string(),
+    kind: v.string(), id: v.string(), uniqueKey: v.string(), invoiceId: v.string(),
+    state: v.string(), availableAt: v.number(), createdAt: v.number(), data: v.any(),
+  }).index("by_unique", ["uniqueKey"])
+    .index("by_owner_kind", ["userId", "workspaceId", "kind", "createdAt", "id"])
+    .index("by_invoice_kind", ["userId", "workspaceId", "invoiceId", "kind", "createdAt", "id"])
+    .index("by_scope_kind", ["scopeKey", "kind", "createdAt", "id"])
+    .index("by_scope_state", ["scopeKey", "kind", "state", "availableAt", "id"])
+    .index("by_owner_state", ["userId", "workspaceId", "kind", "state", "availableAt", "id"]),
+  stripeConnections: defineTable({
+    userId: v.string(), accountId: v.string(), livemode: v.boolean(),
+    chargesEnabled: v.union(v.boolean(), v.null()), payoutsEnabled: v.union(v.boolean(), v.null()),
+    secretEnvelope: v.string(), ...timestamps,
+  }).index("by_owner", ["userId"]).index("by_account_mode", ["accountId", "livemode"]),
   extensionEntities: defineTable({
     userId: v.string(), id: v.string(),
     kind: v.union(v.literal("mileage"), v.literal("contract"), v.literal("taxPayment"), v.literal("rateCard")),
@@ -102,6 +119,7 @@ export default defineSchema({
     issueDate: v.number(),
     dueDate: v.number(),
     status: v.string(),
+    manualPaymentAssertion: v.optional(v.object({source:v.literal("manual"),recordedAt:v.number(),actorId:v.string(),total:v.number(),currency:v.string()})),
     lineItems: v.any(),
     subtotal: v.number(),
     total: v.number(),
@@ -221,5 +239,6 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
+    .index("by_user_id", ["userId", "id"])
     .index("by_hash", ["tokenHash"]),
 });

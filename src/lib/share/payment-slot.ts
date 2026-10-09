@@ -1,5 +1,5 @@
 /**
- * Payment-request plugin slot (stub — Stripe is NOT implemented).
+ * Payment-request plugin slot for capability-scoped invoice checkout.
  *
  * The public invoice portal (`/share/[token]`) renders a Pay button. When
  * clicked it calls `requestSharePayment(...)`. By default no handler is
@@ -15,6 +15,11 @@
 export interface SharePaymentRequest {
   /** Signed share token (proves the payer may view this invoice). */
   shareToken: string;
+  /** Verified owner and capability identity carried from the public resolver. */
+  ownerId: string;
+  shareLinkId: string;
+  /** Stable identity for this payer's logical checkout request and retries. */
+  operationId: string;
   invoiceId: string;
   invoiceNumber: string;
   amountCents: number;

@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InvoicePreview } from "./invoice-preview";
+import { FinancialTimeline } from "./financial-timeline";
+import { getStorageProvider } from "@/lib/db/repos";
 import {
   computeLineItemAmount,
   defaultTaxIdLabelForRegion,
@@ -189,6 +191,10 @@ export function InvoiceEditor({
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-5">
         {statusBanner}
+        {invoice.status !== "draft" &&
+        getStorageProvider().providerName !== "dexie" ? (
+          <FinancialTimeline invoiceId={invoice.id} invoiceStatus={invoice.status} />
+        ) : null}
         {actions ? (
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
         ) : null}
@@ -215,10 +221,21 @@ export function InvoiceEditor({
             </Select>
           </div>
 
-          {invoice.createdAt === 0 ? <label className="flex items-start gap-2 text-sm">
-            <Checkbox checked={invoice.cloudLinkEnabled !== false} onCheckedChange={value => setField("cloudLinkEnabled", value === true)} disabled={readOnly} />
-            <span>Enable cloud invoice link when stored online. Anyone with the link can view the saved invoice and download its PDF.</span>
-          </label> : null}
+          {invoice.createdAt === 0 ? (
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={invoice.cloudLinkEnabled !== false}
+                onCheckedChange={(value) =>
+                  setField("cloudLinkEnabled", value === true)
+                }
+                disabled={readOnly}
+              />
+              <span>
+                Enable cloud invoice link when stored online. Anyone with the
+                link can view the saved invoice and download its PDF.
+              </span>
+            </label>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="grid gap-1.5">
               <Label htmlFor="invoice-number">Invoice #</Label>
@@ -274,9 +291,7 @@ export function InvoiceEditor({
                     : ""
                 }
                 onChange={(e) => {
-                  const ms = e.target.value
-                    ? msFromYmd(e.target.value)
-                    : null;
+                  const ms = e.target.value ? msFromYmd(e.target.value) : null;
                   setField("serviceStart", ms ?? undefined);
                 }}
                 disabled={readOnly}
@@ -288,12 +303,12 @@ export function InvoiceEditor({
                 id="service-end"
                 type="date"
                 value={
-                  invoice.serviceEnd != null ? ymdFromMs(invoice.serviceEnd) : ""
+                  invoice.serviceEnd != null
+                    ? ymdFromMs(invoice.serviceEnd)
+                    : ""
                 }
                 onChange={(e) => {
-                  const ms = e.target.value
-                    ? msFromYmd(e.target.value)
-                    : null;
+                  const ms = e.target.value ? msFromYmd(e.target.value) : null;
                   setField("serviceEnd", ms ?? undefined);
                 }}
                 disabled={readOnly}
@@ -413,6 +428,7 @@ export function InvoiceEditor({
                 <LineItemRow
                   key={item.id}
                   item={item}
+                  currency={currency}
                   onChange={(patch) => updateLine(idx, patch)}
                   onRemove={() => removeLine(idx)}
                   disabled={readOnly}
@@ -429,10 +445,7 @@ export function InvoiceEditor({
               </span>
             </div>
             {taxTotals.groups.map((group) => (
-              <div
-                key={group.rate}
-                className="flex w-60 justify-between"
-              >
+              <div key={group.rate} className="flex w-60 justify-between">
                 <span className="text-muted-foreground">
                   {taxGroupLabel(group.rate, group.label)}
                 </span>
@@ -478,8 +491,7 @@ export function InvoiceEditor({
                 onBlur={(e) => {
                   const v = e.target.value.trim();
                   const current = invoice.paymentMethod ?? "";
-                  if (v !== current)
-                    setField("paymentMethod", v || undefined);
+                  if (v !== current) setField("paymentMethod", v || undefined);
                 }}
                 placeholder="Bank transfer"
                 disabled={readOnly}
@@ -677,11 +689,7 @@ export function InvoiceEditor({
       </div>
 
       <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
-        <InvoicePreview
-          invoice={invoice}
-          settings={settings}
-          client={client}
-        />
+        <InvoicePreview invoice={invoice} settings={settings} client={client} />
       </div>
     </div>
   );
@@ -695,11 +703,13 @@ function sourceIcon(type: InvoiceLineItem["sourceType"]) {
 
 function LineItemRow({
   item,
+  currency,
   onChange,
   onRemove,
   disabled,
 }: {
   item: InvoiceLineItem;
+  currency: string;
   onChange: (patch: Partial<InvoiceLineItem>) => void;
   onRemove: () => void;
   disabled?: boolean;
@@ -761,9 +771,7 @@ function LineItemRow({
         title="Quantity"
         defaultValue={String(item.quantity)}
         key={`qty-${item.id}-${item.quantity}`}
-        onBlur={(e) =>
-          commitNumber(e.target.value, "quantity", item.quantity)
-        }
+        onBlur={(e) => commitNumber(e.target.value, "quantity", item.quantity)}
         disabled={disabled}
       />
       <Input
@@ -788,7 +796,8 @@ function LineItemRow({
           onBlur={(e) => {
             const raw = e.target.value.trim();
             if (raw === "") {
-              if (item.markupPercent != null) onChange({ markupPercent: undefined });
+              if (item.markupPercent != null)
+                onChange({ markupPercent: undefined });
               return;
             }
             const n = Number.parseFloat(raw);
@@ -810,7 +819,7 @@ function LineItemRow({
         disabled={disabled}
       />
       <div className="text-right font-mono text-xs tabular-nums">
-        {formatCurrency(item.amount)}
+        {formatCurrency(item.amount, currency)}
       </div>
       {!disabled ? (
         <Button

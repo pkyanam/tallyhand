@@ -32,10 +32,10 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(res.headers.get("www-authenticate")).toContain("tally:read tally:write");
     expect(await res.text()).not.toContain("oat_synthetic_fixture");
   });
-  it("advertises precise tool scopes for all 91 tools", async () => {
+  it("advertises precise tool scopes for all 92 tools", async () => {
     const res = await POST(request("tools/list", {}));
     const body = await payload(res);
-    expect(body.result.tools).toHaveLength(91);
+    expect(body.result.tools).toHaveLength(92);
     for (const tool of body.result.tools) {
       expect(tool._meta.securitySchemes[0].scopes).toContain("tally:read");
       expect(tool.securitySchemes).toEqual(tool._meta.securitySchemes);
@@ -43,6 +43,10 @@ describe("OAuth scope-upgrade compatibility", () => {
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "update_settings")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:write"]);
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "reset_workspace")._meta.securitySchemes[0].scopes).toEqual(["tally:read", "tally:manage"]);
     expect(body.result.tools.find((tool: { name: string }) => tool.name === "get_profile")._meta["openai/profile"]).toBe(true);
+    const financial = body.result.tools.find((tool: { name: string }) => tool.name === "request_financial_operation");
+    expect(financial._meta.securitySchemes[0].scopes).toEqual(["tally:read"]);
+    expect(financial.inputSchema.required).toContain("grant");
+    expect(financial.description).toContain("broad workspace scopes do not grant financial authority");
   });
 });
 
@@ -50,14 +54,14 @@ it("serves short legacy calls as JSON and preserves no-transform", async () => {
   const response = await POST(request("tools/list", {}));
   expect(response.headers.get("content-type")).toContain("application/json");
   expect(response.headers.get("cache-control")).toContain("no-transform");
-  expect((await payload(response)).result.tools).toHaveLength(91);
+  expect((await payload(response)).result.tools).toHaveLength(92);
 });
 
 it("keeps legacy streaming when progress is requested", async () => {
   const response = await POST(request("tools/list", { _meta: { progressToken: "fixture-progress" } }));
   expect(response.headers.get("content-type")).toContain("text/event-stream");
   expect(response.headers.get("cache-control")).toContain("no-transform");
-  expect((await payload(response)).result.tools).toHaveLength(91);
+  expect((await payload(response)).result.tools).toHaveLength(92);
 });
 
 for (const [name, args, scope] of [

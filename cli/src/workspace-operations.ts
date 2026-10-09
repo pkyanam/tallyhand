@@ -8,6 +8,28 @@ export const operationInputSchema = z.object({
   idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
 }).strict();
 export type WorkspaceScope = "tally:read" | "tally:write" | "tally:manage";
+export const financialOperationSchema = z.object({
+  action: z.enum(["timeline", "payments", "reconcile", "checkout"]),
+  invoiceId: z.string().regex(/^[A-Za-z0-9_-]+$/).optional(),
+  grant: z.string().min(1),
+  operationId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+  cancelUrl: z.string().url().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().max(2048).optional(),
+  paymentCursor: z.string().max(2048).optional(),
+  providerCursors: z.record(z.string(), z.string().max(2048)).optional(),
+}).strict().refine(input => !["timeline", "checkout"].includes(input.action) || !!input.invoiceId, {
+  message: "This action requires invoiceId", path: ["invoiceId"],
+}).refine(input => input.action !== "checkout" || !!input.operationId, {
+  message: "Checkout requires a stable operationId", path: ["operationId"],
+});
+
+export async function requestFinancialOperation(api: Api, input: unknown) {
+  const args = financialOperationSchema.parse(input);
+  needAuth(api);
+  if (!api.requestFinancialOperation) throw new Error("Financial operations are unavailable on this backend");
+  return api.requestFinancialOperation(args);
+}
 export async function requestOperation(api: Api, input: unknown, scope: WorkspaceScope) {
   const args = operationInputSchema.parse(input); needAuth(api);
   if (!api.capabilities || !api.requestWorkspaceOperation) throw new Error("Workspace operation requests are unavailable on this backend");

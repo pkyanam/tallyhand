@@ -375,7 +375,7 @@ export interface VerifiedApiToken {
 export async function findApiToken(token: string): Promise<VerifiedApiToken | null> {
   return memoRequestAuth(`api-key:${token}`, () => findApiTokenUncached(token));
 }
-async function findApiTokenUncached(token: string): Promise<VerifiedApiToken | null> {
+export async function findApiTokenUncached(token: string): Promise<VerifiedApiToken | null> {
   if (!RAW_TOKEN_RE.test(token)) return null;
   const hash = hashApiToken(token);
   const row = await getBackend().findByHash(hash);

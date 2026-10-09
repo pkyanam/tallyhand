@@ -527,6 +527,7 @@ export class SqliteStorageProvider implements StorageProvider {
     const invoice = {
       id: input.id ?? newId("inv"),
       ...input,
+      manualPaymentAssertion: undefined,
       // Mirror writes may carry the browser's timestamps (LWW by updatedAt).
       createdAt: input.createdAt ?? ts,
       updatedAt: input.updatedAt ?? ts,
@@ -546,6 +547,7 @@ export class SqliteStorageProvider implements StorageProvider {
     const next: Invoice = {
       ...existing,
       ...patch,
+      manualPaymentAssertion: existing.manualPaymentAssertion,
       createdAt: existing.createdAt,
       updatedAt: patch.updatedAt ?? now(),
     };
@@ -984,14 +986,27 @@ export class SqliteStorageProvider implements StorageProvider {
   }
 
   async markInvoicePaid(invoiceId: ID): Promise<void> {
-    const stored = await this.getInvoice(invoiceId);
-    if (!stored) return; // mirror Dexie: no-op on missing id
-    const ts = Date.now();
-    const next: Invoice = { ...stored, status: "paid", updatedAt: ts };
-    this.db
-      .prepare("UPDATE invoices SET status = ?, updated_at = ?, data = ? WHERE id = ?")
-      .run("paid", ts, JSON.stringify(next), invoiceId);
+    this.transaction(() => {
+      const stored = this.parse<Invoice>(this.getRow("invoices", invoiceId));
+      if (!stored || stored.status === "paid") return;
+      const ts = Date.now();
+      const next: Invoice = {
+        ...stored,
+        status: "paid",
+        updatedAt: ts,
+        manualPaymentAssertion: {
+          source: "manual",
+          recordedAt: ts,
+          actorId: "local",
+          total: stored.total,
+          currency: stored.currency ?? "USD",
+        },
+      };
+      this.db.prepare("UPDATE invoices SET status = ?, updated_at = ?, data = ? WHERE id = ?")
+        .run("paid", ts, JSON.stringify(next), invoiceId);
+    });
   }
+
 }
 
 /** Test factory: build a provider against an explicit DB file. */

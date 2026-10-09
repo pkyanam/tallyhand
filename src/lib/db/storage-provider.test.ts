@@ -301,7 +301,7 @@ describe("DexieStorageProvider (StorageProvider conformance)", () => {
       expect((await provider.getInvoice(invoice.id))?.status).toBe("sent");
     });
 
-    it("markInvoicePaid flips status only", async () => {
+    it("markInvoicePaid atomically attributes a manual assertion and preserves it on retry", async () => {
       const client = await provider.createClient({ name: "Acme" });
       const invoice = await provider.createInvoice({
         clientId: client.id,
@@ -311,10 +311,15 @@ describe("DexieStorageProvider (StorageProvider conformance)", () => {
         status: "sent",
         lineItems: [],
         subtotal: 0,
-        total: 0,
+        total: 12.345,
+        currency: "JPY",
       });
       await provider.markInvoicePaid(invoice.id);
-      expect((await provider.getInvoice(invoice.id))?.status).toBe("paid");
+      const first = await provider.getInvoice(invoice.id);
+      expect(first?.status).toBe("paid");
+      expect(first?.manualPaymentAssertion).toEqual({ source: "manual", actorId: "browser-local", recordedAt: expect.any(Number), total: 12.345, currency: "JPY" });
+      await provider.markInvoicePaid(invoice.id);
+      expect((await provider.getInvoice(invoice.id))?.manualPaymentAssertion).toEqual(first?.manualPaymentAssertion);
     });
   });
 });

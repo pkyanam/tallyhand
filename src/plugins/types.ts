@@ -24,6 +24,9 @@ export interface PaymentReceivedPayload {
   provider: string;
   /** Provider-side id (Stripe Checkout Session id). */
   externalId: string;
+  /** Durable notification identity. Financial consumers must deduplicate it. */
+  eventId?: string;
+  currency?: string;
 }
 
 /** Payload per domain hook, keyed by hook name. */

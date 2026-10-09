@@ -217,13 +217,16 @@ export class DexieStorageProvider implements StorageProvider {
       createdAt: ts,
       updatedAt: ts,
       ...input,
+      manualPaymentAssertion: undefined,
     } as Invoice;
     await getDB().invoices.add(invoice);
     return invoice;
   }
 
   async updateInvoice(id: ID, patch: Partial<Invoice>): Promise<void> {
-    await getDB().invoices.update(id, { ...patch, updatedAt: now() });
+    const editable = { ...patch };
+    delete editable.manualPaymentAssertion;
+    await getDB().invoices.update(id, { ...editable, updatedAt: now() });
   }
 
   async removeInvoice(id: ID): Promise<void> {
@@ -565,9 +568,17 @@ export class DexieStorageProvider implements StorageProvider {
 
   async markInvoicePaid(invoiceId: ID): Promise<void> {
     const db = getDB();
-    await db.invoices.update(invoiceId, {
-      status: "paid",
-      updatedAt: Date.now(),
+    await db.transaction("rw", db.invoices, async () => {
+      const invoice = await db.invoices.get(invoiceId);
+      if (!invoice || invoice.status === "paid") return;
+      const recordedAt = Date.now();
+      await db.invoices.update(invoiceId, {
+        status: "paid", updatedAt: recordedAt,
+        manualPaymentAssertion: {
+          source: "manual", recordedAt, actorId: "browser-local",
+          total: invoice.total, currency: invoice.currency ?? "USD",
+        },
+      });
     });
   }
 }

@@ -1,0 +1,20 @@
+import { afterEach, expect, it, vi } from "vitest";
+const query=vi.fn(), mutation=vi.fn();
+vi.mock("@/lib/db/convex-client",()=>({createConvexRequestClient:()=>({query,mutation})}));
+import { saveStripeConnection, getStripeConnectionMeta, getStripeConnectionSecret, deleteStripeConnection, findUserIdByStripeAccount } from "./store";
+import { encryptSecret } from "@/lib/crypto/connect-crypto";
+afterEach(()=>{vi.unstubAllEnvs();vi.clearAllMocks();});
+it("uses hosted server transport with ciphertext and bound credentials",async()=>{
+  vi.stubEnv("TALLY_STORAGE","convex");vi.stubEnv("TALLY_ENCRYPTION_KEY","ab".repeat(32));
+  const input={accountId:"acct_a",livemode:false,chargesEnabled:true,payoutsEnabled:false,secretEnvelope:encryptSecret("sk_test_fixture")};
+  mutation.mockResolvedValueOnce({userId:"a",...input});
+  await saveStripeConnection("a",input);
+  expect(mutation).toHaveBeenCalledWith("stripeConnections:save",{userId:"a",...input});
+  query.mockResolvedValueOnce({userId:"a",accountId:"acct_a",livemode:false});
+  await getStripeConnectionMeta("a");
+  query.mockResolvedValueOnce(input.secretEnvelope);
+  expect(await getStripeConnectionSecret("a",{accountId:"acct_a",livemode:false})).toBe("sk_test_fixture");
+  expect(query).toHaveBeenLastCalledWith("stripeConnections:credential",{userId:"a",accountId:"acct_a",livemode:false});
+  query.mockResolvedValueOnce("a");expect(await findUserIdByStripeAccount("acct_a",false)).toBe("a");
+  await deleteStripeConnection("a");expect(mutation).toHaveBeenLastCalledWith("stripeConnections:remove",{userId:"a"});
+});

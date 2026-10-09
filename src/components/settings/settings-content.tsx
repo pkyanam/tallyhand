@@ -61,6 +61,7 @@ import { downloadText } from "@/lib/ledger-export";
 import { formatInvoiceNumber } from "@/lib/invoice-helpers";
 import { CURRENCIES } from "@/core/currencies";
 import type { Settings, TaxRegion } from "@/lib/db/types";
+import { FinancialGrantsCard } from "@/components/settings/financial-grants-card";
 import { DunningCard, StripeCard, StripeConnectCard, TaxCard } from "@/components/settings/dunning-tax-cards";
 
 const MAX_LOGO_BYTES = 500 * 1024;
@@ -601,6 +602,9 @@ export function SettingsContent({ authMode }: { authMode?: TallyAuth }) {
 
         <StripeCard settings={settings} />
         <StripeConnectCard />
+        {(authMode === "clerk" || authMode === "builtin") && (
+          <FinancialGrantsCard />
+        )}
 
         <Card>
           <CardHeader>

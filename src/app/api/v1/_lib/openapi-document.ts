@@ -60,6 +60,58 @@ export const OPENAPI_V1 = {
     { name: "meta" },
   ],
   paths: {
+    "/financial/grants": {
+      get: sessionOperation("List owner-issued financial grants", "Owner browser session only; bearer tokens cannot inspect or issue authority grants. Viewer role denied."),
+      post: {
+        ...sessionOperation("Issue a separate bounded financial grant", "Owner browser session only. Validate workspace and principal ownership. Explicit account, mode, actions, currency and collection amount limit are required. Grant never follows from general workspace scopes. Cross-origin writes denied."),
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", additionalProperties: false,
+          required: ["principal", "actions", "accountId", "mode", "currency", "maxMinorUnits"],
+          properties: {
+            workspaceId: { type: "string" },
+            principal: { oneOf: [
+              { type: "object", additionalProperties: false, required: ["kind", "tokenId"], properties: { kind: { const: "api-token" }, tokenId: { type: "string", minLength: 1 } } },
+              { type: "object", additionalProperties: false, required: ["kind", "userId", "clientId"], properties: { kind: { const: "oauth" }, userId: { type: "string", minLength: 1 }, clientId: { type: "string", minLength: 1 } } },
+            ] },
+            actions: { type: "array", minItems: 1, items: { type: "string", enum: ["collect", "read", "reconcile"] } },
+            accountId: { type: "string", minLength: 1 }, mode: { type: "string", enum: ["test", "live"] },
+            currency: { type: "string", enum: ["USD", "EUR"] }, maxMinorUnits: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+          },
+        } } } },
+        responses: { "201": { description: "{ data: FinancialGrant }" }, "400": { description: "Invalid grant" }, "401": { description: "Session required" }, "403": { description: "Owner authority or principal ownership denied" }, "503": { description: "Grant storage unavailable" } },
+      },
+      delete: {
+        ...sessionOperation("Revoke an owner-issued financial grant", "Owner browser session only. Cross-origin writes denied. Revoked grants fail subsequent execution authority checks."),
+        parameters: [{ name: "id", in: "query", required: true, schema: { type: "string" } }],
+      },
+    },
+    "/financial/invoices/{id}": {
+      get: {
+        tags: ["invoices"], summary: "Read bounded invoice financial history", "x-authentication": "financial_grant", "x-financial-action": "read",
+        description: "Owner session or separately granted financial read authority. Bearer callers must provide X-Tally-Financial-Grant; broad workspace scopes alone are insufficient. Returns collection attempts, confirmed Stripe payments, allocations, refund states, manual evidence and paginated audit records. Pending/failed refunds are not confirmed refunds. Stripe collections are not bank balances.",
+        security: [{ sessionCookie: [] }, { bearerAuth: [], financialGrant: [] }],
+        parameters: [{ $ref: "#/components/parameters/Id" }, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } }, { name: "cursor", in: "query", schema: { type: "string", maxLength: 2048 } }],
+        responses: { "200": { description: "Invoice financial history", content: { "application/json": { schema: { type: "object", required: ["data"], properties: { data: { $ref: "#/components/schemas/FinancialTimeline" } } } } } }, "400": { description: "Invalid page" }, "403": { description: "Financial authority denied" }, "404": { description: "Invoice not found" }, "503": { description: "Financial backend or connection unavailable" } },
+      },
+    },
+    "/financial/payments": {
+      get: {
+        tags: ["invoices"], summary: "List bounded workspace Stripe collection records", "x-authentication": "financial_grant", "x-financial-action": "read",
+        description: "Separate financial read grant required for bearer callers via X-Tally-Financial-Grant, or owner session. Confirmed collections only; not bank balance or payout records.",
+        security: [{ sessionCookie: [] }, { bearerAuth: [], financialGrant: [] }],
+        parameters: [{ name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } }, { name: "cursor", in: "query", schema: { type: "string", maxLength: 2048 } }],
+        responses: { "200": { description: "Financial payment page", content: { "application/json": { schema: { type: "object", required: ["data"], properties: { data: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/FinancialPayment" } }, nextCursor: { type: "string" } } } } } } } }, "400": { description: "Invalid page" }, "403": { description: "Financial authority denied" }, "503": { description: "Financial backend or connection unavailable" } },
+      },
+    },
+    "/financial/reconcile": {
+      post: {
+        tags: ["invoices"], summary: "Recover bounded known financial work", "x-authentication": "financial_grant", "x-financial-action": "reconcile",
+        description: "Requires explicit reconcile financial grant or owner session with x-tallyhand-sync: 1. Reads known provider work and applies verified outcomes; never creates new payment/refund operations or blindly retries uncertain checkout creation. Continuation accepts cursor for durable work, payment_cursor for confirmed payments, and provider_cursors as a JSON string map from returned providerCursors. No dry-run support.",
+        security: [{ sessionCookie: [] }, { bearerAuth: [], financialGrant: [] }],
+        parameters: [{ name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } }, { name: "cursor", in: "query", schema: { type: "string", maxLength: 2048 } }, { name: "payment_cursor", in: "query", schema: { type: "string", maxLength: 2048 } }, { name: "provider_cursors", in: "query", schema: { type: "string", maxLength: 16384 } }],
+        responses: { "200": { description: "{ data: { examined: integer, nextCursor?: string, paymentCursor?: string, providerCursors: object, backlog: boolean } }" }, "400": { description: "Invalid page or missing session CSRF header" }, "403": { description: "Financial authority denied" }, "503": { description: "Recovery unavailable" } },
+      },
+    },
     ...WORKSPACE_PATHS,
     "/onboarding": {
       get: {
@@ -99,9 +151,17 @@ export const OPENAPI_V1 = {
     },
     "/stripe/connect/start": { get: sessionOperation("Start Stripe Connect authorization", "Session only; redirects to provider consent. Provider and encryption configuration required.") },
     "/stripe/connect/callback": { get: sessionOperation("Complete Stripe Connect callback", "Session and verified provider state required; provider callback, not a general agent action.") },
-    "/stripe/connect/status": { get: sessionOperation("Read Stripe Connect availability and connection status", "Session only; Convex does not support Stripe Connect.") },
+    "/stripe/connect/status": { get: sessionOperation("Read Stripe Connect availability and connection status", "Session only; supports SQLite, PostgreSQL, and Convex connection stores.") },
     "/stripe/connect": { delete: sessionOperation("Disconnect Stripe Connect", "Session only; requires x-tallyhand-sync: 1.") },
-    "/stripe/payment-links": { post: { ...sessionOperation("Create a Stripe Checkout link for an existing sent invoice", "Shared/personal API token only; OAuth excluded. Requires configured Stripe account and encryption. Creating a payment link does not execute a payment."), "x-authentication": "api_token", parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }], requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["invoiceId"], properties: { invoiceId: { type: "string", minLength: 1 }, cancelUrl: { type: "string", format: "uri" } } } } } } } },
+    "/stripe/payment-links": { post: {
+      summary: "Prepare a sent invoice Stripe Checkout link",
+      description: "Owner session or separate collect financial grant bound to API-token/OAuth principal, account, mode, currency and amount. Bearer callers provide X-Tally-Financial-Grant. General workspace scopes do not authorize collection. Stable Idempotency-Key required; reuse for retries. Creates a payer link, not confirmed payment. Pending/unknown results require reconciliation rather than a new operation.",
+      "x-authentication": "financial_grant", "x-financial-action": "collect",
+      security: [{ sessionCookie: [] }, { bearerAuth: [], financialGrant: [] }],
+      parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", pattern: "^[A-Za-z0-9_-]{1,128}$" } }],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["invoiceId"], properties: { invoiceId: { type: "string", minLength: 1 }, cancelUrl: { type: "string", format: "uri" } } } } } },
+      responses: { "201": { description: "Checkout link prepared" }, "202": { description: "Pending/uncertain existing attempt; inspect and reconcile" }, "400": { description: "Invalid invoice or operation ID" }, "403": { description: "Financial collection authority denied" }, "409": { description: "Operation fingerprint or invoice conflict" }, "501": { description: "Backend unsupported" }, "503": { description: "Provider or financial backend unavailable" } },
+    } },
     "/stripe/webhook": { post: { summary: "Receive a signed Stripe provider webhook", "x-authentication": "provider_signature", security: [], description: "Requires verified stripe-signature; not a caller workspace operation.", responses: { "200": { description: "Webhook processed" }, "400": { description: "Invalid signature or webhook" } } } },
     "/sync/status": { get: { summary: "Probe encrypted sync availability", security: [], description: "Public availability probe; private session details only for the caller's own session.", responses: { "200": { description: "{ data: { signedIn, storage, syncSupported, userId?, cloudCount?, vaultError? } }" } } } },
     "/sync/pull": { get: { ...sessionOperation("Pull encrypted workspace entities", "Encrypted-sync backend required. Accepts session or shared/personal API token; OAuth excluded."), "x-authentication": "session_or_api_token", parameters: [{ name: "since", in: "query", schema: { type: "number" } }, { name: "types", in: "query", schema: { type: "string" } }, { name: "afterId", in: "query", schema: { type: "string" } }] } },
@@ -1176,6 +1236,7 @@ export const OPENAPI_V1 = {
   },
   components: {
     securitySchemes: {
+      financialGrant: { type: "apiKey", in: "header", name: "X-Tally-Financial-Grant", description: "Separate revocable owner-issued financial grant bound to principal, account, mode and action; broad workspace scope is insufficient." },
       sessionCookie: { type: "apiKey", in: "cookie", name: "tally_session", description: "Authenticated browser session (builtin cookie or Clerk-managed session); bearer credentials do not substitute." },
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "opaque", description: "Personal API key or resource-bound OAuth access token. Hosted OAuth requires resource <origin>/api/mcp and tally:read/write/manage scopes. Browser-session JWTs are not OAuth access tokens." },
     },
@@ -1259,6 +1320,45 @@ export const OPENAPI_V1 = {
       },
     },
     schemas: {
+      InvoiceManualPaymentAssertion: {
+        type: "object", additionalProperties: false,
+        required: ["source", "recordedAt", "actorId", "total", "currency"],
+        description: "Atomic invoice projection recording a user marking paid. Original invoice currency/total retained; not a Stripe collection or verified bank receipt.",
+        properties: { source: { const: "manual" }, recordedAt: { type: "integer" }, actorId: { type: "string" }, total: { type: "number" }, currency: { type: "string" } },
+      },
+      FinancialMoney: {
+        type: "object", required: ["currency", "minorUnits"], additionalProperties: false,
+        properties: { currency: { type: "string", enum: ["USD", "EUR"] }, minorUnits: { type: "integer", minimum: 0, maximum: 9007199254740991 } },
+      },
+      FinancialScope: {
+        type: "object", required: ["userId", "workspaceId", "provider", "accountId", "mode"],
+        properties: { userId: { type: "string" }, workspaceId: { type: "string" }, provider: { const: "stripe" }, accountId: { type: "string" }, mode: { type: "string", enum: ["test", "live"] } },
+      },
+      FinancialInvoiceSnapshot: {
+        type: "object", required: ["invoiceId", "revision", "fingerprint", "money"],
+        properties: { invoiceId: { type: "string" }, revision: { type: "string" }, fingerprint: { type: "string" }, money: { $ref: "#/components/schemas/FinancialMoney" } },
+      },
+      FinancialPayment: {
+        type: "object", required: ["id", "scope", "invoice", "attemptId", "providerPaymentId", "money", "confirmedAt"],
+        properties: { id: { type: "string" }, scope: { $ref: "#/components/schemas/FinancialScope" }, invoice: { $ref: "#/components/schemas/FinancialInvoiceSnapshot" }, attemptId: { type: "string" }, providerPaymentId: { type: "string" }, money: { $ref: "#/components/schemas/FinancialMoney" }, confirmedAt: { type: "integer" } },
+      },
+      FinancialRefund: {
+        type: "object", required: ["id", "scope", "paymentId", "providerPaymentId", "providerRefundId", "money", "state", "updatedAt"],
+        properties: { id: { type: "string" }, scope: { $ref: "#/components/schemas/FinancialScope" }, paymentId: { type: "string" }, providerPaymentId: { type: "string" }, providerRefundId: { type: "string" }, money: { $ref: "#/components/schemas/FinancialMoney" }, state: { type: "string", enum: ["pending", "failed", "confirmed"] }, updatedAt: { type: "integer" }, failure: { type: "string" } },
+      },
+      FinancialTimeline: {
+        type: "object", required: ["attempts", "payments", "allocations", "refunds", "manualEvidence", "audit"],
+        properties: {
+          manualAssertion: { $ref: "#/components/schemas/InvoiceManualPaymentAssertion", description: "Owner-only invoice projection separate from provider ledger evidence." },
+          invoiceStatus: { type: "string", enum: ["draft", "sent", "paid"], description: "Owner-only lifecycle status. Paid without provider/manual evidence has unknown provenance." },
+          attempts: { type: "array", items: { type: "object", required: ["id", "state", "scope", "invoice"], properties: { id: { type: "string" }, state: { type: "string", enum: ["prepared", "dispatching", "pending", "unknown", "confirmed", "failed"] }, scope: { $ref: "#/components/schemas/FinancialScope" }, invoice: { $ref: "#/components/schemas/FinancialInvoiceSnapshot" } } } },
+          payments: { type: "array", items: { $ref: "#/components/schemas/FinancialPayment" } },
+          refunds: { type: "array", items: { $ref: "#/components/schemas/FinancialRefund" } },
+          allocations: { type: "array", items: { type: "object", required: ["id", "paymentId", "invoiceId", "money"], properties: { id: { type: "string" }, paymentId: { type: "string" }, invoiceId: { type: "string" }, money: { $ref: "#/components/schemas/FinancialMoney" } } } },
+          manualEvidence: { type: "array", description: "Owner-only manual assertions; never provider confirmations", items: { type: "object", required: ["id", "invoiceId", "money", "note", "recordedAt"], properties: { id: { type: "string" }, invoiceId: { type: "string" }, money: { $ref: "#/components/schemas/FinancialMoney" }, note: { type: "string" }, recordedAt: { type: "integer" } } } },
+          audit: { type: "object", required: ["items"], properties: { items: { type: "array", items: { type: "object" } }, nextCursor: { type: "string" } } },
+        },
+      },
       Envelope: {
         type: "object",
         properties: {
@@ -1494,6 +1594,7 @@ export const OPENAPI_V1 = {
       Invoice: {
         type: "object",
         properties: {
+          manualPaymentAssertion: { $ref: "#/components/schemas/InvoiceManualPaymentAssertion", readOnly: true },
           cloudLinkEnabled: { type: "boolean", description: "Cloud link enabled by default on create; false keeps the invoice private." },
           shareUrl: { type: ["string", "null"], description: "Canonical public URL on create/get/update responses." },
           pdfUrl: { type: ["string", "null"], description: "Direct public PDF URL; null when sharing is disabled or unavailable." },
@@ -1731,10 +1832,10 @@ export const OPENAPI_V1 = {
       AgentCapabilities: {
         type: "object", required: ["workspaceApi", "extensions", "paymentExecution", "secureControls", "surfaces", "caller", "backend", "operations", "note"],
         properties: {
-          workspaceApi: { const: true }, paymentExecution: { const: false }, extensions: { type: "object", additionalProperties: { type: "boolean" } }, secureControls: { type: "object", additionalProperties: { $ref: "#/components/schemas/AgentControl" } },
+          workspaceApi: { const: true }, paymentExecution: { type: "boolean", description: "Caller/backend availability; each financial operation still requires independent owner authority or an explicit financial grant." }, extensions: { type: "object", additionalProperties: { type: "boolean" } }, secureControls: { type: "object", additionalProperties: { $ref: "#/components/schemas/AgentControl" } },
           surfaces: { type: "object", additionalProperties: { type: "string" } },
           caller: { type: "object", properties: { authentication: { type: "string", enum: ["oauth", "api_token"] }, scopes: { type: "array", items: { type: "string" } }, role: { type: "string" }, canWriteWorkspace: { type: "boolean" }, canManageWorkspace: { type: "boolean" } } },
-          backend: { type: "object", properties: { storage: { type: "string" }, browserLocalDataAccessible: { const: false }, paymentExecution: { const: false }, extensions: { type: "object" } } },
+          backend: { type: "object", properties: { storage: { type: "string" }, browserLocalDataAccessible: { const: false }, paymentExecution: { type: "boolean", description: "Caller/backend availability; each financial operation still requires independent owner authority or an explicit financial grant." }, extensions: { type: "object" } } },
           operations: { type: "array", items: { type: "object", properties: { operationId: { type: "string" }, method: { type: "string" }, path: { type: "string" }, summary: { type: "string" }, requiredScope: { type: "string" }, authentication: { type: "string", enum: ["workspace", "public", "session", "api_token", "session_or_api_token", "provider_signature"] }, dryRun: { type: "boolean" }, dryRunRequiredScope: { type: ["string", "null"] }, dryRunAllowedNow: { type: "boolean" }, idempotency: { type: "boolean" }, allowedNow: { type: "boolean" }, supportedByBackend: { type: "boolean" }, authorizationReason: { type: "string" } } } }, note: { type: "string" },
         },
       },

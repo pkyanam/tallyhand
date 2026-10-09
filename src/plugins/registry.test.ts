@@ -217,3 +217,16 @@ describe("PluginRegistry", () => {
     expect(registry.list()).toHaveLength(0);
   });
 });
+
+describe('durable hook delivery', () => {
+  it('propagates subscriber failures only when durable retries are requested', async () => {
+    const registry = new PluginRegistry();
+    const fail = vi.fn().mockRejectedValueOnce(new Error('delivery unavailable')).mockResolvedValue(undefined);
+    registry.register(makePlugin('retry', { activate: ctx => { ctx.hooks.on('onPaymentReceived', fail); } }));
+    const event = { eventId: 'stable-event' } as DomainHookPayloads['onPaymentReceived'];
+    await expect(registry.emit('onPaymentReceived', event, { retryFailures: true })).rejects.toThrow();
+    await expect(registry.emit('onPaymentReceived', event, { retryFailures: true })).resolves.toBeUndefined();
+    expect(fail).toHaveBeenCalledTimes(2);
+    expect(fail.mock.calls.map(call => call[0].eventId)).toEqual(['stable-event', 'stable-event']);
+  });
+});

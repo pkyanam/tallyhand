@@ -13,6 +13,7 @@ import {
   CONFIG_PATH,
 } from "./client.js";
 import { emit } from "./format.js";
+import { requestFinancialOperation } from "./workspace-operations.js";
 import {
   VERSION,
   type Out,
@@ -98,6 +99,27 @@ export function buildProgram(): Command {
     .option("--timing", "write request timings to stderr (never prints credentials)");
 
   const apiCommands = program.command("api").description("Request an authenticated workspace REST operation");
+  program.command("financial <action>")
+    .description("timeline, payments, reconcile, or checkout; requires an explicit grant")
+    .option("--invoice-id <id>", "invoice for timeline")
+    .requiredOption("--grant <id>", "separate owner-issued financial grant ID")
+    .option("--operation-id <id>", "stable checkout operation ID; reuse for retries")
+    .option("--cancel-url <url>", "checkout cancellation return URL")
+    .option("--limit <number>", "bounded page size, max 100", "50")
+    .option("--cursor <cursor>")
+    .option("--payment-cursor <cursor>", "reconciliation payment continuation")
+    .option("--provider-cursors <json>", "reconciliation provider continuation map")
+    .action(wrap(async (cmd, action, opts) => {
+      const { api } = ctx(cmd);
+      const data = await requestFinancialOperation(api, {
+        action, invoiceId: opts.invoiceId, grant: opts.grant,
+        operationId: opts.operationId, cancelUrl: opts.cancelUrl,
+        limit: Number(opts.limit), cursor: opts.cursor,
+        paymentCursor: opts.paymentCursor,
+        providerCursors: opts.providerCursors ? JSON.parse(opts.providerCursors) : undefined,
+      });
+      console.log(JSON.stringify(data, null, 2));
+    }));
   apiCommands.command("request <method> <path>").option("--body <json>").option("--query <json>", "query parameters object").option("--dry-run").option("--idempotency-key <key>")
     .action(wrap(async (cmd, method, path, opts) => { const { api } = ctx(cmd); needAuth(api); const body = opts.body === undefined ? undefined : JSON.parse(opts.body); console.log(JSON.stringify(await api.requestWorkspaceOperation({ method, path, body, query: opts.query === undefined ? undefined : JSON.parse(opts.query), dryRun: opts.dryRun || undefined, idempotencyKey: opts.idempotencyKey }), null, 2)); }));
   program.command("setup").description("Inspect workspace readiness and actionable next steps")
