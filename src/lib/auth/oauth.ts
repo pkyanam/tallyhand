@@ -1,4 +1,5 @@
 /** Clerk OAuth tokens are resource-bound; session JWTs are never substitutes. */
+import { requireAgentSubAdmission, AgentSubAdmissionError } from "./agentsub";
 import { memoRequestAuth } from "./request-cache";
 import { createClerkClient } from "@clerk/backend";
 
@@ -34,10 +35,15 @@ async function verifyTallyOAuthUncached(token: string): Promise<TallyOAuthIdenti
     if (verified.revoked || verified.expired || !verified.subject.startsWith("user_") ||
         !verified.aud?.includes(config.resource) || !verified.clientId ||
         (verified.expiration != null && verified.expiration <= Date.now() / 1000)) return null;
+    await requireAgentSubAdmission(verified.subject);
     return { userId: verified.subject, clientId: verified.clientId, scopes: verified.scopes, ...(verified.expiration != null ? { expiresAt: verified.expiration } : {}) };
   } catch (error) {
     // A transient provider/network outage must not look like revoked credentials.
     // Never echo the upstream exception, which can contain credentials.
+    if (error instanceof AgentSubAdmissionError) {
+      if (error.reason === "clearance_denied") throw error;
+      throw new OAuthVerificationUnavailable();
+    }
     const status = Number((error as { status?: number }).status);
     const name = (error as { name?: string }).name;
     if ([400, 401, 403, 404, 422].includes(status) || name === "TokenVerificationError") return null;

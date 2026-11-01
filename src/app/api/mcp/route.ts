@@ -1,3 +1,4 @@
+import { agentSubDeniedResponse } from "@/lib/auth/agentsub";
 /** One API client and tool catalog serve modern and legacy MCP clients. */
 import { withRequestAuthCache } from "@/lib/auth/request-cache";
 import { dispatchWorkspaceApi } from "@/server/internal-api";
@@ -62,14 +63,18 @@ async function handleRequest(req: Request): Promise<Response> {
   let authInfo: AuthInfo;
   if (isOAuthToken(token)) {
     let identity;
-    try { identity = await verifyTallyOAuth(token); } catch { console.warn("mcp_auth", { outcome: "verification_unavailable", method: req.method }); return cors(req, oauthUnavailableResponse()); }
+    try { identity = await verifyTallyOAuth(token); } catch (error) {
+      const denied = agentSubDeniedResponse(error);
+      console.warn("mcp_auth", { outcome: denied ? "clearance_denied" : "verification_unavailable", method: req.method });
+      return cors(req, denied ?? oauthUnavailableResponse());
+    }
     if (!identity) { console.info("mcp_auth", { outcome: "invalid_oauth_token", method: req.method }); return cors(req, oauthChallenge()); }
     if (!identity.scopes.includes("tally:read")) { console.info("mcp_auth", { outcome: "missing_read_scope", method: req.method }); return cors(req, oauthChallenge(403)); }
     authInfo = { token, clientId: identity.clientId, scopes: identity.scopes, expiresAt: identity.expiresAt,
       resource: new URL(oauthConfig().resource), resourceMetadataUrl: oauthConfig().metadataUrl, extra: { kind: "oauth", userId: identity.userId } };
   } else {
     const denied = await requireApiToken(req);
-    if (denied) return cors(req, oauthChallenge());
+    if (denied) return cors(req, denied.status === 401 ? oauthChallenge() : denied);
     authInfo = { token, clientId: "tallyhand-api-key", scopes: [...TALLY_SCOPES], extra: { kind: "api-key" } };
   }
   const authenticated = performance.now();

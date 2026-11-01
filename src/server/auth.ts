@@ -14,6 +14,7 @@
  * Both travel as `Authorization: Bearer <token>`.
  */
 import { timingSafeEqual } from "node:crypto";
+import { agentSubDeniedResponse } from "@/lib/auth/agentsub";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
@@ -56,7 +57,7 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
     const { isOAuthToken, verifyTallyOAuth, requiredRestScope, oauthChallenge, oauthUnavailableResponse } = await import("@/lib/auth/oauth");
     if (isOAuthToken(provided)) {
       let identity;
-      try { identity = await verifyTallyOAuth(provided); } catch { return oauthUnavailableResponse(); }
+      try { identity = await verifyTallyOAuth(provided); } catch (error) { return agentSubDeniedResponse(error) ?? oauthUnavailableResponse(); }
       if (!identity) return oauthChallenge();
       const required = requiredRestScope(req);
       if (!required) return jsonError(403, "forbidden", "OAuth access is limited to workspace API operations");
@@ -68,7 +69,14 @@ export async function requireApiToken(req: Request): Promise<Response | null> {
   // (pg/convex/node:sqlite) out of the module graph until it's needed.
   if (provided) {
     const { findApiToken } = await import("@/lib/auth/api-tokens");
-    if (await findApiToken(provided)) return null;
+    const personal = await findApiToken(provided);
+    if (personal) {
+      const { requireAgentSubAdmission } = await import("@/lib/auth/agentsub");
+      try { await requireAgentSubAdmission(personal.userId); } catch (error) {
+        return agentSubDeniedResponse(error) ?? jsonError(503, "admission_unavailable", "Agent subscription access could not be verified");
+      }
+      return null;
+    }
   }
 
   // Hosted OAuth deployments are available without the optional self-hosted

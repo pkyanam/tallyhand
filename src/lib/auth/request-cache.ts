@@ -8,6 +8,8 @@ export function memoRequestAuth<T>(key: string, fn: () => Promise<T>): Promise<T
   const cache = requestCache.getStore();
   if (!cache) return fn();
   const existing = cache.get(key); if (existing) return existing as Promise<T>;
+  // Bound request-local work even for large MCP batches; overflow rechecks live.
+  if (cache.size >= 128) return fn();
   const pending = fn(); cache.set(key, pending); return pending;
 }
 

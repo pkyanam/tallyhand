@@ -1,4 +1,5 @@
 /** Authentication belongs at the database boundary, including direct clients. */
+import { requireIdentityAdmission } from "./admission";
 import {
   queryGeneric, mutationGeneric,
   type DataModelFromSchemaDefinition, type GenericQueryCtx, type GenericMutationCtx,
@@ -32,6 +33,7 @@ export async function requireOwner(
   const identity = await ctx.auth.getUserIdentity();
   let userId: string | undefined;
   if (identity) {
+    await requireIdentityAdmission(ctx, identity);
     userId = identity.subject;
     // New Clerk accounts have no public role metadata yet. Match the app's
     // member default only for absent/null claims; explicit unknown roles deny.

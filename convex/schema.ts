@@ -15,6 +15,11 @@ const timestamps = {
 };
 
 export default defineSchema({
+  applicationAdmissions: defineTable({
+    clerkSubject: v.string(), kind: v.union(v.literal("agent"), v.literal("human")),
+    allowed: v.boolean(), merchantId: v.string(), offerId: v.string(), expiresAt: v.number(), checkedAt: v.number(),
+  }).index("by_subject", ["clerkSubject"]),
+
   extensionEntities: defineTable({
     userId: v.string(), id: v.string(),
     kind: v.union(v.literal("mileage"), v.literal("contract"), v.literal("taxPayment"), v.literal("rateCard")),

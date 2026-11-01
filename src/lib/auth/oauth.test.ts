@@ -1,6 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-const { verify } = vi.hoisted(() => ({ verify: vi.fn() }));
+const { verify, admission } = vi.hoisted(() => ({ verify: vi.fn(), admission: vi.fn() }));
 vi.mock("@clerk/backend", () => ({ createClerkClient: () => ({ idPOAuthAccessToken: { verify } }) }));
+vi.mock("./agentsub", async original => ({ ...await original<typeof import("./agentsub")>(), requireAgentSubAdmission: admission }));
+import { AgentSubAdmissionError } from "./agentsub";
 import { verifyTallyOAuth, requiredRestScope, oauthConfig } from "./oauth";
 
 beforeEach(() => {
@@ -9,6 +11,7 @@ beforeEach(() => {
   vi.stubEnv("TALLY_MCP_OAUTH_ENABLED", "true");
   vi.stubEnv("CLERK_SECRET_KEY", "synthetic-test-value");
   verify.mockReset();
+  admission.mockReset();
 });
 afterEach(() => vi.unstubAllEnvs());
 const fixture = () => ({ subject: "user_fixture", clientId: "client_fixture", scopes: ["tally:read"], revoked: false, expired: false, expiration: Date.now()/1000 + 600, aud: ["https://tally.example/api/mcp"] });
@@ -43,4 +46,12 @@ it("does not misreport temporary provider failure as an invalid token", async ()
 it("still rejects a provider-rejected token", async () => {
   verify.mockRejectedValue({ status: 401 });
   expect(await verifyTallyOAuth("oat_synthetic_fixture")).toBeNull();
+});
+
+it.each(["clearance_denied", "verification_unavailable"] as const)("preserves admission classification %s after native OAuth verification", async reason => {
+  verify.mockResolvedValue(fixture());
+  admission.mockRejectedValue(new AgentSubAdmissionError(reason));
+  if (reason === "clearance_denied") await expect(verifyTallyOAuth("oat_synthetic_fixture")).rejects.toMatchObject({ reason });
+  else await expect(verifyTallyOAuth("oat_synthetic_fixture")).rejects.toThrow("temporarily unavailable");
+  expect(admission).toHaveBeenCalledWith("user_fixture");
 });
