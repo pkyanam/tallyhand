@@ -2,6 +2,7 @@
 
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { AdmissionNotice } from "./admission-notice";
 import { useAuth } from "@clerk/nextjs";
 import { ConvexReactClient, useConvexAuth, useQuery, useAction } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
@@ -10,6 +11,32 @@ import { notifyDataChanged } from "@/lib/data/data-events";
 
 const revisionQuery = makeFunctionReference<"query", { userId: string }, number>("workspace:revision");
 
+const refreshAdmission = makeFunctionReference<"action", Record<string, never>, { allowed: boolean; expiresAt: number; reason?: "clearance_denied" }>("admission:refresh");
+export function isAdmissionWorkspacePath(path: string): boolean {
+  return /^\/(dashboard|timesheet|ledger|clients|projects|invoices|expenses|analytics|tax|reckoning|settings|shortcuts)(\/|$)/.test(path);
+}
+function AdmissionBoundary({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useConvexAuth();
+  const { userId } = useAuth();
+  const isWorkspace = isAdmissionWorkspacePath(usePathname() ?? "");
+  const refresh = useAction(refreshAdmission);
+  const [state, setState] = useState<{ userId: string; allowed: boolean; expiresAt: number; reason?: "clearance_denied" } | null>(null);
+  useEffect(() => {
+    if (!isWorkspace || !isAuthenticated || !userId) { setState(null); return; }
+    let active = true;
+    const check = async () => {
+      try { const result = await refresh({}); if (active) setState({ userId, ...result }); }
+      catch { if (active) setState({ userId, allowed: false, expiresAt: 0 }); }
+    };
+    void check();
+    const timer = setInterval(() => { void check(); }, 30000);
+    return () => { active = false; clearInterval(timer); };
+  }, [isWorkspace, isAuthenticated, userId, refresh]);
+  if (!isWorkspace || !isAuthenticated) return children;
+  if (!state || state.userId !== userId) return <p role="status">Verifying application access…</p>;
+  if (!state.allowed || state.expiresAt <= Date.now()) return <AdmissionNotice reason={state.reason ?? "verification_unavailable"} />;
+  return <><SubscriptionBoundary key={`${userId}:${state.expiresAt}`}><WorkspaceSubscription /></SubscriptionBoundary>{children}</>;
+}
 function WorkspaceSubscription() {
   const { userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
@@ -30,39 +57,6 @@ class SubscriptionBoundary extends Component<{ children: ReactNode }, { failed: 
   render() { return this.state.failed ? null : this.props.children; }
 }
 
-const refreshAdmission = makeFunctionReference<"action", Record<string, never>, { allowed: boolean; expiresAt: number }>("admission:refresh");
-
-function RealtimeSubscription({ admissionEnabled }: { admissionEnabled: boolean }) {
-  const { userId, sessionId } = useAuth();
-  const { isAuthenticated } = useConvexAuth();
-  const pathname = usePathname() ?? "";
-  const isWorkspace = /^\/(dashboard|timesheet|ledger|clients|projects|invoices|expenses|analytics|tax|reckoning|settings|shortcuts)(\/|$)/.test(pathname);
-  const refresh = useAction(refreshAdmission);
-  const [grant, setGrant] = useState<{ sessionId: string; expiresAt: number; generation: number } | null>(null);
-  useEffect(() => {
-    if (!admissionEnabled || !isWorkspace || !isAuthenticated || !sessionId) return;
-    let active = true;
-    const check = async () => {
-      try {
-        const result = await refresh({});
-        if (active) setGrant(previous => result.allowed ? {
-          sessionId, expiresAt: result.expiresAt, generation: (previous?.generation ?? 0) + 1,
-        } : null);
-      } catch {
-        if (active) setGrant(null);
-      }
-    };
-    void check();
-    const timer = setInterval(() => { void check(); }, 30000);
-    return () => { active = false; clearInterval(timer); };
-  }, [admissionEnabled, isWorkspace, isAuthenticated, sessionId, refresh]);
-  if (!isWorkspace || !isAuthenticated || !userId) return null;
-  if (admissionEnabled && (!grant || grant.sessionId !== sessionId || grant.expiresAt <= Date.now())) return null;
-  return <SubscriptionBoundary key={`${sessionId}:${userId}:${grant?.generation ?? 0}`}>
-    <WorkspaceSubscription />
-  </SubscriptionBoundary>;
-}
-
 /** Local mode never loads this optional cloud-only subscription bundle. */
 export function ConvexRealtimeProvider({ url, children, admissionEnabled = false }: { url: string; children: ReactNode; admissionEnabled?: boolean }) {
   const resource = useMemo(() => ({
@@ -80,8 +74,7 @@ export function ConvexRealtimeProvider({ url, children, admissionEnabled = false
   const { client } = resource;
   return (
     <ConvexProviderWithClerk client={client} useAuth={useAuth}>
-      <RealtimeSubscription admissionEnabled={admissionEnabled} />
-      {children}
+      {admissionEnabled ? <AdmissionBoundary>{children}</AdmissionBoundary> : <><SubscriptionBoundary><WorkspaceSubscription /></SubscriptionBoundary>{children}</>}
     </ConvexProviderWithClerk>
   );
 }

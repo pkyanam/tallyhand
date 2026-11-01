@@ -3,6 +3,9 @@ vi.mock("@/lib/auth/oauth", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/auth/oauth")>();
   return { ...actual, verifyTallyOAuth: vi.fn(async () => ({ userId: "user_fixture", clientId: "client_fixture", scopes: ["tally:read"], expiresAt: Date.now() / 1000 + 600 })) };
 });
+import { verifyTallyOAuth } from "@/lib/auth/oauth";
+import { AgentSubAdmissionError } from "@/lib/auth/agentsub";
+import { requireApiToken } from "@/server/auth";
 import { POST } from "./route";
 beforeEach(() => { vi.stubEnv("APP_BASE_URL", "https://tally.example"); });
 afterEach(() => vi.unstubAllEnvs());
@@ -86,3 +89,18 @@ it("requests complete workspace grants during initial MCP connection, before any
   expect(response.status).toBe(401);
   expect(response.headers.get("www-authenticate")).toContain('scope="tally:read tally:write tally:manage"');
 });
+for (const [reason, status, code] of [["clearance_denied", 403, "clearance_denied"], ["verification_unavailable", 503, "auth_temporarily_unavailable"]] as const) {
+  it(`preserves ${reason} at REST and MCP OAuth boundaries without an invalid-token challenge`, async () => {
+    vi.mocked(verifyTallyOAuth).mockRejectedValueOnce(new AgentSubAdmissionError(reason));
+    const rest = await requireApiToken(new Request("https://tally.example/api/v1/clients", { headers: { authorization: "Bearer oat_synthetic_fixture" } }));
+    expect(rest?.status).toBe(status);
+    expect((await rest!.json()).error.code).toBe(code);
+    expect(rest!.headers.get("www-authenticate")).toBeNull();
+    vi.mocked(verifyTallyOAuth).mockRejectedValueOnce(new AgentSubAdmissionError(reason));
+    const mcp = await POST(request("tools/list", {}));
+    expect(mcp.status).toBe(status);
+    expect((await mcp.json()).error.code).toBe(code);
+    expect(mcp.headers.get("www-authenticate")).toBeNull();
+    expect(mcp.headers.get("cache-control")).toContain("no-store");
+  });
+}

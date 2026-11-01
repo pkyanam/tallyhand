@@ -1,3 +1,5 @@
+import { agentsubConfigured, requireAgentSubAdmission, AgentSubAdmissionError } from "@/lib/auth/agentsub";
+import { AdmissionNotice } from "@/components/app/admission-notice";
 import { effectiveAuth } from "@/lib/mode";
 import type { ReactNode } from "react";
 import { AppChrome } from "@/components/app/app-chrome";
@@ -13,6 +15,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // browser holds the only copy: local mode, or auth enabled but no
   // signed-in session (e.g. the "Use locally" choice). A signed-in user
   // syncs to the cloud vault, so the notice would be wrong for them.
+  if (agentsubConfigured() && effectiveAuth() === "clerk") {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    if (session.userId) {
+      try { await requireAgentSubAdmission(session.userId); }
+      catch (error) {
+        if (error instanceof AgentSubAdmissionError) return <AdmissionNotice reason={error.reason} />;
+        throw error;
+      }
+    }
+  }
   const userId = await tryResolveUserId();
   const showLocalNotice = userId === null || userId === LOCAL_USER_ID;
   const dataMode = showLocalNotice ? "local" : "cloud";

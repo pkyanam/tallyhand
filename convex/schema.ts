@@ -32,6 +32,11 @@ export default defineSchema({
     chargesEnabled: v.union(v.boolean(), v.null()), payoutsEnabled: v.union(v.boolean(), v.null()),
     secretEnvelope: v.string(), ...timestamps,
   }).index("by_owner", ["userId"]).index("by_account_mode", ["accountId", "livemode"]),
+  applicationAdmissions: defineTable({
+    clerkSubject: v.string(), kind: v.union(v.literal("agent"), v.literal("human")),
+    allowed: v.boolean(), merchantId: v.string(), offerId: v.string(), expiresAt: v.number(), checkedAt: v.number(),
+  }).index("by_subject", ["clerkSubject"]),
+
   extensionEntities: defineTable({
     userId: v.string(), id: v.string(),
     kind: v.union(v.literal("mileage"), v.literal("contract"), v.literal("taxPayment"), v.literal("rateCard")),

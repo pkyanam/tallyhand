@@ -20,6 +20,7 @@
  *
  * SERVER ONLY — uses next/headers.
  */
+import { requireAgentSubAdmission } from "./agentsub";
 import { cookies, headers } from "next/headers";
 import { timingSafeEqual } from "node:crypto";
 import { effectiveAuth } from "@/lib/mode";
@@ -60,6 +61,7 @@ async function personalTokenUserId(): Promise<string | null> {
   if (isOAuthToken(presented)) return (await verifyTallyOAuth(presented))?.userId ?? null;
   const { findApiToken } = await import("./api-tokens");
   const verified = await findApiToken(presented);
+  if (verified) await requireAgentSubAdmission(verified.userId);
   return verified ? verified.userId : null;
 }
 
@@ -86,6 +88,7 @@ async function clerkUserId(): Promise<string> {
   const auth = await clerkAuthFn();
   const session = await auth();
   if (!session?.userId) throw unauthorized();
+  await requireAgentSubAdmission(session.userId);
   return session.userId;
 }
 
@@ -94,6 +97,7 @@ async function clerkSessionUserId(): Promise<string> {
   const auth = await clerkAuthFn();
   const session = await auth();
   if (!session?.userId) throw unauthorized();
+  await requireAgentSubAdmission(session.userId);
   return session.userId;
 }
 

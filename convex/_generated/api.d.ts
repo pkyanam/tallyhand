@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admission from "../admission.js";
 import type * as access from "../access.js";
 import type * as backup from "../backup.js";
 import type * as extensions from "../extensions.js";
@@ -22,6 +23,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admission: typeof admission;
   access: typeof access;
   backup: typeof backup;
   extensions: typeof extensions;

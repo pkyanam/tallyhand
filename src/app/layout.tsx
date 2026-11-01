@@ -1,3 +1,4 @@
+import { agentsubConfigured } from "@/lib/auth/agentsub";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -75,7 +76,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {clerkKey ? (
-            <ClerkAuthProvider publishableKey={clerkKey} convexUrl={convexUrl} admissionEnabled={Boolean(process.env.AGENTSUB_MERCHANT_ID || process.env.AGENTSUB_OFFER_ID || process.env.AGENTSUB_MERCHANT_KEY)}>{children}</ClerkAuthProvider>
+            <ClerkAuthProvider admissionEnabled={agentsubConfigured()} publishableKey={clerkKey} convexUrl={convexUrl}>{children}</ClerkAuthProvider>
           ) : (
             children
           )}
