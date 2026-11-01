@@ -905,7 +905,9 @@ export const shareGetById = serverQuery({
 export const shareRevoke = mutationGeneric({
   args: { userId: v.string(), id: v.string() },
   handler: async (ctx, args) => {
-    const doc = await docById(ctx, "shareLinks", needUser(args.userId), args.id);
+    const doc = await ctx.db.query("shareLinks")
+      .withIndex("by_user", (q) => q.eq("userId", needUser(args.userId)))
+      .filter((q) => q.eq(q.field("id"), args.id)).unique();
     if (!doc) throw new Error(`shareLinks/${args.id} not found`);
     await ctx.db.patch(doc._id, { revokedAt: Date.now(), updatedAt: Date.now() });
     return { revoked: true };

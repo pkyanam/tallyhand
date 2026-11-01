@@ -10,11 +10,17 @@ export const POST = withApiRequestCache(async (req: Request, { params }: { param
   const input = await req.clone().json().catch(() => null);
   if (typeof input?.enabled !== "boolean") return badRequest("enabled must be a boolean");
   return withIdempotency(req, async () => {
-    const deps = getShareDeps();
-    const invoice = await deps.ownerProvider.getInvoice(params.id); if (!invoice) return notFound("invoice");
-    if (!input.enabled) { await disableInvoiceLinks(deps, invoice.id); return ok({ cloudLinkEnabled: false, shareUrl: null, pdfUrl: null }); }
-    if (invoice.cloudLinkEnabled === false) await disableInvoiceLinks(deps, invoice.id);
-    await deps.ownerProvider.updateInvoice(invoice.id, { cloudLinkEnabled: true });
-    return ok({ cloudLinkEnabled: true, ...await invoiceLinks(deps, { ...invoice, cloudLinkEnabled: true }, true) });
+    try {
+      const deps = getShareDeps();
+      const invoice = await deps.ownerProvider.getInvoice(params.id); if (!invoice) return notFound("invoice");
+      if (!input.enabled) { await disableInvoiceLinks(deps, invoice.id); return ok({ cloudLinkEnabled: false, shareUrl: null, pdfUrl: null }); }
+      if (invoice.cloudLinkEnabled === false) await disableInvoiceLinks(deps, invoice.id);
+      await deps.ownerProvider.updateInvoice(invoice.id, { cloudLinkEnabled: true });
+      return ok({ cloudLinkEnabled: true, ...await invoiceLinks(deps, { ...invoice, cloudLinkEnabled: true }, true) });
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      return Response.json({ error: { code: "sharing_unavailable", message: "Could not update cloud sharing. Please retry." } },
+        { status: status && [400, 401, 403, 404, 409].includes(status) ? status : 503 });
+    }
   });
 });
