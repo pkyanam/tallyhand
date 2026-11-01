@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Payment, PaymentAttempt } from "@/core/financial/types";
 import type { FinancialStore } from "@/core/financial/store";
 const m = vi.hoisted(() => ({
   sessions: vi.fn(),
@@ -31,13 +32,16 @@ const scope = {
   accountId: "acct",
   mode: "test" as const,
 };
-const attempt = {
+const attempt: PaymentAttempt = {
+  requestId: "request", operationId: "operation", requestFingerprint: "request-fingerprint",
+  providerIdempotencyKey: "provider-key", actor: { kind: "owner", id: "u" }, updatedAt: 1,
   id: "a",
   scope,
   state: "unknown",
   createdAt: 1,
   invoice: {
     invoiceId: "i",
+    revision: "1",
     fingerprint: "full",
     money: { minorUnits: 100, currency: "USD" },
   },
@@ -202,9 +206,10 @@ describe("financial recovery", () => {
       ...attempt,
       id: `a${i}`,
       checkoutSessionId: `cs${i}`,
-      state: "pending",
+      state: "pending" as const,
     }));
-    const payments = Array.from({ length: 6 }, (_, i) => ({
+    const payments: Payment[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, invoice: attempt.invoice, attemptId: `a${i}`, money: attempt.invoice.money, confirmedAt: 1,
       scope,
       providerPaymentId: `pi${i}`,
     }));

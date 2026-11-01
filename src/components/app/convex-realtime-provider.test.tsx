@@ -7,7 +7,7 @@ import { ConvexRealtimeProvider } from "./convex-realtime-provider";
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
 const state = vi.hoisted(() => ({ userId: "owner", sessionId: "session-1", fail: false }));
-vi.mock("@clerk/nextjs", () => ({ useAuth: () => state }));
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => state, useClerk: () => ({ signOut: vi.fn() }) }));
 vi.mock("convex/react", () => ({
   ConvexReactClient: class { close = vi.fn(); },
   useAction: () => refresh,
@@ -30,13 +30,15 @@ it("keeps the app and login usable when the optional revision query throws, and 
   expect(notifyDataChanged).toHaveBeenCalled();
 });
 
-it("refreshes admission before subscribing, and keeps content usable if verification fails", async () => {
+it("gates workspace content on failed admission and retries after a session change", async () => {
   refresh.mockRejectedValueOnce(new Error("Verification unavailable"));
   const view = render(<ConvexRealtimeProvider url="https://example.convex.cloud" admissionEnabled><div>Workspace</div></ConvexRealtimeProvider>);
   await waitFor(() => expect(refresh).toHaveBeenCalled());
-  expect(screen.getByText("Workspace")).toBeTruthy();
+  await screen.findByRole("button", { name: "Sign out and switch accounts" });
+  expect(screen.queryByText("Workspace")).toBeNull();
   refresh.mockResolvedValue({ allowed: true, expiresAt: Date.now() + 60000 });
   state.sessionId = "session-2";
   view.rerender(<ConvexRealtimeProvider url="https://example.convex.cloud" admissionEnabled><div>Workspace</div></ConvexRealtimeProvider>);
   await waitFor(() => expect(notifyDataChanged).toHaveBeenCalled());
+  expect(screen.getByText("Workspace")).toBeTruthy();
 });

@@ -17,25 +17,25 @@ export function isAdmissionWorkspacePath(path: string): boolean {
 }
 function AdmissionBoundary({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
-  const { userId } = useAuth();
+  const { userId, sessionId } = useAuth();
   const isWorkspace = isAdmissionWorkspacePath(usePathname() ?? "");
   const refresh = useAction(refreshAdmission);
-  const [state, setState] = useState<{ userId: string; allowed: boolean; expiresAt: number; reason?: "clearance_denied" } | null>(null);
+  const [state, setState] = useState<{ userId: string; sessionId?: string | null; allowed: boolean; expiresAt: number; reason?: "clearance_denied" } | null>(null);
   useEffect(() => {
     if (!isWorkspace || !isAuthenticated || !userId) { setState(null); return; }
     let active = true;
     const check = async () => {
-      try { const result = await refresh({}); if (active) setState({ userId, ...result }); }
-      catch { if (active) setState({ userId, allowed: false, expiresAt: 0 }); }
+      try { const result = await refresh({}); if (active) setState({ userId, sessionId, ...result }); }
+      catch { if (active) setState({ userId, sessionId, allowed: false, expiresAt: 0 }); }
     };
     void check();
     const timer = setInterval(() => { void check(); }, 30000);
     return () => { active = false; clearInterval(timer); };
-  }, [isWorkspace, isAuthenticated, userId, refresh]);
+  }, [isWorkspace, isAuthenticated, userId, sessionId, refresh]);
   if (!isWorkspace || !isAuthenticated) return children;
-  if (!state || state.userId !== userId) return <p role="status">Verifying application access…</p>;
+  if (!state || state.userId !== userId || state.sessionId !== sessionId) return <p role="status">Verifying application access…</p>;
   if (!state.allowed || state.expiresAt <= Date.now()) return <AdmissionNotice reason={state.reason ?? "verification_unavailable"} />;
-  return <><SubscriptionBoundary key={`${userId}:${state.expiresAt}`}><WorkspaceSubscription /></SubscriptionBoundary>{children}</>;
+  return <><RealtimeSubscription generation={state.expiresAt} />{children}</>;
 }
 function WorkspaceSubscription() {
   const { userId } = useAuth();
@@ -57,6 +57,14 @@ class SubscriptionBoundary extends Component<{ children: ReactNode }, { failed: 
   render() { return this.state.failed ? null : this.props.children; }
 }
 
+function RealtimeSubscription({ generation = 0 }: { generation?: number }) {
+  const { userId, sessionId } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
+  const isWorkspace = isAdmissionWorkspacePath(usePathname() ?? "");
+  if (!isWorkspace || !isAuthenticated || !userId) return null;
+  return <SubscriptionBoundary key={`${sessionId}:${userId}:${generation}`}><WorkspaceSubscription /></SubscriptionBoundary>;
+}
+
 /** Local mode never loads this optional cloud-only subscription bundle. */
 export function ConvexRealtimeProvider({ url, children, admissionEnabled = false }: { url: string; children: ReactNode; admissionEnabled?: boolean }) {
   const resource = useMemo(() => ({
@@ -74,7 +82,7 @@ export function ConvexRealtimeProvider({ url, children, admissionEnabled = false
   const { client } = resource;
   return (
     <ConvexProviderWithClerk client={client} useAuth={useAuth}>
-      {admissionEnabled ? <AdmissionBoundary>{children}</AdmissionBoundary> : <><SubscriptionBoundary><WorkspaceSubscription /></SubscriptionBoundary>{children}</>}
+      {admissionEnabled ? <AdmissionBoundary>{children}</AdmissionBoundary> : <><RealtimeSubscription />{children}</>}
     </ConvexProviderWithClerk>
   );
 }
